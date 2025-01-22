@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% load i18n %}
+{% load account %}
+
+{% block head_title %}{% trans "Email Confirmed" %}{% endblock %}
+
+{% block content %}
+<div class="container auth-container">
+    <h1>{% trans "Email Confirmed" %}</h1>
+    
+    <div class="alert alert-success">
+        <p>{% blocktrans %}Thank you for confirming your email address. Your registration is now complete.{% endblocktrans %}</p>
+    </div>
+    
+    <div>
+        <a href="/" class="button">{% trans "Go to Dashboard" %}</a>
+        <a href="{% url 'account_email' %}" class="button button-secondary">{% trans "Manage Email Settings" %}</a>
+    </div>
+</div>
+{% endblock %}

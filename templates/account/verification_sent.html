@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% load i18n %}
+
+{% block head_title %}{% trans "Verify Your Email Address" %}{% endblock %}
+
+{% block content %}
+<div class="container auth-container">
+    <h1>{% trans "Verify Your Email Address" %}</h1>
+    
+    <div class="alert alert-success">
+        <p>{% blocktrans %}We have sent an email to verify your email address. Please check your inbox and click on the link to complete your registration.{% endblocktrans %}</p>
+    </div>
+    
+    <p>{% blocktrans %}If you don't receive the email within a few minutes, please check your spam folder.{% endblocktrans %}</p>
+    
+    <a href="/" class="button button-secondary">{% trans "Return to Home" %}</a>
+</div>
+{% endblock %}
