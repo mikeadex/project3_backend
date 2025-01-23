@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from cv_writer.models import (
     CvWriter, Education, Experience, Skill, Language, Certification, Reference, ProfessionalSummary, Interest, SocialMedia
 )
+from .parsers import DocumentParser
 
 # Create your models here.
 class CVDocument(models.Model):
@@ -40,119 +41,89 @@ class CVDocument(models.Model):
     def __str__(self):
         return f"{self.user.username}'s CV - {self.document_type}"
 
-    def transfer_to_cv_writer(self):
+    def transfer_to_cv_writer(self, user):
         """
-        Transfer cleaned data to cv_writer models
+        Transfer parsed CV data to CV Writer app models
         """
         if not self.parsed_data:
             raise ValueError("No parsed data available")
+            
+        parsed_data = self.parsed_data
 
-        data = self.parsed_data
-
-        # Create or update cvWriter 
-        cv_writer, _ = CvWriter.objects.update_or_create(
-            user = self.user,
-            defaults = {
-                'first_name': data.get('first_name', ''),
-                'last_name': data.get('last_name', ''),
-                'address': data.get('address', ''),
-                'city': data.get('city', ''),
-                'country': data.get('country', ''),
-                'contact_number': data.get('contact_number', ''),
-                'additional_information': data.get('additional_information', ''),
+        # Create or update CV Writer
+        from cv_writer.models import CvWriter
+        cv_writer, created = CvWriter.objects.update_or_create(
+            user=user,
+            defaults={
+                'first_name': parsed_data['personal_info'].get('first_name', ''),
+                'last_name': parsed_data['personal_info'].get('last_name', ''),
+                'address': parsed_data['personal_info'].get('address', ''),
+                'city': parsed_data['personal_info'].get('city', ''),
+                'country': parsed_data['personal_info'].get('country', ''),
+                'contact_number': parsed_data['personal_info'].get('contact_number', ''),
+                'additional_information': parsed_data.get('additional_info', '')
             }
         )
 
-        #  Professional Summary
-        if 'professional_summary' in data:
+        # Create Professional Summary
+        from cv_writer.models import ProfessionalSummary
+        if parsed_data.get('professional_summary'):
             ProfessionalSummary.objects.update_or_create(
-                user=self.user,
-                defaults={'summary': data['professional_summary']}
+                user=user,
+                defaults={'summary': parsed_data['professional_summary']}
             )
 
-        #  Education 
-        if 'education' in data:
-            for edu in data['education']:
-                Education.objects.update_or_create(
-                user=self.user,
+        # Create Education entries
+        from cv_writer.models import Education
+        for edu in parsed_data.get('education', []):
+            Education.objects.create(
+                user=user,
                 school_name=edu.get('school', ''),
                 degree=edu.get('degree', ''),
                 field_of_study=edu.get('field', ''),
                 start_date=edu.get('start_date'),
                 end_date=edu.get('end_date'),
-                current=edu.get('current', False),
-                )
+                current=edu.get('current', False)
+            )
 
-        # Work Experience
-        if 'experience' in data:
-            for exp in data['experience']:
-                Experience.objects.update_or_create(
-                    user=self.user,
-                    company_name=exp.get('company', ''),
-                    job_title=exp.get('title', ''),
-                    job_description=exp.get('description', ''),
-                    achievements=exp.get('achievements', ''),
-                    start_date=exp.get('start_date'),
-                    end_date=exp.get('end_date'),
-                    employment_type=exp.get('type', 'Full-time'),
-                    current=exp.get('current', False)
-                )
-        
-        #  Skills
-        if 'skills' in data:
-            for skill in data['skills']:
-                Skill.objects.create(
-                    user=self.user,
-                    skill_name=skill.get('name', ''),
-                    skill_level=skill.get('level', 'Intermediate')
-                )
+        # Create Experience entries
+        from cv_writer.models import Experience
+        for exp in parsed_data.get('experience', []):
+            Experience.objects.create(
+                user=user,
+                company_name=exp.get('company', ''),
+                job_title=exp.get('title', ''),
+                job_description=exp.get('description', ''),
+                achievements=exp.get('achievements', ''),
+                start_date=exp.get('start_date'),
+                end_date=exp.get('end_date'),
+                employment_type=exp.get('type', 'Full-time'),
+                current=exp.get('current', False)
+            )
 
-        # Languages
-        if 'languages' in data:
-            for lang in data['languages']:
-                Language.objects.create(
-                    user=self.user,
-                    language_name=lang.get('name', ''),
-                    language_level=lang.get('level', 'Intermediate')
-                )
+        # Create Skill entries
+        from cv_writer.models import Skill
+        for skill in parsed_data.get('skills', []):
+            Skill.objects.create(
+                user=user,
+                skill_name=skill.get('name', ''),
+                skill_level=skill.get('level', 'Intermediate')
+            )
 
-        # Create Certifications
-        if 'certifications' in data:
-            for cert in data['certifications']:
-                Certification.objects.create(
-                    user=self.user,
-                    certificate_name=cert.get('name', ''),
-                    certificate_date=cert.get('date'),
-                    certificate_link=cert.get('link', '')
-                )
+        # Create Certification entries
+        from cv_writer.models import Certification
+        for cert in parsed_data.get('certifications', []):
+            Certification.objects.create(
+                user=user,
+                certificate_name=cert.get('name', ''),
+                certificate_date=cert.get('date'),
+                certificate_link=cert.get('link', '')
+            )
 
-        # Create References
-        if 'references' in data:
-            for ref in data['references']:
-                Reference.objects.create(
-                    user=self.user,
-                    name=ref.get('name', ''),
-                    title=ref.get('title', ''),
-                    company=ref.get('company', ''),
-                    email=ref.get('email', ''),
-                    phone=ref.get('phone', ''),
-                    reference_type=ref.get('type', 'Professional')
-                )
+        return cv_writer
 
-        # Create Social Media
-        if 'social_media' in data:
-            for social in data['social_media']:
-                SocialMedia.objects.create(
-                    user=self.user,
-                    platform=social.get('platform', ''),
-                    url=social.get('url', '')
-                )
-
-        self.parsing_status = 'completed'
-        self.save()
-
-        class Meta:
-            ordering = ['-created_at']
+    class Meta:
+        ordering = ['-created_at']
 
 
 class ParsingMetaData(models.Model):

@@ -2,34 +2,35 @@ from tokenize import Pointfloat
 from django.shortcuts import render
 from django.views.generic.edit import model_forms
 from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated as isAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from .models import (
     CvWriter,
     Education,
     Experience,
-    Certification,
+    ProfessionalSummary,
+    Interest,
     Skill,
     Language,
+    Certification,
     Reference,
     SocialMedia,
-    ProfessionalSummary,
-    Interest
 )
 from .serializers import (
     CvWriterSerializer,
     EducationSerializer,
     ExperienceSerializer,
-    CertificationSerializer,
+    ProfessionalSummarySerializer,
+    InterestSummarySerializer,
     SkillSerializer,
     LanguageSerializer,
+    CertificationSerializer,
     ReferenceSerializer,
     SocialMediaSerializer,
-    ProfessionalSummarySerializer,
-    InterestSummarySerializer
 )
 
 """
@@ -37,8 +38,8 @@ I created a BaseListCreateAPIView class that inherits from generics.ListCreateAP
 """
 
 
-class BaseListCreateAPIView(generics.ListCreateAPIView):
-    permission_classes = [isAuthenticated]
+class BaseListCreateAPIView(ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -48,8 +49,8 @@ class BaseListCreateAPIView(generics.ListCreateAPIView):
         serializer.save(user=self.request.user)
 
 
-class BaseRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [isAuthenticated]
+class BaseRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
     lookup_field = "id"
 
     def get_queryset(self):
@@ -176,6 +177,47 @@ class SocialMediaListCreate(BaseListCreateAPIView):
 class SocialMediaDetailView(BaseRetrieveUpdateDestroyAPIView):
     serializer_class = SocialMediaSerializer
     model = SocialMedia
+
+
+class CVListCreateView(ListCreateAPIView):
+    queryset = CvWriter.objects.all()
+    serializer_class = CvWriterSerializer
+
+class CVRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    queryset = CvWriter.objects.all()
+    serializer_class = CvWriterSerializer
+
+class EducationListCreateView(ListCreateAPIView):
+    queryset = Education.objects.all()
+    serializer_class = EducationSerializer
+
+class EducationRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    queryset = Education.objects.all()
+    serializer_class = EducationSerializer
+
+class ExperienceListCreateView(ListCreateAPIView):
+    queryset = Experience.objects.all()
+    serializer_class = ExperienceSerializer
+
+class ExperienceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    queryset = Experience.objects.all()
+    serializer_class = ExperienceSerializer
+
+class SkillListCreateView(ListCreateAPIView):
+    queryset = Skill.objects.all()
+    serializer_class = SkillSerializer
+
+class SkillRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    queryset = Skill.objects.all()
+    serializer_class = SkillSerializer
+
+class CertificationListCreateView(ListCreateAPIView):
+    queryset = Certification.objects.all()
+    serializer_class = CertificationSerializer
+
+class CertificationRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    queryset = Certification.objects.all()
+    serializer_class = CertificationSerializer
 
 
 # Create your views here.

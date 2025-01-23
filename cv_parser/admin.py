@@ -1,3 +1,5 @@
 from django.contrib import admin
+from . models import CVDocument, ParsingMetaData
 
-# Register your models here.
+admin.site.register(CVDocument)
+admin.site.register(ParsingMetaData)

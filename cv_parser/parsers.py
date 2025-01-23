@@ -3,8 +3,9 @@ import docx
 import re
 import nltk
 import logging
+import json
 from dateutil import parser
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -14,21 +15,14 @@ class ParserException(Exception):
     pass
 
 class DocumentParser:
-    def __init__(self):
+    def __init__(self, ml_predictor=None):
         """
-        Initializes the parser and downloads NLTK resources
+        Initializes the parser with optional ML predictor
         
-        This constructor method is called when an instance of the class is created. It ensures that the 
-        required NLTK datasets for tokenization, part-of-speech tagging, named entity recognition, 
-        and word lists are available for use in the application.
-
-        The following resources are downloaded:
-        - 'punkt': A tokenizer for splitting text into sentences and words.
-        - 'average_perceptron_tagger': A part-of-speech tagger for labeling words with their grammatical 
-        categories.
-        - 'maxent_ne_chunker': A named entity chunker for identifying named entities in text.
-        - 'words': A list of words for various NLP tasks.
+        Args:
+            ml_predictor: Optional CVParserPredictor instance for ML-based parsing
         """
+        self.ml_predictor = ml_predictor
         try:
             nltk.download('punkt', quiet=True)
             nltk.download('averaged_perceptron_tagger', quiet=True)
@@ -50,28 +44,128 @@ class DocumentParser:
             Dict[str, Any]: Parsed CV data
         """
         try:
-            logger.info(f"Starting to parse document: {file_path}")
+            # Extract text from document
+            text = self._extract_text(file_path, document_type)
             
-            # Extract text based on document type
-            if document_type == 'pdf':
-                text = self.parse_pdf(file_path)
-            elif document_type == 'docx':
-                text = self.parse_docx(file_path)
-            else:
-                raise ParserException(f"Unsupported document type: {document_type}")
+            # Try ML-based parsing first if available
+            if self.ml_predictor:
+                try:
+                    parsed_data = self.ml_predictor.predict(text, document_type)
+                    # If confidence score is high enough, use ML results
+                    if parsed_data.get('confidence_score', 0) > 0.8:
+                        return parsed_data
+                except Exception as e:
+                    logger.warning(f"ML parsing failed, falling back to rule-based: {str(e)}")
             
-            if not text:
-                raise ParserException("No text could be extracted from document")
-            
-            # Parse sections
-            parsed_data = self.extract_sections(text)
-            
-            logger.info(f"Successfully parsed document: {file_path}")
-            return parsed_data
+            # Fall back to rule-based parsing
+            return self._parse_text(text)
             
         except Exception as e:
-            logger.error(f"Error parsing document {file_path}: {str(e)}")
+            logger.error(f"Failed to parse document: {str(e)}")
             raise ParserException(f"Failed to parse document: {str(e)}")
+
+    def _extract_text(self, file_path: str, document_type: str) -> str:
+        """
+        Extracts text from a document
+        
+        Args:
+            file_path (str): Path to the document
+            document_type (str): Type of document ('pdf' or 'docx')
+            
+        Returns:
+            str: Extracted text
+        """
+        if document_type == 'pdf':
+            return self.parse_pdf(file_path)
+        elif document_type == 'docx':
+            return self.parse_docx(file_path)
+        else:
+            raise ParserException(f"Unsupported document type: {document_type}")
+
+    def _parse_text(self, text: str) -> Dict[str, Any]:
+        """
+        Parses text into structured CV data
+        
+        Args:
+            text (str): Text to parse
+            
+        Returns:
+            Dict[str, Any]: Parsed CV data
+        """
+        # Basic structure for extracted data
+        data = {
+            'personal_info': {},
+            'professional_summary': '',
+            'education': [],
+            'experience': [],
+            'skills': [],
+            'languages': [],
+            'certifications': [],
+            'references': [],
+            'interests': [],
+            'social_media': []
+        }
+
+        # Split text into lines for initial processing
+        lines = text.split('\n')
+        lines = [line.strip() for line in lines if line.strip()]  # Remove empty lines
+        
+        # First, try to extract personal information from the beginning
+        data['personal_info'] = self._parse_personal_info(lines[:5])  # Look at first 5 lines
+        
+        # Look for professional summary near the top of the document
+        summary_section_found = False
+        summary_lines = []
+        
+        # First try to find a dedicated summary section
+        sections = self._split_into_sections(text)
+        for title, content in sections.items():
+            if any(word in title.lower() for word in ['summary', 'profile', 'objective', 'about']):
+                data['professional_summary'] = self._parse_professional_summary(content)
+                summary_section_found = True
+                break
+        
+        # If no dedicated summary section found, look for summary-like content at the start
+        if not summary_section_found:
+            for line in lines[1:10]:  # Look in first 10 lines after name
+                line = line.strip()
+                # Skip lines that look like contact info
+                if re.search(r'@|[0-9]{3}[-\s]?[0-9]{3}|Street|Ave|Road|IL|USA', line):
+                    continue
+                # Skip lines that look like section headers
+                if self._is_section_header(line):
+                    break
+                # Include substantial lines that might be part of a summary
+                if line and len(line) > 30:  # Only include longer lines
+                    summary_lines.append(line)
+            
+            if summary_lines:
+                data['professional_summary'] = ' '.join(summary_lines)
+
+        # Process remaining sections
+        for section_title, section_content in sections.items():
+            section_title = section_title.lower()
+            if 'education' in section_title:
+                data['education'] = self._parse_education(section_content)
+            elif any(x in section_title for x in ['experience', 'employment', 'work history']):
+                data['experience'] = self._parse_experience(section_content)
+            elif 'skill' in section_title:
+                data['skills'] = self._parse_skills(section_content)
+            elif 'language' in section_title:
+                data['languages'] = self._parse_languages(section_content)
+            elif any(x in section_title for x in ['certification', 'certificate', 'qualification']):
+                data['certifications'] = self._parse_certifications(section_content)
+            elif 'reference' in section_title:
+                data['references'] = self._parse_references(section_content)
+            elif any(x in section_title for x in ['interest', 'hobby', 'activities']):
+                data['interests'] = self._parse_interests(section_content)
+            elif any(x in section_title for x in ['social', 'link', 'contact']):
+                # Try to extract additional personal info from contact section
+                contact_info = self._parse_personal_info(section_content)
+                data['personal_info'].update(contact_info)
+                data['social_media'] = self._parse_social_media(section_content)
+
+        return data
 
     def parse_pdf(self, file_path: str) -> str:
         """
@@ -124,47 +218,6 @@ class DocumentParser:
             logger.error(f"Error parsing DOCX {file_path}: {str(e)}")
             raise ParserException(f"Failed to parse DOCX: {str(e)}")
 
-    def extract_sections(self, text: str) -> Dict[str, Any]:
-        # Basic structure for extracted data
-        data = {
-            'personal_info': {},
-            'professional_summary': '',
-            'education': [],
-            'experience': [],
-            'skills': [],
-            'languages': [],
-            'certifications': [],
-            'references': [],
-            'interests': [],
-            'social_media': []
-        }
-
-        #  split text into sections
-        sections = self._split_into_sections(text)
-
-        # extract information from each section if available
-        for section_title, section_content in sections.items():
-            if 'education' in section_title.lower():
-                data['education'] = self._parse_education(section_content)
-            elif 'experience' in section_title.lower():
-                data['experience'] = self._parse_experience(section_content)
-            elif 'skills' in section_title.lower():
-                data['skills'] = self._parse_skills(section_content)
-            elif 'professional_summary' in section_title.lower():
-                data['professional_summary'] = self._parse_professional_summary(section_content)
-            elif 'Language' in section_title.lower():
-                data['languages'] = self._parse_languages(section_content)
-            elif 'Certification' in section_title.lower():
-                data['certifications'] = self._parse_certifications(section_content)
-            elif 'reference' in section_title.lower():
-                data['references'] = self._parse_references(section_content)
-            elif 'interest' in section_title.lower():
-                data['interests'] = self._parse_interests(section_content)
-            elif 'social_media' in section_title.lower():
-                data['social_media'] = self._parse_social_media(section_content)
-
-        return data
-
     def _split_into_sections(self, text: str) -> Dict[str, str]:
         # Implementation for splitting text into sections
         # This is a placeholder - you'll need to implement proper section detection
@@ -206,7 +259,7 @@ class DocumentParser:
             'references', 'professional references',
             'summary', 'professional summary', 'profile', 'about me',
             'interests', 'hobbies', 'activities',
-            'projects', 'personal projects',
+            'projects', 'personal projects', 'personal summary'
             'publications', 'research',
             'awards', 'achievements',
             'volunteer', 'volunteering',
@@ -240,6 +293,43 @@ class DocumentParser:
             return any(re.match(pattern, line) for pattern in header_patterns)
             
         return False
+
+    def _parse_date(self, date_str):
+        """Helper method to parse dates with better error handling"""
+        if not date_str:
+            return None
+            
+        try:
+            # Try to parse the date string
+            return parser.parse(date_str).strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            # If parsing fails, return None
+            return None
+
+    def _extract_date_range(self, text):
+        """
+        Extract date range from text with support for various formats
+        Returns (start_date, end_date, is_current)
+        """
+        # Common date patterns
+        patterns = [
+            # Jan 2020 - Present
+            r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4})\s*-\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|Present|Current|Now)',
+            # 2020 - Present
+            r'(\d{4})\s*-\s*(Present|Current|Now|\d{4})',
+            # 01/2020 - Present
+            r'(\d{1,2}/\d{4})\s*-\s*(Present|Current|Now|\d{1,2}/\d{4})',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                start_date = self._parse_date(match.group(1))
+                is_current = any(word in match.group(2).lower() for word in ['present', 'current', 'now'])
+                end_date = None if is_current else self._parse_date(match.group(2))
+                return start_date, end_date, is_current
+                
+        return None, None, False
 
     def _parse_education(self, text: str) -> list:
         """
@@ -283,18 +373,14 @@ class DocumentParser:
                         education_info['degree'] = line.strip()
                 
                 # Look for dates
-                date_match = re.search(r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4})\s*-\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|Present)', line, re.IGNORECASE)
-                if date_match:
-                    try:
-                        education_info['start_date'] = parser.parse(date_match.group(1)).strftime('%Y-%m-%d')
-                        if date_match.group(2).lower() == 'present':
-                            education_info['current'] = True
-                        else:
-                            education_info['end_date'] = parser.parse(date_match.group(2)).strftime('%Y-%m-%d')
-                    except (ValueError, TypeError):
-                        continue
+                start_date, end_date, is_current = self._extract_date_range(line)
+                if start_date:
+                    education_info['start_date'] = start_date
+                    education_info['end_date'] = end_date
+                    education_info['current'] = is_current
             
-            education_entries.append(education_info)
+            if education_info['school']:  # Only add if we have at least a school name
+                education_entries.append(education_info)
         
         return education_entries
 
@@ -351,16 +437,11 @@ class DocumentParser:
                     continue
                 
                 # Look for dates
-                date_match = re.search(r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4})\s*-\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|Present)', line, re.IGNORECASE)
-                if date_match:
-                    try:
-                        experience_info['start_date'] = parser.parse(date_match.group(1)).strftime('%Y-%m-%d')
-                        if date_match.group(2).lower() == 'present':
-                            experience_info['current'] = True
-                        else:
-                            experience_info['end_date'] = parser.parse(date_match.group(2)).strftime('%Y-%m-%d')
-                    except (ValueError, TypeError):
-                        continue
+                start_date, end_date, is_current = self._extract_date_range(line)
+                if start_date:
+                    experience_info['start_date'] = start_date
+                    experience_info['end_date'] = end_date
+                    experience_info['current'] = is_current
                     continue
                 
                 # Check for achievements section
@@ -377,52 +458,71 @@ class DocumentParser:
                         description_lines.append(line.strip())
             
             experience_info['description'] = '\n'.join(description_lines)
-            experience_entries.append(experience_info)
+            if experience_info['company']:  # Only add if we have at least a company name
+                experience_entries.append(experience_info)
         
         return experience_entries
 
-    def _parse_skills(self, text: str) -> list:
+    def _parse_skills(self, text: str) -> List[Dict[str, str]]:
         """
-        Parses skills section text into structured data.
-        
-        Args:
-            text (str): The text content of the skills section
-            
-        Returns:
-            list: List of dictionaries containing skill information
+        Parse skills section into structured data
+        Returns a list of skills with their levels
         """
         skills = []
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
         
-        # Common skill level indicators
-        level_indicators = {
-            'expert': 'Expert',
-            'advanced': 'Advanced',
-            'intermediate': 'Intermediate',
-            'beginner': 'Beginner',
-            'basic': 'Beginner',
-            'proficient': 'Advanced'
-        }
+        # Skip copyright sections
+        if 'copyright' in text.lower() or '©' in text:
+            text = text.split('copyright')[0]
+            text = text.split('©')[0]
         
+        # Common skill indicators
+        skill_indicators = [
+            'proficient', 'experienced', 'skilled', 'knowledge of', 'expertise in',
+            'familiar with', 'competent in', 'trained in', 'certified in',
+            'specialist in', 'background in', 'working knowledge'
+        ]
+        
+        # Split text into lines and process each line
+        lines = text.split('\n')
         for line in lines:
-            # Remove bullet points and other common separators
-            line = re.sub(r'^[-•●\*]\s*', '', line)
+            line = line.strip()
+            if not line or len(line) < 3:  # Skip empty or very short lines
+                continue
+                
+            # Skip lines that look like headers or copyright notices
+            if self._is_section_header(line) or any(x in line.lower() for x in ['copyright', '©', 'www.', 'http', '@']):
+                continue
             
-            # Check if skill has level indicator
-            skill_level = 'Intermediate'  # default level
-            for indicator, level in level_indicators.items():
-                if indicator in line.lower():
-                    skill_level = level
-                    line = re.sub(r'\s*[\(\[\-]\s*' + indicator + r'.*[\)\]]\s*', '', line, flags=re.IGNORECASE)
-                    break
+            # Try to extract skill and level
+            # First check if there's an explicit level indicator
+            level_match = re.search(r'[\(\[\{](beginner|intermediate|advanced|expert)[\)\]\}]', line.lower())
+            if level_match:
+                skill = line[:level_match.start()].strip()
+                level = level_match.group(1).capitalize()
+            else:
+                # Look for other level indicators
+                level = 'Intermediate'  # Default level
+                for indicator in ['Expert in', 'Advanced', 'Proficient in', 'Basic']:
+                    if line.lower().startswith(indicator.lower()):
+                        level = indicator.split()[0].capitalize()
+                        line = line[len(indicator):].strip()
+                        break
+                skill = line
             
-            # Clean up the skill name
-            skill_name = line.strip()
-            if skill_name:
-                skills.append({
-                    'name': skill_name,
-                    'level': skill_level
-                })
+            # Clean up skill name
+            skill = re.sub(r'[^\w\s\-\(\)]+', '', skill)  # Remove special characters except ()
+            skill = re.sub(r'\s+', ' ', skill).strip()  # Normalize whitespace
+            
+            # Skip if skill is too long (likely not a skill) or too short
+            if 3 < len(skill) < 50 and not any(x in skill.lower() for x in ['copyright', 'www', 'http']):
+                # Split multiple skills if separated by common delimiters
+                sub_skills = re.split(r'\s*[,•●&/]\s*', skill)
+                for sub_skill in sub_skills:
+                    if sub_skill and len(sub_skill.strip()) > 2:
+                        skills.append({
+                            'name': sub_skill.strip(),
+                            'level': level
+                        })
         
         return skills
 
@@ -669,3 +769,68 @@ class DocumentParser:
                 })
             
         return social_media
+
+    def _parse_personal_info(self, text: str) -> Dict[str, str]:
+        """
+        Extract personal information from CV text
+        """
+        if isinstance(text, list):
+            text = '\n'.join(text)
+            
+        info = {
+            'first_name': '',
+            'last_name': '',
+            'email': '',
+            'phone': '',
+            'address': '',
+            'city': '',
+            'country': '',
+            'contact_number': ''
+        }
+        
+        # Extract email
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        email_match = re.search(email_pattern, text)
+        if email_match:
+            info['email'] = email_match.group(0)
+        
+        # Extract phone number (various formats)
+        phone_patterns = [
+            r'\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # International format
+            r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # US format
+            r'\d{4}[-.\s]?\d{3}[-.\s]?\d{3}',  # Other format
+        ]
+        for pattern in phone_patterns:
+            phone_match = re.search(pattern, text)
+            if phone_match:
+                info['contact_number'] = phone_match.group(0)
+                break
+        
+        # Try to extract name from the first few lines
+        first_lines = text.split('\n')[:3]  # Look at first 3 lines for name
+        for line in first_lines:
+            line = line.strip()
+            # Skip lines that look like section headers or are too long
+            if len(line) > 50 or self._is_section_header(line):
+                continue
+            # Look for a name-like pattern (2-3 words, each capitalized)
+            # Updated pattern to handle names with spaces between letters
+            name_match = re.match(r'^([A-Z][a-z]*(?:\s+[A-Z][a-z]*){1,2})$', line)
+            if name_match:
+                name_parts = name_match.group(1).split()
+                info['first_name'] = name_parts[0]
+                info['last_name'] = name_parts[-1] if len(name_parts) > 1 else ''
+                break
+        
+        # Extract address components
+        # Look for address patterns
+        address_pattern = r'(\d+[^,]*),\s*([^,]+),\s*([^,]+)\s*(\d{5})?'
+        address_match = re.search(address_pattern, text)
+        if address_match:
+            street, city, state, zipcode = address_match.groups()
+            info['address'] = street.strip()
+            info['city'] = city.strip()
+            if state:
+                info['country'] = state.strip()  # Using country field for state
+        
+        return {k: v for k, v in info.items() if v}  # Remove empty values

@@ -1,11 +1,25 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.text import slugify
 
 
 class CvWriter(models.Model):
+    STATUS_CHOICES = (
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+        ('archived', 'Archived'),
+    )
+    
+    VISIBILITY_CHOICES = (
+        ('private', 'Private'),
+        ('public', 'Public'),
+        ('shared', 'Shared'),
+    )
+    
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="cv_writer"
     )
+    # Personal Information from CV Parser
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     address = models.CharField(max_length=100)
@@ -13,11 +27,32 @@ class CvWriter(models.Model):
     country = models.CharField(max_length=100)
     contact_number = models.CharField(max_length=100)
     additional_information = models.TextField(null=True, blank=True)
+    
+    # New fields for LinkedIn integration
+    title = models.CharField(max_length=200, null=True, blank=True)
+    slug = models.SlugField(max_length=200, null=True, blank=True, unique=True)
+    description = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', null=True, blank=True)
+    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private', null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name}"
+        return f"{self.first_name} {self.last_name}'s CV"
+        
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            # Generate slug from first_name and last_name if not provided
+            base_slug = slugify(f"{self.first_name}-{self.last_name}-cv")
+            unique_slug = base_slug
+            counter = 1
+            # Ensure unique slug
+            while CvWriter.objects.filter(slug=unique_slug).exclude(id=self.id).exists():
+                unique_slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = unique_slug
+        super().save(*args, **kwargs)
 
 
 class Education(models.Model):
@@ -25,7 +60,7 @@ class Education(models.Model):
     school_name = models.CharField(max_length=100)
     degree = models.CharField(max_length=100)
     field_of_study = models.CharField(max_length=100)
-    start_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     current = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -67,7 +102,7 @@ class Experience(models.Model):
     job_title = models.CharField(max_length=100)
     job_description = models.TextField()
     achievements = models.TextField()
-    start_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     employment_type = models.CharField(max_length=100, choices=EMPLOYMENT_TYPE)
     current = models.BooleanField(default=False)
@@ -106,13 +141,13 @@ class Certification(models.Model):
         User, on_delete=models.CASCADE, related_name="certification"
     )
     certificate_name = models.CharField(max_length=100)
-    certificate_date = models.DateField()
-    certificate_link = models.URLField()
+    certificate_date = models.DateField(null=True, blank=True)
+    certificate_link = models.URLField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.certificate_name} - {self.certificate_date}"
+        return f"{self.certificate_name}"
 
 
 class Reference(models.Model):

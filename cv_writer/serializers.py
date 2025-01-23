@@ -1,7 +1,6 @@
-from pydoc import classname
-from django.contrib.auth.models import User
 from rest_framework import serializers
-from cv_writer.models import (
+from django.contrib.auth.models import User
+from .models import (
     CvWriter,
     Education,
     Experience,
@@ -58,64 +57,27 @@ class InterestSummarySerializer(serializers.ModelSerializer):
 class EducationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Education
-        fields = [
-            "id",
-            "school_name",
-            "degree",
-            "field_of_study",
-            "start_date",
-            "end_date",
-            "current",
-            "user",
-            "created_at",
-        ]
-        extra_kwargs = {"user": {"read_only": True}}
-
+        fields = '__all__'
 
 class ExperienceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Experience
-        fields = [
-            "id",
-            "company_name",
-            "job_title",
-            "job_description",
-            "achievements",
-            "start_date",
-            "end_date",
-            "employment_type",
-            "current",
-            "user",
-            "created_at",
-        ]
-        extra_kwargs = {"user": {"read_only": True}}
-
+        fields = '__all__'
 
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Skill
-        fields = ["id", "user", "skill_name", "skill_level", "created_at"]
-        extra_kwargs = {"user": {"read_only": True}}
+        fields = '__all__'
 
+class CertificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Certification
+        fields = '__all__'
 
 class LanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Language
         fields = ["id", "user", "language_name", "language_level", "is_custom", "created_at"]
-        extra_kwargs = {"user": {"read_only": True}}
-
-
-class CertificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Certification
-        fields = [
-            "id",
-            "user",
-            "certificate_name",
-            "certificate_date",
-            "certificate_link",
-            "created_at",
-        ]
         extra_kwargs = {"user": {"read_only": True}}
 
 
@@ -149,3 +111,13 @@ class SocialMediaSerializer(serializers.ModelSerializer):
         extra_kwargs = {"user": {"read_only": True}}
 
 
+class CVSerializer(serializers.ModelSerializer):
+    education = EducationSerializer(many=True, read_only=True)
+    experience = ExperienceSerializer(many=True, read_only=True)
+    skills = SkillSerializer(many=True, read_only=True)
+    certifications = CertificationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = CvWriter
+        fields = '__all__'
+        extra_kwargs = {"user": {"read_only": True}}

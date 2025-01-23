@@ -42,7 +42,7 @@ class CVParserViewSet(viewsets.ModelViewSet):
             cv_document.save()
 
             # Transfer to cv_writer models
-            cv_document.transfer_to_cv_writer()
+            cv_document.transfer_to_cv_writer(user=request.user)
 
             return Response({
                 'message': 'Document parsed successfully',
