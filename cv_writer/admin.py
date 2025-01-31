@@ -10,6 +10,7 @@ from .models import (
     SocialMedia,
     ProfessionalSummary,
     Interest,
+    CVImprovement
 )
 
 # Register your models here.
@@ -23,4 +24,5 @@ admin.site.register(Reference)
 admin.site.register(SocialMedia)
 admin.site.register(ProfessionalSummary)
 admin.site.register(Interest)
+admin.site.register(CVImprovement)
 # Compare this snippet from cv_writer/models.py:

@@ -1,4 +1,7 @@
 cleaned_data/
 dataset_files/
+models/
+logs/
+venv/
 
 .env

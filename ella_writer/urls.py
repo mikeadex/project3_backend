@@ -18,11 +18,10 @@ from allauth.account.views import confirm_email
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
-    path("api/v1/", include("cv_writer.urls")),
     path("api-auth/", include("rest_framework.urls")),
     path("", include("home.urls")),
     path("api/cv_parser/", include("cv_parser.urls")),
-    path("cv_writer/", include("cv_writer.urls")),
+    path("api/cv_writer/", include("cv_writer.urls")),  
     path("models_trainer/", include("models_trainer.urls")),
     path("api/linkedin/", include("linkedin_parser.urls")),
     

@@ -55,6 +55,39 @@ class CvWriter(models.Model):
         super().save(*args, **kwargs)
 
 
+class CVImprovement(models.Model):
+    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name='improvements')
+    section = models.CharField(max_length=50, choices=[
+        ('professional_summary', 'Professional Summary'),
+        ('experience', 'Experience'),
+        ('education', 'Education'),
+        ('skills', 'Skills'),
+        ('certifications', 'Certifications'),
+        ('languages', 'Languages'),
+        ('interests', 'Interests')
+    ])
+    original_content = models.TextField()
+    improved_content = models.TextField()
+    improvement_type = models.CharField(max_length=20, choices=[
+        ('minimal', 'Quick Improvement'),
+        ('full', 'Deep Improvement')
+    ])
+    tokens_used = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed')
+    ], default='pending')
+    error_message = models.TextField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.cv.user.email} - {self.section} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
 class Education(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="education")
     school_name = models.CharField(max_length=100)

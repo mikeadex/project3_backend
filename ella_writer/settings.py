@@ -61,7 +61,8 @@ INSTALLED_APPS = [
     "cv_parser",
     "cv_writer",
     "models_trainer",
-    "linkedin_parser",  # Add this line
+    "linkedin_parser", 
+    "jobstract",
 ]
 
 MIDDLEWARE = [
@@ -145,28 +146,40 @@ ROOT_URLCONF = "ella_writer.urls"
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
         },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'WARNING',
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'cv_writer.log'),
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
+        'cv_writer': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
         'django': {
             'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        'django.server': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
+            'level': 'INFO',
+            'propagate': True,
         },
     },
 }
+
+# Create logs directory if it doesn't exist
+if not os.path.exists(os.path.join(BASE_DIR, 'logs')):
+    os.makedirs(os.path.join(BASE_DIR, 'logs'))
 
 TEMPLATES = [
     {
@@ -283,6 +296,12 @@ ACCOUNT_FORMS = {
 
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
 ACCOUNT_PASSWORD_REQUIRED = True
+
+# Gemini AI Settings
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+# Local LLM Settings
+LLAMA_MODEL_PATH = os.getenv('LLAMA_MODEL_PATH', os.path.join(BASE_DIR, 'models/llama-2-7b-chat.gguf'))
 
 # LinkedIn OAuth Configuration
 LINKEDIN_CONFIG = {
