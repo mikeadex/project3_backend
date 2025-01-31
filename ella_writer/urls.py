@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/cv_writer/", include("cv_writer.urls")),  
     path("models_trainer/", include("models_trainer.urls")),
     path("api/linkedin/", include("linkedin_parser.urls")),
+    path("api/jobstract/", include("jobstract.urls")),
     
     # Authentication endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="get_token"),
