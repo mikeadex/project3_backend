@@ -1,5 +1,6 @@
 from tabnanny import verbose
 from django.db import models
+from django.contrib.auth.models import User
 
 # Create your models here.
 class Employer(models.Model):
@@ -77,3 +78,55 @@ class Opportunity(models.Model):
     class Meta:
         verbose_name_plural = 'Opportunities'
         ordering = ['-date_posted']
+
+class JobApplication(models.Model):
+    STATUS_CHOICES = (
+        ('applied', 'Applied'),
+        ('screening', 'Screening'),
+        ('interview', 'Interview'),
+        ('offer', 'Offer'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+        ('withdrawn', 'Withdrawn'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='job_applications')
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name='applications')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='applied')
+    applied_date = models.DateTimeField(auto_now_add=True)
+    cv_used = models.ForeignKey('cv_writer.CvWriter', on_delete=models.SET_NULL, null=True, blank=True)
+    cover_letter = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    next_follow_up = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-applied_date']
+        unique_together = ['user', 'opportunity']
+
+    def __str__(self):
+        return f"{self.user.username}'s application for {self.opportunity.title}"
+
+class ApplicationEvent(models.Model):
+    EVENT_TYPES = (
+        ('status_change', 'Status Change'),
+        ('interview_scheduled', 'Interview Scheduled'),
+        ('interview_completed', 'Interview Completed'),
+        ('offer_received', 'Offer Received'),
+        ('note_added', 'Note Added'),
+        ('follow_up', 'Follow Up'),
+    )
+
+    application = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name='events')
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    event_date = models.DateTimeField()
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-event_date']
+
+    def __str__(self):
+        return f"{self.event_type} for {self.application}"

@@ -1,0 +1,46 @@
+<div class="postcell post-layout--right">
+    
+    <div class="s-prose js-post-body" itemprop="text">
+                
+<p>Ok, I see plenty of these errors around. I have tried everything I know to do and have yet to figure this out.</p>
+
+<p>I am working on a development server running python 2.5 and Django 1.3. Django 1.3 was installed using python setup.py install after unpacking the tar.gz download.</p>
+
+<p>All works well, I seldom have the need to run <code>manage.py</code> but am trying to use the new staticfiles app and am running into problems.</p>
+
+<pre><code>python manage.py collectstatic
+Traceback (most recent call last):
+  File "manage.py", line 2, in &lt;module&gt;
+    from django.core.management import execute_manager
+ImportError: No module named core.management
+</code></pre>
+
+<p>Ok, so I have <code>PATH</code> issue.</p>
+
+<p>From <a href="http://docs.djangoproject.com/en/dev//topics/install/#finding-site-packages" rel="noreferrer">Django install</a> I double check my <code>site-packages</code> directory.</p>
+
+<pre><code>python -c "from distutils.sysconfig import get_python_lib; print get_python_lib()"
+/usr/lib/python2.5/site-packages
+</code></pre>
+
+<p>Ok, let's check out what I have, echo $PYTHON_PATH was empty, so I set it</p>
+
+<pre><code>export PYTHON_PATH=/usr/lib/python2.5/site-packages/django
+</code></pre>
+
+<p>Still no luck. Lets check what sys.path has to say</p>
+
+<pre><code>&gt;&gt;&gt; import sys
+&gt;&gt;&gt; print sys.path
+['', '/usr/lib/python2.5', '/usr/lib/python2.5/plat-linux2', '/usr/lib/python2.5/lib-tk', '/usr/lib/python2.5/lib-dynload', '/usr/local/lib/python2.5/site-packages', '/usr/lib/python2.5/site-packages', '/usr/lib/python2.5/site-packages/PIL', '/usr/lib/python2.5/site-packages/django', '/var/lib/python-support/python2.5']
+</code></pre>
+
+<p>path is there, I even created /usr/lib/python2.5/site-packages/django.pth with contents</p>
+
+<pre><code>cat /usr/lib/python2.5/site-packages/django.pth 
+/usr/lib/python2.5/site-packages/django/
+</code></pre>
+
+<p>Anyone got an clues to what is going on here? </p>
+
+<p>I found a symlink further up the path that was getting in the way, but no on to a new error.</p>
