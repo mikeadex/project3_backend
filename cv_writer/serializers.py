@@ -110,3 +110,37 @@ class CVImprovementSerializer(serializers.ModelSerializer):
             'improvement_type', 'tokens_used', 'status', 'error_message',
             'created_at'
         ]
+
+class CVVersionSerializer(serializers.ModelSerializer):
+    variants = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CvWriter
+        fields = [
+            'id', 
+            'user', 
+            'title', 
+            'is_primary', 
+            'created_at', 
+            'updated_at', 
+            'parent_version', 
+            'version_name', 
+            'version_purpose',
+            'variants'
+        ]
+        read_only_fields = ['user', 'created_at', 'updated_at']
+
+    def get_variants(self, obj):
+        # Get all variant versions of this CV
+        variants = obj.variants.all()
+        return CVVersionSerializer(variants, many=True).data
+
+    def create(self, validated_data):
+        # Ensure the CV is created for the current user
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Prevent changing the user
+        validated_data.pop('user', None)
+        return super().update(instance, validated_data)

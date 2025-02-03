@@ -37,6 +37,9 @@ class CvWriter(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    parent_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='variants')
+    version_name = models.CharField(max_length=100, blank=True, null=True)
+    version_purpose = models.CharField(max_length=200, blank=True, null=True)  # e.g. "Tech Startup", "Marketing Role"
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}'s CV"
@@ -53,6 +56,21 @@ class CvWriter(models.Model):
                 counter += 1
             self.slug = unique_slug
         super().save(*args, **kwargs)
+
+    def clone(self):
+        # Create a new version based on this CV
+        return CvWriter.objects.create(
+            user=self.user,
+            title=f"{self.title} - Copy",
+            is_primary=False,
+            parent_version=self,
+            version_name=f"{self.version_name} - Copy" if self.version_name else None,
+            version_purpose=self.version_purpose
+        )
+
+    class Meta:
+        verbose_name_plural = 'CV Writers'
+        ordering = ['-created_at']
 
 
 class CVImprovement(models.Model):

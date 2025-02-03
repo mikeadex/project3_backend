@@ -40,4 +40,10 @@ urlpatterns = [
 
     path('social-media/', views.SocialMediaListCreate.as_view(), name='social-media-list-create'),
     path('social-media/<int:id>/', views.SocialMediaDetailView.as_view(), name='social-media-detail'),
+
+    # CV Versioning Endpoints
+    path('cv/versions/', views.CVVersionListCreateView.as_view(), name='cv-versions-list'),
+    path('cv/versions/<int:pk>/', views.CVVersionDetailView.as_view(), name='cv-version-detail'),
+    path('cv/versions/<int:pk>/set_primary/', views.SetPrimaryVersionView.as_view(), name='set-primary-version'),
+    path('cv/versions/<int:pk>/clone/', views.CloneCVVersionView.as_view(), name='clone-cv-version'),
 ]

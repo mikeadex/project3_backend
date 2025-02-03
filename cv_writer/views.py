@@ -1,13 +1,22 @@
 from tokenize import Pointfloat
 from django.shortcuts import render
 from django.views.generic.edit import model_forms
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
 from django.core.mail import send_mail
-from rest_framework.decorators import api_view, permission_classes
+
+from rest_framework import (
+    generics, 
+    status, 
+    views as rest_views,
+)
+from rest_framework.permissions import (
+    IsAuthenticated, 
+    AllowAny
+)
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.decorators import api_view, permission_classes
+
 from .models import (
     CvWriter,
     Education,
@@ -33,6 +42,7 @@ from .serializers import (
     ReferenceSerializer,
     SocialMediaSerializer,
     CVImprovementSerializer,
+    CVVersionSerializer
 )
 from .services import CVImprovementService
 from .local_llm import LocalLLMService
@@ -647,3 +657,62 @@ def get_cv(request, cv_id):
         return Response({'error': 'CV not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CVVersionListCreateView(generics.ListCreateAPIView):
+    serializer_class = CVVersionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only return CVs for the current user
+        return CvWriter.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        # Ensure the CV is created for the current user
+        serializer.save(user=self.request.user)
+
+class CVVersionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CVVersionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only allow access to the user's own CVs
+        return CvWriter.objects.filter(user=self.request.user)
+
+class SetPrimaryVersionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            # Find the CV version
+            version = CvWriter.objects.get(pk=pk, user=request.user)
+            
+            # Unset primary for all other CVs of this user
+            CvWriter.objects.filter(user=request.user, is_primary=True).update(is_primary=False)
+            
+            # Set this version as primary
+            version.is_primary = True
+            version.save()
+            
+            # Serialize and return the updated version
+            serializer = CVVersionSerializer(version, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except CvWriter.DoesNotExist:
+            return Response({'error': 'Version not found'}, status=status.HTTP_404_NOT_FOUND)
+
+class CloneCVVersionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            # Find the CV version to clone
+            original_version = CvWriter.objects.get(pk=pk, user=request.user)
+            
+            # Create a clone
+            cloned_version = original_version.clone()
+            
+            # Serialize and return the cloned version
+            serializer = CVVersionSerializer(cloned_version, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except CvWriter.DoesNotExist:
+            return Response({'error': 'Version not found'}, status=status.HTTP_404_NOT_FOUND)
