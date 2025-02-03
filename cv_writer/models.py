@@ -16,8 +16,10 @@ class CvWriter(models.Model):
         ('shared', 'Shared'),
     )
     
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="cv_writer"
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name="cv_versions"
     )
     # Personal Information from CV Parser
     first_name = models.CharField(max_length=100)
@@ -38,15 +40,31 @@ class CvWriter(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     parent_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='variants')
-    version_name = models.CharField(max_length=100, blank=True, null=True)
-    version_purpose = models.CharField(max_length=200, blank=True, null=True)  # e.g. "Tech Startup", "Marketing Role"
+    version_name = models.CharField(max_length=100, blank=True, null=True, default='Version 1')
+    version_purpose = models.CharField(max_length=200, blank=True, null=True)
+    is_primary = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name}'s CV"
+        version_info = f" - {self.version_name}" if self.version_name else ""
+        return f"{self.first_name} {self.last_name}'s CV{version_info}"
         
     def save(self, *args, **kwargs):
+        # If this is the first version for the user, set as primary
+        if not self.pk:  # Only on first save
+            existing_versions = CvWriter.objects.filter(user=self.user).count()
+            if existing_versions == 0:
+                self.is_primary = True
+                self.version_name = 'Version 1'
+            else:
+                # Ensure unique version name
+                base_name = 'Version'
+                counter = 2  # Start from 2 since first version is already 'Version 1'
+                while CvWriter.objects.filter(user=self.user, version_name=f'{base_name} {counter}').exists():
+                    counter += 1
+                self.version_name = f'{base_name} {counter}'
+
+        # Generate slug if not provided
         if not self.slug:
-            # Generate slug from first_name and last_name if not provided
             base_slug = slugify(f"{self.first_name}-{self.last_name}-cv")
             unique_slug = base_slug
             counter = 1
@@ -55,22 +73,42 @@ class CvWriter(models.Model):
                 unique_slug = f"{base_slug}-{counter}"
                 counter += 1
             self.slug = unique_slug
+
         super().save(*args, **kwargs)
 
     def clone(self):
         # Create a new version based on this CV
+        base_name = f"{self.version_name} - Copy" if self.version_name else "New Version"
+        counter = 1
+        unique_name = base_name
+        while CvWriter.objects.filter(user=self.user, version_name=unique_name).exists():
+            unique_name = f"{base_name} {counter}"
+            counter += 1
+
         return CvWriter.objects.create(
             user=self.user,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            address=self.address,
+            city=self.city,
+            country=self.country,
+            contact_number=self.contact_number,
+            additional_information=self.additional_information,
             title=f"{self.title} - Copy",
-            is_primary=False,
+            description=self.description,
+            status=self.status,
+            visibility=self.visibility,
             parent_version=self,
-            version_name=f"{self.version_name} - Copy" if self.version_name else None,
-            version_purpose=self.version_purpose
+            version_name=unique_name,
+            version_purpose=self.version_purpose,
+            is_primary=False
         )
 
     class Meta:
         verbose_name_plural = 'CV Writers'
         ordering = ['-created_at']
+        # Remove unique constraint on user
+        # unique_together = ['user']  # Commented out to allow multiple versions
 
 
 class CVImprovement(models.Model):
@@ -119,6 +157,7 @@ class Education(models.Model):
 
     def __str__(self):
         return f"{self.school_name} - {self.degree}"
+
 
 class ProfessionalSummary(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="professional_summary")

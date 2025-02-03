@@ -14,6 +14,7 @@ from .serializers import (
     JobApplicationSerializer, ApplicationEventSerializer
 )
 from cv_writer.models import CvWriter, Skill, Experience, Education
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -65,112 +66,136 @@ class OpportunityViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['GET'], permission_classes=[IsAuthenticated])
     def recommended(self, request):
         """Get job recommendations based on user's CV and preferences."""
+        import traceback
+        
         try:
-            # Get user's CV
+            # Detailed logging of user and request context
+            logger.info(f"Recommendation Request - User: {request.user.username}")
+            logger.info(f"User ID: {request.user.id}")
+
+            # Get user's primary CV or the most recent CV
             try:
-                cv = CvWriter.objects.get(user=request.user)
-                logger.info(f"Found CV for user {request.user.username}")
-            except CvWriter.DoesNotExist:
-                logger.warning(f"No CV found for user {request.user.username}")
+                # First try to get the primary CV
+                cv_queryset = CvWriter.objects.filter(user=request.user)
+                logger.info(f"Total CVs found for user: {cv_queryset.count()}")
+                
+                cv = cv_queryset.filter(is_primary=True).first()
+                
+                # If no primary CV, get the most recent CV
+                if not cv:
+                    cv = cv_queryset.order_by('-created_at').first()
+                
+                if not cv:
+                    logger.warning(f"No CV found for user {request.user.username}")
+                    return Response(
+                        {"detail": "Please create a CV to get personalized job recommendations."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                logger.info(f"Using CV: {cv} for recommendations")
+            except Exception as cv_error:
+                logger.error(f"CV Retrieval Error: {cv_error}")
+                logger.error(traceback.format_exc())
                 return Response(
-                    {"detail": "Please create a CV to get personalized job recommendations."},
-                    status=status.HTTP_404_NOT_FOUND
+                    {"detail": "Error retrieving your CV. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # Get user's skills
-            user_skills = set(
-                skill.skill_name.lower() 
-                for skill in Skill.objects.filter(user=request.user)
-            )
-            logger.info(f"Found {len(user_skills)} skills for user: {user_skills}")
+            # Get user's skills with detailed logging
+            try:
+                user_skills = set(
+                    skill.skill_name.lower() 
+                    for skill in Skill.objects.filter(user=request.user)
+                )
+                logger.info(f"Found {len(user_skills)} skills for user: {user_skills}")
+            except Exception as skill_error:
+                logger.error(f"Skill Retrieval Error: {skill_error}")
+                logger.error(traceback.format_exc())
+                user_skills = set()
 
             # Get user's experience level from most recent experience
-            latest_experience = (
-                Experience.objects
-                .filter(user=request.user)
-                .order_by('-end_date', '-start_date')
-                .first()
-            )
-            if latest_experience:
-                logger.info(f"Latest experience: {latest_experience.job_title}")
-
-            # Base queryset
-            queryset = Opportunity.objects.filter(
-                opportunity_type='job'
-            ).select_related('employer')
-            
-            logger.info(f"Found {queryset.count()} total jobs")
-            
-            # Score and sort opportunities based on skills match
-            scored_opportunities = []
-            for opportunity in queryset:
-                score = 0
+            try:
+                latest_experience = (
+                    Experience.objects
+                    .filter(user=request.user)
+                    .order_by('-end_date', '-start_date')
+                    .first()
+                )
+                experience_level = 'entry_level'  # Default
                 
-                # Calculate skills match score
-                if opportunity.skills_required or opportunity.skills_gained:
-                    required_skills = set(s.strip().lower() for s in (opportunity.skills_required or '').split(',') if s.strip())
-                    gained_skills = set(s.strip().lower() for s in (opportunity.skills_gained or '').split(',') if s.strip())
-                    all_job_skills = required_skills.union(gained_skills)
-                    
-                    if all_job_skills and user_skills:
-                        # Calculate skills match percentage
-                        matching_skills = user_skills.intersection(all_job_skills)
-                        skills_score = len(matching_skills) / len(all_job_skills)
-                        
-                        # Boost score if user has required skills
-                        if required_skills:
-                            required_skills_match = user_skills.intersection(required_skills)
-                            if required_skills_match:
-                                skills_score += (len(required_skills_match) / len(required_skills)) * 0.3
-                        
-                        score += skills_score
-                        logger.info(f"Job {opportunity.title} - Skills score: {skills_score}, Matching skills: {matching_skills}")
-                
-                # Boost score for matching job title or similar role
                 if latest_experience:
-                    job_title = latest_experience.job_title.lower()
-                    opportunity_title = opportunity.title.lower()
+                    logger.info(f"Latest experience: {latest_experience.job_title}")
+                    # Calculate years of experience
+                    years_of_experience = 0
+                    if latest_experience.start_date:
+                        from datetime import date
+                        years_of_experience = (date.today() - latest_experience.start_date).days / 365.25
                     
-                    # Exact title match
-                    if job_title in opportunity_title or opportunity_title in job_title:
-                        score += 0.3
-                        logger.info(f"Job {opportunity.title} - Exact title match bonus")
-                    # Partial title match (check for common words)
+                    if years_of_experience > 5:
+                        experience_level = 'senior'
+                    elif years_of_experience > 2:
+                        experience_level = 'mid'
                     else:
-                        job_words = set(job_title.split())
-                        opp_words = set(opportunity_title.split())
-                        common_words = job_words.intersection(opp_words)
-                        if common_words:
-                            title_bonus = 0.1 * (len(common_words) / len(opp_words))
-                            score += title_bonus
-                            logger.info(f"Job {opportunity.title} - Partial title match bonus: {title_bonus}")
+                        experience_level = 'entry_level'
+                    
+                    logger.info(f"Calculated Experience Level: {experience_level} (Years: {years_of_experience:.2f})")
+                else:
+                    logger.warning("No experience found for user")
+            except Exception as exp_error:
+                logger.error(f"Experience Retrieval Error: {exp_error}")
+                logger.error(traceback.format_exc())
+                experience_level = 'entry_level'
+
+            # Base queryset with skill and experience matching
+            try:
+                queryset = Opportunity.objects.filter(
+                    opportunity_type='job'
+                ).select_related('employer')
                 
-                # Only include opportunities with a minimum score
-                if score > 0.05:  # Lowered threshold to 5% for testing
-                    scored_opportunities.append((opportunity, score))
-                    logger.info(f"Job {opportunity.title} - Final score: {score}")
+                logger.info(f"Total job opportunities before filtering: {queryset.count()}")
+                
+                # Skill-based filtering
+                if user_skills:
+                    # Create a Q object to check for each skill
+                    skill_query = models.Q()
+                    for skill in user_skills:
+                        skill_query |= models.Q(skills_required__icontains=skill) | \
+                                       models.Q(skills_gained__icontains=skill)
+                    
+                    skill_matched_jobs = queryset.filter(skill_query)
+                    
+                    if skill_matched_jobs.exists():
+                        queryset = skill_matched_jobs
+                        logger.info(f"Skill-matched jobs: {queryset.count()}")
+                
+                # Experience level filtering
+                queryset = queryset.filter(
+                    experience_level__icontains=experience_level
+                )
+                
+                logger.info(f"Jobs after experience level filtering: {queryset.count()}")
+
+                # Limit recommendations
+                queryset = queryset[:20]  # Limit to 20 recommendations
+                logger.info(f"Final recommendations count: {queryset.count()}")
+                
+                # Serialize and return
+                serializer = self.get_serializer(queryset, many=True)
+                return Response(serializer.data)
             
-            logger.info(f"Found {len(scored_opportunities)} jobs above threshold")
-            
-            # Sort by score and get top matches
-            scored_opportunities.sort(key=lambda x: x[1], reverse=True)
-            recommended_opportunities = []
-            
-            for opportunity, score in scored_opportunities[:10]:
-                # Convert score to percentage and normalize to max 100%
-                normalized_score = min(score, 1.0)  # Cap at 100%
-                opportunity.matching_score = round(normalized_score * 100, 1)
-                recommended_opportunities.append(opportunity)
-            
-            logger.info(f"Returning {len(recommended_opportunities)} recommendations")
-            
-            serializer = OpportunitySerializer(recommended_opportunities, many=True)
-            return Response(serializer.data)
-            
+            except Exception as query_error:
+                logger.error(f"Query Processing Error: {query_error}")
+                logger.error(traceback.format_exc())
+                return Response(
+                    {"detail": "Error processing job recommendations."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
         except Exception as e:
-            logger.error(f"Error in recommendations: {str(e)}", exc_info=True)
+            logger.error(f"Unexpected error in recommendations: {e}")
+            logger.error(traceback.format_exc())
             return Response(
-                {"detail": f"Error getting recommendations: {str(e)}"},
+                {"detail": "An unexpected error occurred while fetching recommendations."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

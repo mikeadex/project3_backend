@@ -47,6 +47,8 @@ from .serializers import (
 from .services import CVImprovementService
 from .local_llm import LocalLLMService
 from django.db.models import Q
+import logging
+logger = logging.getLogger(__name__)
 
 cv_improvement_service = CVImprovementService()
 
@@ -664,30 +666,64 @@ class CVVersionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Only return CVs for the current user
-        return CvWriter.objects.filter(user=self.request.user)
+        try:
+            # Return all CV versions for the current user, sorted by primary first
+            queryset = CvWriter.objects.filter(user=self.request.user).order_by('-is_primary', '-created_at')
+            logger.info(f"Fetching CV versions for user {self.request.user.username}. Count: {queryset.count()}")
+            return queryset
+        except Exception as e:
+            logger.error(f"Error in get_queryset: {str(e)}", exc_info=True)
+            raise
 
     def perform_create(self, serializer):
-        # Ensure the CV is created for the current user
-        serializer.save(user=self.request.user)
+        try:
+            # Ensure the CV version is created for the current user
+            # Check if this is the first version for the user
+            existing_versions = CvWriter.objects.filter(user=self.request.user).count()
+            
+            # If this is the first version, set it as primary
+            is_primary = existing_versions == 0
+
+            logger.info(f"Creating CV version for user {self.request.user.username}. Is Primary: {is_primary}")
+
+            # If creating a new version, copy data from the primary version
+            primary_version = CvWriter.objects.filter(user=self.request.user, is_primary=True).first()
+            
+            serializer.save(
+                user=self.request.user, 
+                is_primary=is_primary
+            )
+        except Exception as e:
+            logger.error(f"Error in perform_create: {str(e)}", exc_info=True)
+            raise
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in list method: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'An unexpected error occurred: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class CVVersionDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CVVersionSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Only allow access to the user's own CVs
-        return CvWriter.objects.filter(user=self.request.user)
+        # Only return CV versions for the current user
+        return CvWriter.objects.filter(user=self.request.user).order_by('-is_primary', '-created_at')
 
 class SetPrimaryVersionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
         try:
-            # Find the CV version
-            version = CvWriter.objects.get(pk=pk, user=request.user)
+            # Find the version to set as primary
+            version = get_object_or_404(CvWriter, pk=pk, user=request.user)
             
-            # Unset primary for all other CVs of this user
+            # Unset primary for all other versions
             CvWriter.objects.filter(user=request.user, is_primary=True).update(is_primary=False)
             
             # Set this version as primary
@@ -696,9 +732,14 @@ class SetPrimaryVersionView(APIView):
             
             # Serialize and return the updated version
             serializer = CVVersionSerializer(version, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except CvWriter.DoesNotExist:
-            return Response({'error': 'Version not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(serializer.data)
+        
+        except Exception as e:
+            logger.error(f"Error setting primary version: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'An unexpected error occurred: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class CloneCVVersionView(APIView):
     permission_classes = [IsAuthenticated]

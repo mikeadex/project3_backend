@@ -19,7 +19,8 @@ class CvWriterSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'first_name', 'last_name', 'address', 'city', 'country',
             'contact_number', 'additional_information', 'title', 'description',
-            'status', 'visibility', 'created_at', 'updated_at'
+            'status', 'visibility', 'created_at', 'updated_at', 
+            'version_name', 'version_purpose', 'is_primary'
         ]
 
     def to_representation(self, instance):
@@ -113,12 +114,27 @@ class CVImprovementSerializer(serializers.ModelSerializer):
 
 class CVVersionSerializer(serializers.ModelSerializer):
     variants = serializers.SerializerMethodField()
+    is_primary = serializers.BooleanField(required=False)
+    version_name = serializers.CharField(
+        required=False, 
+        allow_blank=True, 
+        allow_null=True, 
+        max_length=100
+    )
+    version_purpose = serializers.CharField(
+        required=False, 
+        allow_blank=True, 
+        allow_null=True, 
+        max_length=200
+    )
 
     class Meta:
         model = CvWriter
         fields = [
             'id', 
             'user', 
+            'first_name',
+            'last_name',
             'title', 
             'is_primary', 
             'created_at', 
@@ -128,19 +144,69 @@ class CVVersionSerializer(serializers.ModelSerializer):
             'version_purpose',
             'variants'
         ]
-        read_only_fields = ['user', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'created_at', 'updated_at', 'first_name', 'last_name']
 
     def get_variants(self, obj):
-        # Get all variant versions of this CV
-        variants = obj.variants.all()
-        return CVVersionSerializer(variants, many=True).data
+        # Get all variants of this CV version
+        variants = CvWriter.objects.filter(parent_version=obj)
+        return [
+            {
+                'id': variant.id,
+                'title': variant.title,
+                'version_name': variant.version_name,
+                'version_purpose': variant.version_purpose,
+                'created_at': variant.created_at,
+                'is_primary': variant.is_primary
+            } for variant in variants
+        ]
+
+    def validate(self, attrs):
+        # Ensure only one primary version exists per user
+        user = self.context['request'].user
+        is_primary = attrs.get('is_primary', False)
+
+        # If setting as primary, unset primary for other versions
+        if is_primary:
+            CvWriter.objects.filter(user=user, is_primary=True).update(is_primary=False)
+
+        return attrs
 
     def create(self, validated_data):
-        # Ensure the CV is created for the current user
+        # Ensure user is set
         validated_data['user'] = self.context['request'].user
+        
+        # Set default version name if not provided
+        if 'version_name' not in validated_data:
+            existing_versions = CvWriter.objects.filter(user=validated_data['user']).count()
+            validated_data['version_name'] = f'Version {existing_versions + 1}'
+
+        # Set is_primary if not specified
+        if 'is_primary' not in validated_data:
+            existing_versions = CvWriter.objects.filter(user=validated_data['user']).count()
+            validated_data['is_primary'] = existing_versions == 0
+
+        # Copy data from the primary version if this is a new version
+        primary_version = CvWriter.objects.filter(user=validated_data['user'], is_primary=True).first()
+        if primary_version:
+            validated_data.setdefault('first_name', primary_version.first_name)
+            validated_data.setdefault('last_name', primary_version.last_name)
+            validated_data.setdefault('address', primary_version.address)
+            validated_data.setdefault('city', primary_version.city)
+            validated_data.setdefault('country', primary_version.country)
+            validated_data.setdefault('contact_number', primary_version.contact_number)
+            validated_data.setdefault('additional_information', primary_version.additional_information)
+
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        # Prevent changing the user
+        # Prevent changing user
         validated_data.pop('user', None)
+        
+        # If updating primary status, ensure only one primary version
+        if 'is_primary' in validated_data and validated_data['is_primary']:
+            CvWriter.objects.filter(
+                user=instance.user, 
+                is_primary=True
+            ).exclude(pk=instance.pk).update(is_primary=False)
+
         return super().update(instance, validated_data)
