@@ -12,6 +12,7 @@ from .models import (
     SocialMedia,
     CVImprovement,
 )
+from django.utils import timezone
 
 class CvWriterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -169,7 +170,78 @@ class CVVersionSerializer(serializers.ModelSerializer):
         if is_primary:
             CvWriter.objects.filter(user=user, is_primary=True).update(is_primary=False)
 
+        # Validate version name length
+        if 'version_name' in attrs:
+            if len(attrs['version_name']) > 100:
+                raise serializers.ValidationError({
+                    'version_name': 'Version name cannot exceed 100 characters.'
+                })
+        
+        # Validate version purpose length
+        if 'version_purpose' in attrs:
+            if len(attrs['version_purpose']) > 200:
+                raise serializers.ValidationError({
+                    'version_purpose': 'Version purpose cannot exceed 200 characters.'
+                })
+        
+        # Validate visibility
+        if 'visibility' in attrs:
+            valid_visibilities = ['private', 'public', 'shared']
+            if attrs['visibility'] not in valid_visibilities:
+                raise serializers.ValidationError({
+                    'visibility': f'Visibility must be one of {valid_visibilities}'
+                })
+        
         return attrs
+
+    def update(self, instance, validated_data):
+        """
+        Custom update method to handle version details editing
+        """
+        # Prevent editing primary version's name or purpose
+        if instance.is_primary and ('version_name' in validated_data or 'version_purpose' in validated_data):
+            raise serializers.ValidationError({
+                'detail': 'Cannot modify the primary version\'s name or purpose.'
+            })
+        
+        # Allow updating version name, purpose, and visibility
+        allowed_fields = ['version_name', 'version_purpose', 'visibility']
+        
+        # Sanitize input data
+        for field in allowed_fields:
+            if field in validated_data:
+                # Trim whitespace
+                value = validated_data[field].strip() if isinstance(validated_data[field], str) else validated_data[field]
+                
+                # Skip if value is empty string
+                if value:
+                    setattr(instance, field, value)
+        
+        # Validate version name uniqueness
+        if 'version_name' in validated_data:
+            existing_versions = CvWriter.objects.filter(
+                user=instance.user, 
+                version_name=validated_data['version_name']
+            ).exclude(pk=instance.pk)
+            
+            if existing_versions.exists():
+                raise serializers.ValidationError({
+                    'version_name': 'A version with this name already exists.'
+                })
+        
+        # Validate visibility
+        if 'visibility' in validated_data:
+            valid_visibilities = ['private', 'public', 'shared']
+            if validated_data['visibility'] not in valid_visibilities:
+                raise serializers.ValidationError({
+                    'visibility': f'Visibility must be one of {valid_visibilities}'
+                })
+        
+        # Update timestamp
+        instance.updated_at = timezone.now()
+        instance.save()
+        
+        return instance
 
     def create(self, validated_data):
         # Ensure user is set

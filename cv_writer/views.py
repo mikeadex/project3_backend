@@ -757,3 +757,75 @@ class CloneCVVersionView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except CvWriter.DoesNotExist:
             return Response({'error': 'Version not found'}, status=status.HTTP_404_NOT_FOUND)
+
+class EditCVVersionView(generics.UpdateAPIView):
+    """
+    View to edit details of a specific CV version.
+    Allows updating version name, purpose, and visibility.
+    """
+    serializer_class = CVVersionSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Ensure users can only edit their own CV versions
+        """
+        return CvWriter.objects.filter(user=self.request.user)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Custom update method with enhanced error handling
+        """
+        try:
+            # Validate input data
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            
+            # Validate input data
+            serializer.is_valid(raise_exception=True)
+            
+            # Perform the update
+            self.perform_update(serializer)
+            
+            # Return updated version details
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except serializers.ValidationError as e:
+            # Handle validation errors from serializer
+            return Response(
+                {'error': str(e.detail)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        except CvWriter.DoesNotExist:
+            # Handle case where version doesn't exist
+            return Response(
+                {'error': 'CV version not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            # Catch any unexpected errors
+            return Response(
+                {'error': 'An unexpected error occurred while editing the version'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def perform_update(self, serializer):
+        """
+        Custom update to add additional validation
+        """
+        # Prevent editing primary version's name or purpose
+        instance = serializer.instance
+        if instance.is_primary:
+            # Only allow updating visibility for primary version
+            allowed_fields = ['visibility']
+            for field in list(serializer.validated_data.keys()):
+                if field not in allowed_fields:
+                    raise serializers.ValidationError({
+                        'detail': 'Cannot modify the primary version\'s details except visibility.'
+                    })
+        
+        # Save the updated version
+        serializer.save()
