@@ -306,6 +306,11 @@ LLAMA_MODEL_PATH = os.getenv(
     "LLAMA_MODEL_PATH", os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf")
 )
 
+
+# Add to existing settings.py
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 # LinkedIn OAuth Configuration
 LINKEDIN_CONFIG = {
     "CLIENT_ID": os.getenv("LINKEDIN_CLIENT_ID", ""),
