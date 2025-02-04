@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 import os
+import dj_database_url
 
 load_dotenv()
 
@@ -61,7 +62,7 @@ INSTALLED_APPS = [
     "cv_parser",
     "cv_writer",
     "models_trainer",
-    "linkedin_parser", 
+    "linkedin_parser",
     "jobstract",
 ]
 
@@ -88,7 +89,7 @@ MIDDLEWARE = [
 #             'key': ''
 #         }
 #     },
-    
+
 # }
 
 ALLOWED_HOSTS = ["*"]
@@ -106,109 +107,109 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': True,
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
 }
 
 REST_AUTH = {
-    'USE_JWT': True,
-    'JWT_AUTH_COOKIE': 'access_token',
-    'JWT_AUTH_REFRESH_COOKIE': 'refresh_token',
-    'JWT_AUTH_HTTPONLY': False,
+    "USE_JWT": True,
+    "JWT_AUTH_COOKIE": "access_token",
+    "JWT_AUTH_REFRESH_COOKIE": "refresh_token",
+    "JWT_AUTH_HTTPONLY": False,
 }
 
 # Frontend URL (without trailing slash)
-FRONTEND_URL = 'http://localhost:5173'
+FRONTEND_URL = "http://localhost:5173"
 
 # Email settings
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'noreply@ella.com'
-SITE_NAME = 'Ella'
-SITE_DOMAIN = FRONTEND_URL.replace('http://', '').replace('https://', '')
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@ella.com"
+SITE_NAME = "Ella"
+SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
 
 ROOT_URLCONF = "ella_writer.urls"
 
 # Logging Configuration
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'cv_writer.log'),
-            'formatter': 'verbose',
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": os.path.join(BASE_DIR, "logs", "cv_writer.log"),
+            "formatter": "verbose",
         },
     },
-    'loggers': {
-        'cv_writer': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': True,
+    "loggers": {
+        "cv_writer": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": True,
         },
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': True,
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
         },
     },
 }
 
 # Create logs directory if it doesn't exist
-if not os.path.exists(os.path.join(BASE_DIR, 'logs')):
-    os.makedirs(os.path.join(BASE_DIR, 'logs'))
+if not os.path.exists(os.path.join(BASE_DIR, "logs")):
+    os.makedirs(os.path.join(BASE_DIR, "logs"))
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            os.path.join(BASE_DIR, 'templates'),
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [
+            os.path.join(BASE_DIR, "templates"),
         ],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
 # Email verification settings
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = '/'
-ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = '/'
+ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = "/"
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = "/"
 
 AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
 WSGI_APPLICATION = "ella_writer.wsgi.application"
@@ -218,29 +219,29 @@ WSGI_APPLICATION = "ella_writer.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.parse(
+        url=os.getenv("DATABASE_URL", ""),
+        conn_max_age=600, conn_health_checks=True
+    )
 }
 
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {
-            'min_length': 8,
-        }
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {
+            "min_length": 8,
+        },
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -266,11 +267,11 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 # Email settings (console backend for development)
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 
 EMAIL_USE_TLS = True
 
@@ -278,37 +279,39 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Ella Writer] '
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Ella Writer] "
 
 LOGIN_URL = "account_login"
-LOGIN_REDIRECT_URL ="/"
+LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
 
 # Form setting
 ACCOUNT_FORMS = {
-    'signup': 'allauth.account.forms.SignupForm',
-    'login': 'allauth.account.forms.LoginForm',
-    'reset_password': 'allauth.account.forms.ResetPasswordForm',
-    'reset_password_from_key': 'allauth.account.forms.ResetPasswordKeyForm',
-    'change_password': 'allauth.account.forms.ChangePasswordForm',
-    'add_email': 'allauth.account.forms.AddEmailForm'
+    "signup": "allauth.account.forms.SignupForm",
+    "login": "allauth.account.forms.LoginForm",
+    "reset_password": "allauth.account.forms.ResetPasswordForm",
+    "reset_password_from_key": "allauth.account.forms.ResetPasswordKeyForm",
+    "change_password": "allauth.account.forms.ChangePasswordForm",
+    "add_email": "allauth.account.forms.AddEmailForm",
 }
 
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
 ACCOUNT_PASSWORD_REQUIRED = True
 
 # Gemini AI Settings
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Local LLM Settings
-LLAMA_MODEL_PATH = os.getenv('LLAMA_MODEL_PATH', os.path.join(BASE_DIR, 'models/llama-2-7b-chat.gguf'))
+LLAMA_MODEL_PATH = os.getenv(
+    "LLAMA_MODEL_PATH", os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf")
+)
 
 # LinkedIn OAuth Configuration
 LINKEDIN_CONFIG = {
-    'CLIENT_ID': os.getenv('LINKEDIN_CLIENT_ID', ''),
-    'CLIENT_SECRET': os.getenv('LINKEDIN_CLIENT_SECRET', ''),
-    'SCOPE': 'r_liteprofile r_emailaddress',
-    'AUTH_URL': 'https://www.linkedin.com/oauth/v2/authorization',
-    'TOKEN_URL': 'https://www.linkedin.com/oauth/v2/accessToken',
-    'REDIRECT_URI': 'http://localhost:5173/linkedin/callback'
+    "CLIENT_ID": os.getenv("LINKEDIN_CLIENT_ID", ""),
+    "CLIENT_SECRET": os.getenv("LINKEDIN_CLIENT_SECRET", ""),
+    "SCOPE": "r_liteprofile r_emailaddress",
+    "AUTH_URL": "https://www.linkedin.com/oauth/v2/authorization",
+    "TOKEN_URL": "https://www.linkedin.com/oauth/v2/accessToken",
+    "REDIRECT_URI": "http://localhost:5173/linkedin/callback",
 }
