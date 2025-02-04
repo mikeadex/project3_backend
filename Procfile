@@ -1,1 +1,1 @@
-web: gunicorn ella_writer.wsgi:application
+web: python manage.py collectstatic --noinput && gunicorn ella_writer.wsgi:application
