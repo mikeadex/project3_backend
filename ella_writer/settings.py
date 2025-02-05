@@ -32,6 +32,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Secret Key Configuration
 
 def get_secret_key():
+    import base64
     # First, try to get the base64 encoded secret key
     encoded_secret_key = os.environ.get('DJANGO_SECRET_KEY', '')
     
@@ -114,11 +115,11 @@ MIDDLEWARE = [
 
 ALLOWED_HOSTS = ["*"]
 
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "https://www.ellacvwriter.com",
-    "https://ellacvwriter.com",
-    "http://localhost:5173",  # Vite dev server
-    "http://127.0.0.1:5173",
+    "https://www.ellacv.com",
+    "https://ellacv.com",
+    "http://localhost:5173",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -145,15 +146,26 @@ CORS_ALLOW_HEADERS = [
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://www.ellacvwriter.com",
-    "https://ellacvwriter.com",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "https://www.ellacv.com",
+    "https://ellacv.com",
 ]
 
-# SECURE_SSL_REDIRECT = True
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
+# Production-specific settings
+if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
+    # Security settings
+    DEBUG = False
+    
+    # Enforce HTTPS and secure cookies
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # Add your production domain to allowed hosts
+    ALLOWED_HOSTS = [
+        'project3-backend-7ck4.onrender.com', 
+        'www.ellacv.com', 
+        'ellacv.com'
+    ]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -416,13 +428,13 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     
     # CORS settings for production
     CORS_ALLOWED_ORIGINS = [
-        "https://www.ellacvwriter.com",
-        "https://ellacvwriter.com",
+        "https://www.ellacv.com",
+        "https://ellacv.com",
     ]
     
     CSRF_TRUSTED_ORIGINS = [
-        "https://www.ellacvwriter.com",
-        "https://ellacvwriter.com",
+        "https://www.ellacv.com",
+        "https://ellacv.com",
     ]
     
     # Logging for production
