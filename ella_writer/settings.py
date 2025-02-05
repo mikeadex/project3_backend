@@ -41,7 +41,6 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'allauth.account.middleware.AccountMiddleware',  # Add this line
-    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -81,6 +80,7 @@ if DEBUG:
     ]
 else:
     # Production settings
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -92,14 +92,23 @@ else:
     CORS_TRUSTED_ORIGINS = [
         "https://www.ellacvwriter.com",
         "https://ellacvwriter.com",
+        'https://project3-backend-7ck4.onrender.com',
     ]
     
     CSRF_TRUSTED_ORIGINS = [
         "https://www.ellacvwriter.com",
         "https://ellacvwriter.com",
+        'https://project3-backend-7ck4.onrender.com',
     ]
 
 ALLOWED_HOSTS = ["*"]
+
+if not DEBUG:
+    ALLOWED_HOSTS = [
+        'project3-backend-7ck4.onrender.com',
+        'www.ellacvwriter.com',
+        'ellacvwriter.com',
+    ]
 
 CORS_ALLOWED_METHODS = [
     'DELETE',
@@ -278,12 +287,23 @@ WSGI_APPLICATION = "ella_writer.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": dj_database_url.parse(
-        url=os.getenv("DATABASE_URL", ""),
-        conn_max_age=600, conn_health_checks=True
-    )
-}
+if os.getenv('DJANGO_DEBUG', 'False') == 'True':
+    # Local development settings
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    # Production database configuration
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.getenv('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
 
 
 # Password validation

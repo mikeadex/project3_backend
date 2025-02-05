@@ -2,38 +2,30 @@ services:
   - type: web
     name: ella-backend
     env: python
-    plan: free
-    branch: main
     buildCommand: |
       python -m pip install --upgrade pip
       pip install -r requirements.txt
-      python manage.py collectstatic --noinput
-    startCommand: gunicorn ella_writer.wsgi:application
+    startCommand: |
+      python manage.py migrate
+      gunicorn ella_writer.wsgi:application
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: ella_writer.settings
-      - key: DEBUG
-        value: False
-      - key: DJANGO_DEBUG
-        value: False
-      - key: SECRET_KEY
-        generateValue: true
       - key: DJANGO_SECRET_KEY
         generateValue: true
-      - key: ALLOWED_HOSTS
-        value: www.ellacvwriter.com,ellacvwriter.com
-      - key: CORS_ALLOWED_ORIGINS
-        value: https://www.ellacvwriter.com,https://ellacvwriter.com
+      - key: DJANGO_DEBUG
+        value: false
       - key: DATABASE_URL
         fromDatabase:
           name: ella-postgres
           property: connectionString
-      - key: MISTRAL_API_KEY
-        sync: false
-      - key: GROQ_API_KEY
-        sync: false
+      - key: ALLOWED_HOSTS
+        value: project3-backend-7ck4.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://project3-backend-7ck4.onrender.com,https://ellacvwriter.com
 
 databases:
   - name: ella-postgres
     plan: free
     region: oregon
+    ipAllowList: []
