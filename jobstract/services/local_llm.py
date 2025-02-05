@@ -1,15 +1,9 @@
 import os
 import logging
 import traceback
-from typing import Optional
-
-# Local imports
-import socket
-
-try:
-    import llama_cpp
-except ImportError:
-    llama_cpp = None
+import time
+import uuid
+from typing import Optional, Dict, Any
 
 # External API imports
 import mistralai.client
@@ -17,10 +11,77 @@ import groq
 
 logger = logging.getLogger(__name__)
 
-def is_localhost():
-    """Check if the code is running on localhost."""
-    hostname = socket.gethostname()
-    return hostname in ['localhost', '127.0.0.1'] or 'local' in hostname.lower()
+# Configure a dedicated logger for LLM services
+llm_logger = logging.getLogger('llm_service')
+llm_logger.setLevel(logging.INFO)
+
+# Create a file handler
+try:
+    log_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    file_handler = logging.FileHandler(os.path.join(log_dir, 'llm_service.log'))
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    ))
+    llm_logger.addHandler(file_handler)
+except Exception as e:
+    print(f"Could not set up file logging: {e}")
+
+class LLMServiceMonitor:
+    @staticmethod
+    def log_api_call(
+        provider: str, 
+        prompt: str, 
+        model: str, 
+        success: bool, 
+        duration: float = 0, 
+        error: str = None,
+        tokens_used: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Log detailed information about LLM API calls.
+        
+        Args:
+            provider (str): Name of the LLM provider (Mistral/Groq)
+            prompt (str): Input prompt
+            model (str): Model used
+            success (bool): Whether the API call was successful
+            duration (float): API call duration in seconds
+            error (str, optional): Error message if call failed
+            tokens_used (int, optional): Number of tokens used
+        
+        Returns:
+            Dict containing log metadata
+        """
+        log_entry = {
+            'request_id': str(uuid.uuid4()),
+            'provider': provider,
+            'model': model,
+            'timestamp': time.time(),
+            'prompt_length': len(prompt),
+            'success': success,
+            'duration_ms': int(duration * 1000),
+            'tokens_used': tokens_used,
+            'error': error
+        }
+        
+        log_message = (
+            f"LLM API Call: "
+            f"provider={log_entry['provider']} "
+            f"model={log_entry['model']} "
+            f"request_id={log_entry['request_id']} "
+            f"prompt_length={log_entry['prompt_length']} "
+            f"success={log_entry['success']} "
+            f"duration_ms={log_entry['duration_ms']} "
+            f"tokens_used={log_entry['tokens_used']}"
+        )
+        
+        if success:
+            llm_logger.info(log_message)
+        else:
+            llm_logger.error(log_message + f" error={error}")
+        
+        return log_entry
 
 class LLMService:
     def __init__(self):
@@ -29,52 +90,33 @@ class LLMService:
         self.model = self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize the appropriate LLM based on environment."""
+        """Initialize the appropriate LLM for production."""
         try:
-            # Prioritize local Llama on localhost
-            if is_localhost():
-                model_path = '/opt/render/project/src/models/llama-2-7b-chat.gguf'
-                if llama_cpp and os.path.exists(model_path):
-                    logger.info("Initializing local Llama model")
-                    return llama_cpp.Llama(
-                        model_path=model_path,
-                        n_ctx=2048,
-                        n_batch=512,
-                        n_gpu_layers=-1
-                    )
-                else:
-                    logger.warning("Local Llama model not available")
-            
-            # Fallback to Mistral in production
+            # Prioritize Mistral in production
             if self.mistral_api_key:
-                logger.info("Using Mistral AI for text generation")
+                llm_logger.info("Using Mistral AI for text generation")
                 return mistralai.client.MistralClient(api_key=self.mistral_api_key)
             
-            # Secondary fallback to Groq
+            # Fallback to Groq
             if self.groq_api_key:
-                logger.info("Using Groq for text generation")
+                llm_logger.info("Using Groq for text generation")
                 return groq.Groq(api_key=self.groq_api_key)
             
             raise ValueError("No LLM service available")
         
         except Exception as e:
-            logger.error(f"LLM initialization error: {e}")
-            logger.debug(traceback.format_exc())
+            llm_logger.error(f"LLM initialization error: {e}")
+            llm_logger.debug(traceback.format_exc())
             return None
 
     def generate_text(self, prompt: str, max_tokens: int = 150) -> str:
         """Generate text using the initialized model."""
+        if not self.model:
+            llm_logger.error("No model initialized for text generation")
+            return "Unable to generate improved summary. No LLM service available."
+
+        start_time = time.time()
         try:
-            # Local Llama model
-            if isinstance(self.model, llama_cpp.Llama):
-                response = self.model(
-                    prompt, 
-                    max_tokens=max_tokens, 
-                    stop=["\n"], 
-                    echo=False
-                )
-                return response.get('choices', [{}])[0].get('text', '').strip()
-            
             # Mistral AI
             if hasattr(self.model, 'chat'):
                 response = self.model.chat(
@@ -85,6 +127,17 @@ class LLMService:
                     ],
                     max_tokens=max_tokens
                 )
+                
+                # Log Mistral API call
+                LLMServiceMonitor.log_api_call(
+                    provider='Mistral',
+                    prompt=prompt,
+                    model='mistral-small',
+                    success=True,
+                    duration=time.time() - start_time,
+                    tokens_used=response.usage.total_tokens if hasattr(response, 'usage') else 0
+                )
+                
                 return response.choices[0].message.content.strip()
             
             # Groq
@@ -97,13 +150,34 @@ class LLMService:
                     ],
                     max_tokens=max_tokens
                 )
+                
+                # Log Groq API call
+                LLMServiceMonitor.log_api_call(
+                    provider='Groq',
+                    prompt=prompt,
+                    model='llama2-70b-4096',
+                    success=True,
+                    duration=time.time() - start_time,
+                    tokens_used=response.usage.total_tokens if hasattr(response, 'usage') else 0
+                )
+                
                 return response.choices[0].message.content.strip()
             
             raise ValueError("No text generation method available")
         
         except Exception as e:
-            logger.error(f"Text generation error: {e}")
-            logger.debug(traceback.format_exc())
+            # Log API call failure
+            LLMServiceMonitor.log_api_call(
+                provider='Mistral/Groq',
+                prompt=prompt,
+                model='unknown',
+                success=False,
+                duration=time.time() - start_time,
+                error=str(e)
+            )
+            
+            llm_logger.error(f"Text generation error: {e}")
+            llm_logger.debug(traceback.format_exc())
             return "Unable to generate improved summary. Please try again later."
 
 def improve_summary(summary: str) -> str:
@@ -111,7 +185,8 @@ def improve_summary(summary: str) -> str:
     llm_service = LLMService()
     
     if not llm_service.model:
-        return summary  # Return original if no service available
+        llm_logger.warning("No LLM model available. Returning original summary.")
+        return summary
     
     prompt = f"""
     Improve the following CV summary, making it more professional, concise, and impactful:
