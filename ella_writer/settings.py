@@ -300,13 +300,30 @@ ACCOUNT_FORMS = {
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
 ACCOUNT_PASSWORD_REQUIRED = True
 
+
+# Environment Configuration
+ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'development')
+
+# LLM Configuration
+LLM_PROVIDERS = {
+    'development': {
+        'provider': 'local',
+        'model_path': os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf"),
+        'fallback_provider': 'local'
+    },
+    'production': {
+        'provider': 'mistral',
+        'api_key': os.getenv('MISTRAL_API_KEY'),
+        'fallback_provider': 'groq_llama',
+        'fallback_api_key': os.getenv('GROQ_API_KEY')
+    }
+}
+
+# Get current environment configuration
+CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS['development'])
+
 # Gemini AI Settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Local LLM Settings
-LLAMA_MODEL_PATH = os.getenv(
-    "LLAMA_MODEL_PATH", os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf")
-)
 
 
 # Add to existing settings.py
