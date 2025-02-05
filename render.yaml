@@ -14,7 +14,11 @@ services:
         value: ella_writer.settings
       - key: DEBUG
         value: False
+      - key: DJANGO_DEBUG
+        value: False
       - key: SECRET_KEY
+        generateValue: true
+      - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
         value: www.ellacvwriter.com,ellacvwriter.com
