@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 import os
 import logging
+import requests
 from django.conf import settings
 from .models import (
     CvWriter,
@@ -19,26 +20,99 @@ from .local_llm import LocalLLMService
 
 logger = logging.getLogger(__name__)
 
+class MistralAPIService:
+    def __init__(self):
+        self.api_key = settings.MISTRAL_API_KEY
+        self.base_url = "https://api.mistral.ai/v1/chat/completions"
+        self.model = "mistral-medium"
+
+    def improve_text(self, prompt: str) -> str:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+        
+        try:
+            response = requests.post(self.base_url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            logger.error(f"Mistral API Error: {str(e)}")
+            return None
+
+class GroqLlamaAPIService:
+    def __init__(self):
+        self.api_key = settings.GROQ_API_KEY
+        self.base_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.model = "llama2-70b-4096"
+
+    def improve_text(self, prompt: str) -> str:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+        
+        try:
+            response = requests.post(self.base_url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            logger.error(f"Groq Llama API Error: {str(e)}")
+            return None
+
 class CVImprovementService:
     def __init__(self):
+        # Determine environment
+        is_production = os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
+        
         try:
-            logger.info("Initializing CV Improvement Service")
-            self.llm_service = LocalLLMService()
-            self.use_local_llm = True
-            logger.info("Local LLM initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize local LLM: {str(e)}")
-            self.use_local_llm = False
-            # Initialize Gemini as fallback if API key exists
-            if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-                logger.info("Initializing Gemini as fallback")
-                import google.generativeai as genai
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.use_gemini = True
-                logger.info("Gemini initialized successfully")
-            else:
-                logger.warning("No fallback AI service available")
-                self.use_gemini = False
+            # Try local LLM first for development
+            if not is_production:
+                logger.info("Initializing Local LLM for development")
+                self.llm_service = LocalLLMService()
+                self.use_local_llm = True
+                logger.info("Local LLM initialized successfully")
+                return
+            
+            # Production primary service: Mistral API
+            logger.info("Initializing Mistral API for production")
+            self.primary_service = MistralAPIService()
+            self.use_mistral = True
+            logger.info("Mistral API initialized successfully")
+
+            # Production fallback: Groq Llama API
+            logger.info("Initializing Groq Llama API as fallback")
+            self.fallback_service = GroqLlamaAPIService()
+            self.use_groq = True
+            logger.info("Groq Llama API initialized successfully")
+        
+        except Exception as primary_error:
+            logger.error(f"Failed to initialize Mistral API: {str(primary_error)}")
+            
+            # Fallback to Groq Llama API if Mistral fails
+            try:
+                logger.info("Falling back to Groq Llama API")
+                self.primary_service = GroqLlamaAPIService()
+                self.use_groq = True
+                logger.info("Groq Llama API initialized successfully")
+            except Exception as fallback_error:
+                # Raise error if both Mistral and Groq fail in production
+                logger.error(f"Failed to initialize Groq Llama API: {str(fallback_error)}")
+                raise RuntimeError("No AI service available for CV improvement in production")
 
         self.improvement_prompts = {
             'professional_summary': {
@@ -49,17 +123,13 @@ class CVImprovementService:
                 1. Focus on:
                    - Years of experience in {industry}
                    - Key achievements and impact
-                   - Core skills and expertise
-                   - Career objectives
-                2. Keep it concise (150-200 words)
-                3. Use active voice and strong verbs
-                4. Include relevant industry keywords
-                5. Highlight unique value proposition
+                2. Keep it concise and compelling
+                3. Use strong, active language
 
-                Original summary:
+                Original Summary:
                 {content}
 
-                Return only the improved summary without any explanations.
+                Improved Summary:
                 """
             },
             'experience': {
@@ -227,45 +297,31 @@ class CVImprovementService:
     async def _improve_section(self, section: str, content: Dict) -> Dict:
         """Improves a specific section using available LLM."""
         try:
-            if self.use_local_llm:
-                try:
-                    logger.info(f"Improving section using local LLM: {section}")
-                    result = self.llm_service.improve_section(section, content)
-                    if not result or not result.get('improved'):
-                        raise Exception("No improvement generated")
-                    logger.info(f"Section improved successfully using local LLM: {section}")
-                    return result
-                except Exception as e:
-                    logger.error(f"Local LLM failed: {str(e)}")
-                    if not self.use_gemini:
-                        raise Exception("No fallback service available")
-                    
-            if self.use_gemini:
-                logger.info(f"Improving section using Gemini: {section}")
-                # Use existing Gemini implementation
-                prompt_data = self.improvement_prompts.get(section)
-                if not prompt_data:
-                    return {'original': content, 'improved': str(content)}
+            prompt_data = self.improvement_prompts.get(section)
+            if not prompt_data:
+                return {'original': content, 'improved': str(content)}
 
-                formatted_prompt = prompt_data['template'].format(
-                    content=str(content),
-                    industry=self._detect_industry(content)
-                )
+            formatted_prompt = prompt_data['template'].format(
+                content=str(content),
+                industry=self._detect_industry(content)
+            )
 
-                try:
-                    response = genai.generate_text(formatted_prompt)
-                    if not response:
-                        raise Exception("No response from Gemini")
-                    logger.info(f"Section improved successfully using Gemini: {section}")
-                    return {
-                        'original': content,
-                        'improved': response.text if hasattr(response, 'text') else str(response)
-                    }
-                except Exception as e:
-                    logger.error(f"Gemini failed: {str(e)}")
-                    raise
-            else:
-                raise Exception("No LLM service available")
+            # Fallback logic
+            if hasattr(self, 'use_mistral') and self.use_mistral:
+                mistral_result = self.primary_service.improve_text(formatted_prompt)
+                if mistral_result:
+                    return {'original': content, 'improved': mistral_result}
+            
+            if hasattr(self, 'use_groq') and self.use_groq:
+                groq_result = self.fallback_service.improve_text(formatted_prompt)
+                if groq_result:
+                    return {'original': content, 'improved': groq_result}
+            
+            if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'use_local_llm') and self.use_local_llm:
+                return {'original': content, 'improved': self.primary_service.improve_text(formatted_prompt)}
+            
+            logger.warning("No AI service available for improvement")
+            return {'original': content, 'improved': str(content)}
 
         except Exception as e:
             logger.error(f"Error improving section: {str(e)}")
