@@ -387,29 +387,69 @@ def improve_summary(request):
         
         print(f"Received summary for improvement: {summary[:100]}...")
         
-        # Import the correct LLM service
-        from jobstract.services.local_llm import improve_summary as llm_improve_summary
+        # Initialize LLM service
+        try:
+            llm_service = LocalLLMService()
+            print("LLM service initialized successfully")
+        except Exception as e:
+            print(f"Failed to initialize LLM service: {str(e)}")
+            return Response(
+                {'error': f'Failed to initialize LLM service: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
-        # Improve summary
+        # Improve summary with timeout handling
         try:
             print("Starting summary improvement...")
-            improved_summary = llm_improve_summary(summary)
+            import threading
+            import queue
             
-            print(f"Improvement result: {improved_summary}")
+            def improve_in_thread(q):
+                try:
+                    result = llm_service.improve_section('professional_summary', summary)
+                    q.put(('success', result))
+                except Exception as e:
+                    q.put(('error', str(e)))
             
-            if not improved_summary or improved_summary == summary:
-                return Response({
-                    'status': 'warning',
-                    'original': summary,
-                    'improved': summary
-                }, status=status.HTTP_200_OK)
+            # Create a queue for the result
+            result_queue = queue.Queue()
             
-            return Response({
-                'status': 'success',
-                'original': summary,
-                'improved': improved_summary
-            }, status=status.HTTP_200_OK)
+            # Start the improvement in a separate thread
+            improvement_thread = threading.Thread(
+                target=improve_in_thread, 
+                args=(result_queue,)
+            )
+            improvement_thread.daemon = True
+            improvement_thread.start()
+            
+            # Wait for the result with timeout
+            try:
+                status_type, result = result_queue.get(timeout=90)  # 90-second timeout
                 
+                if status_type == 'error':
+                    raise Exception(result)
+                    
+                print(f"Improvement result: {result}")
+                
+                if not result:
+                    raise ValueError("No result returned from LLM service")
+                    
+                if not isinstance(result, dict) or 'improved' not in result:
+                    raise ValueError(f"Invalid result format: {result}")
+                
+                return Response({
+                    'status': 'success',
+                    'original': summary,
+                    'improved': result['improved']
+                }, status=status.HTTP_200_OK)
+                
+            except queue.Empty:
+                print("Operation timed out")
+                return Response(
+                    {'error': 'The operation took too long to complete. Please try again with a shorter summary.'},
+                    status=status.HTTP_504_GATEWAY_TIMEOUT
+                )
+            
         except Exception as e:
             print(f"Error during summary improvement: {str(e)}")
             return Response(
