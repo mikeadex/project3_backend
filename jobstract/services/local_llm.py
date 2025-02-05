@@ -140,17 +140,10 @@ class LLMService:
                     max_tokens=max_tokens
                 )
                 
-                # Log Mistral API call
-                LLMServiceMonitor.log_api_call(
-                    provider='Mistral',
-                    prompt=prompt,
-                    model='mistral-small',
-                    success=True,
-                    duration=time.time() - start_time,
-                    tokens_used=response.usage.total_tokens if hasattr(response, 'usage') else 0
-                )
-                
-                return response.choices[0].message.content.strip()
+                # Safely extract content
+                if hasattr(response, 'choices') and response.choices:
+                    return response.choices[0].message.content.strip()
+                return prompt
             
             # Groq
             if hasattr(self.model, 'chat') and hasattr(self.model.chat, 'completions'):
@@ -163,17 +156,10 @@ class LLMService:
                     max_tokens=max_tokens
                 )
                 
-                # Log Groq API call
-                LLMServiceMonitor.log_api_call(
-                    provider='Groq',
-                    prompt=prompt,
-                    model='llama2-70b-4096',
-                    success=True,
-                    duration=time.time() - start_time,
-                    tokens_used=response.usage.total_tokens if hasattr(response, 'usage') else 0
-                )
-                
-                return response.choices[0].message.content.strip()
+                # Safely extract content
+                if hasattr(response, 'choices') and response.choices:
+                    return response.choices[0].message.content.strip()
+                return prompt
             
             raise ValueError("No text generation method available")
         
@@ -190,7 +176,7 @@ class LLMService:
             
             llm_logger.error(f"Text generation error: {e}")
             llm_logger.debug(traceback.format_exc())
-            return "Unable to generate improved summary. Please try again later."
+            return prompt
 
 def improve_summary(summary: str) -> str:
     """Improve CV summary using the appropriate LLM service."""
