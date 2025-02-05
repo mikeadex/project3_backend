@@ -18,7 +18,7 @@ class CustomPasswordResetSerializer(DefaultPasswordResetSerializer):
         request = self.context.get('request')
         # Set up the email options
         opts = {
-            'use_https': not settings.DEBUG,  # Use HTTPS only in production
+            'use_https': request.is_secure(),
             'from_email': getattr(settings, 'DEFAULT_FROM_EMAIL'),
             'email_template_name': 'registration/password_reset_email.html',
             'subject_template_name': 'registration/password_reset_subject.txt',
@@ -27,7 +27,6 @@ class CustomPasswordResetSerializer(DefaultPasswordResetSerializer):
             'extra_email_context': {
                 'frontend_url': settings.FRONTEND_URL,
                 'site_name': settings.SITE_NAME,
-                'protocol': 'http' if settings.DEBUG else 'https',
             }
         }
         self.reset_form.save(**opts)

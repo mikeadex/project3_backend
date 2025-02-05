@@ -27,111 +27,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-fallback-key-please-change-in-production')
+SECRET_KEY = "django-insecure-j@%g@u!!$pxjurml^d*css4h@-5kp8+*b91h9vfgn+fpaic0o%"
 
-# Conditional security settings
-DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
 
-# Ensure MIDDLEWARE is defined before modifications
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'allauth.account.middleware.AccountMiddleware',  # Add this line
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-
-if DEBUG:
-    # Local development settings
-    SECURE_SSL_REDIRECT = False
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
-    SECURE_HSTS_SECONDS = 0
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
-    SECURE_HSTS_PRELOAD = False
-    
-    # Remove security middleware in development
-    try:
-        MIDDLEWARE.remove('django.middleware.security.SecurityMiddleware')
-    except ValueError:
-        pass  # Middleware not in list, continue
-
-    # HTTP-only origins for development
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    
-    CORS_TRUSTED_ORIGINS = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    
-    CSRF_TRUSTED_ORIGINS = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-else:
-    # Production settings
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    
-    # HTTPS origins for production
-    CORS_TRUSTED_ORIGINS = [
-        "https://www.ellacvwriter.com",
-        "https://ellacvwriter.com",
-        'https://project3-backend-7ck4.onrender.com',
-    ]
-    
-    CSRF_TRUSTED_ORIGINS = [
-        "https://www.ellacvwriter.com",
-        "https://ellacvwriter.com",
-        'https://project3-backend-7ck4.onrender.com',
-    ]
-
-ALLOWED_HOSTS = ["*"]
-
-if not DEBUG:
-    ALLOWED_HOSTS = [
-        'project3-backend-7ck4.onrender.com',
-        'www.ellacvwriter.com',
-        'ellacvwriter.com',
-    ]
-
-CORS_ALLOWED_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-CORS_ALLOWED_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-CORS_ALLOW_CREDENTIALS = True
+ALLOWED_HOSTS = []
 
 # Sites Framework
 SITE_ID = 1
@@ -166,6 +67,18 @@ INSTALLED_APPS = [
     "jobstract",
 ]
 
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
+]
+
 # SOCIALACCOUNT_PROVIDERS = {
 #     'google': {
 #         # For each OAuth based provider, either add a ``SocialApp``
@@ -180,9 +93,48 @@ INSTALLED_APPS = [
 
 # }
 
-# Ensure frontend URL is protocol-aware
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
+ALLOWED_HOSTS = ["*"]
+
+CORS_ALLOWED_ORIGINS = [
+    "https://www.ellacvwriter.com",
+    "https://ellacvwriter.com",
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173",
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://www.ellacvwriter.com",
+    "https://ellacvwriter.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# SECURE_SSL_REDIRECT = True
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -209,6 +161,15 @@ REST_AUTH = {
     "JWT_AUTH_REFRESH_COOKIE": "refresh_token",
     "JWT_AUTH_HTTPONLY": False,
 }
+
+# Frontend URL (without trailing slash)
+FRONTEND_URL = "http://localhost:5173"
+
+# Email settings
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@ella.com"
+SITE_NAME = "Ella"
+SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
 
 ROOT_URLCONF = "ella_writer.urls"
 
@@ -287,23 +248,12 @@ WSGI_APPLICATION = "ella_writer.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-if os.getenv('DJANGO_DEBUG', 'False') == 'True':
-    # Local development settings
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-else:
-    # Production database configuration
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=os.getenv('DATABASE_URL'),
-            conn_max_age=600,
-            ssl_require=True
-        )
-    }
+DATABASES = {
+    "default": dj_database_url.parse(
+        url=os.getenv("DATABASE_URL", ""),
+        conn_max_age=600, conn_health_checks=True
+    )
+}
 
 
 # Password validation
@@ -349,10 +299,13 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 # Email settings (console backend for development)
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@ella.com"
-SITE_NAME = "Ella"
-SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+EMAIL_USE_TLS = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
