@@ -86,14 +86,6 @@ class CVImprovementService:
         is_production = os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
         
         try:
-            # Local LLM only for development
-            if not is_production:
-                logger.info("Initializing Local LLM for development")
-                self.llm_service = LocalLLMService()
-                self.use_local_llm = True
-                logger.info("Local LLM initialized successfully")
-                return
-            
             # Validate API keys for production
             if not settings.MISTRAL_API_KEY and not settings.GROQ_API_KEY:
                 raise ValueError("No API keys available for LLM services in production")
@@ -192,6 +184,7 @@ class CVImprovementService:
             
             if not is_production:
                 # Use local LLM in development
+                self.llm_service = LocalLLMService(force_init=True)
                 improve_func = self.llm_service.improve_text
             else:
                 # Use primary service in production
@@ -350,8 +343,8 @@ class CVImprovementService:
                 if groq_result:
                     return {'original': content, 'improved': groq_result}
             
-            if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'use_local_llm') and self.use_local_llm:
-                return {'original': content, 'improved': self.primary_service.improve_text(formatted_prompt)}
+            if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'llm_service'):
+                return {'original': content, 'improved': self.llm_service.improve_text(formatted_prompt)}
             
             logger.warning("No AI service available for improvement")
             return {'original': content, 'improved': str(content)}

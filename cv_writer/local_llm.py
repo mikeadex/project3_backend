@@ -18,10 +18,14 @@ class BaseLLMService:
         raise NotImplementedError()
 
 class LocalLLMService(BaseLLMService):
-    def __init__(self):
+    def __init__(self, force_init=False):
         super().__init__(settings.CURRENT_LLM_CONFIG)
         self.model = None
-        self._initialize_model()
+        
+        # Only initialize in development or if force_init is True
+        is_development = not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
+        if is_development or force_init:
+            self._initialize_model()
         
         self.prompts = {
             'professional_summary': """[INST] You are an expert CV writer. Improve this professional summary to be more impactful. Focus on years of experience, key achievements, core skills, and career objectives. Keep it concise (100-150 words). Use active voice and strong verbs. 
