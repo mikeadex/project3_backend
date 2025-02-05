@@ -86,7 +86,7 @@ class CVImprovementService:
         is_production = os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
         
         try:
-            # Try local LLM first for development
+            # Local LLM only for development
             if not is_production:
                 logger.info("Initializing Local LLM for development")
                 self.llm_service = LocalLLMService()
@@ -187,6 +187,16 @@ class CVImprovementService:
             improvements = {}
             improvement_records = []
             
+            # Determine service based on environment
+            is_production = os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
+            
+            if not is_production:
+                # Use local LLM in development
+                improve_func = self.llm_service.improve_text
+            else:
+                # Use primary service in production
+                improve_func = self.primary_service.improve_text
+            
             # Improve professional summary
             if hasattr(cv, 'professional_summary'):
                 logger.info("Improving professional summary")
@@ -199,20 +209,35 @@ class CVImprovementService:
                 improvement_records.append(improvement)
                 
                 try:
-                    result = await self._improve_section(
-                        'professional_summary',
-                        cv.professional_summary.summary
+                    # Attempt improvement with primary service
+                    improved_summary = improve_func(
+                        self.improvement_prompts['professional_summary']['template'].format(
+                            industry=cv.industry or 'general',
+                            content=cv.professional_summary.summary
+                        )
                     )
-                    improvements['professional_summary'] = result
-                    improvement.improved_content = result['improved']
-                    improvement.status = 'completed'
-                    improvement.tokens_used = len(result['improved'])
-                    logger.info("Professional summary improved successfully")
+                    
+                    # Fallback to secondary service if primary fails in production
+                    if is_production and not improved_summary and hasattr(self, 'fallback_service'):
+                        logger.warning("Primary service failed. Attempting fallback service.")
+                        improved_summary = self.fallback_service.improve_text(
+                            self.improvement_prompts['professional_summary']['template'].format(
+                                industry=cv.industry or 'general',
+                                content=cv.professional_summary.summary
+                            )
+                        )
+                    
+                    if improved_summary:
+                        improvement.improved_content = improved_summary
+                        improvement.save()
+                        improvements['professional_summary'] = improved_summary
+                        cv.professional_summary.summary = improved_summary
+                        cv.professional_summary.save()
+                    
                 except Exception as e:
                     logger.error(f"Error improving professional summary: {str(e)}")
                     improvement.status = 'failed'
-                    improvement.error_message = str(e)
-                improvement.save()
+                    improvement.save()
 
             # Improve experiences
             experiences = []
