@@ -29,7 +29,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = base64.b64decode(os.environ.get('DJANGO_SECRET_KEY', '')).decode('utf-8')
+# Secret Key Configuration
+
+def get_secret_key():
+    # First, try to get the base64 encoded secret key
+    encoded_secret_key = os.environ.get('DJANGO_SECRET_KEY', '')
+    
+    try:
+        # Try to decode the base64 encoded key
+        if encoded_secret_key:
+            return base64.b64decode(encoded_secret_key).decode('utf-8')
+    except Exception:
+        pass
+    
+    # Fallback to the original secret key or generate a new one
+    return encoded_secret_key or "django-insecure-fallback-key-please-replace"
+
+# Set the secret key using the function
+SECRET_KEY = get_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -378,7 +395,7 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     DEBUG = False
     
     # Use environment variable for secret key in production
-    SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', SECRET_KEY)
+    # SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', SECRET_KEY)
     
     # Enforce HTTPS and secure cookies
     SECURE_SSL_REDIRECT = True
