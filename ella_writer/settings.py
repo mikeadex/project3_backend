@@ -335,6 +335,10 @@ ACCOUNT_PASSWORD_REQUIRED = True
 ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'development')
 
 # LLM Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 LLM_PROVIDERS = {
     'development': {
         'provider': 'local',
@@ -343,22 +347,14 @@ LLM_PROVIDERS = {
     },
     'production': {
         'provider': 'mistral',
-        'api_key': os.getenv('MISTRAL_API_KEY'),
+        'api_key': MISTRAL_API_KEY,
         'fallback_provider': 'groq_llama',
-        'fallback_api_key': os.getenv('GROQ_API_KEY')
+        'fallback_api_key': GROQ_API_KEY
     }
 }
 
 # Get current environment configuration
 CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS['development'])
-
-# Gemini AI Settings
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-
-# Add to existing settings.py
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # LinkedIn OAuth Configuration
 LINKEDIN_CONFIG = {
@@ -369,3 +365,7 @@ LINKEDIN_CONFIG = {
     "TOKEN_URL": "https://www.linkedin.com/oauth/v2/accessToken",
     "REDIRECT_URI": "http://localhost:5173/linkedin/callback",
 }
+
+# Add to existing settings.py
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'

@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 class MistralAPIService:
     def __init__(self):
         self.api_key = settings.MISTRAL_API_KEY
+        if not self.api_key:
+            raise ValueError("Mistral API Key is not set. Please provide MISTRAL_API_KEY in environment variables.")
+        
         self.base_url = "https://api.mistral.ai/v1/chat/completions"
         self.model = "mistral-medium"
 
@@ -50,6 +53,9 @@ class MistralAPIService:
 class GroqLlamaAPIService:
     def __init__(self):
         self.api_key = settings.GROQ_API_KEY
+        if not self.api_key:
+            raise ValueError("Groq API Key is not set. Please provide GROQ_API_KEY in environment variables.")
+        
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model = "llama2-70b-4096"
 
@@ -88,31 +94,33 @@ class CVImprovementService:
                 logger.info("Local LLM initialized successfully")
                 return
             
-            # Production primary service: Mistral API
-            logger.info("Initializing Mistral API for production")
-            self.primary_service = MistralAPIService()
-            self.use_mistral = True
-            logger.info("Mistral API initialized successfully")
-
-            # Production fallback: Groq Llama API
-            logger.info("Initializing Groq Llama API as fallback")
-            self.fallback_service = GroqLlamaAPIService()
-            self.use_groq = True
-            logger.info("Groq Llama API initialized successfully")
-        
-        except Exception as primary_error:
-            logger.error(f"Failed to initialize Mistral API: {str(primary_error)}")
+            # Validate API keys for production
+            if not settings.MISTRAL_API_KEY and not settings.GROQ_API_KEY:
+                raise ValueError("No API keys available for LLM services in production")
             
-            # Fallback to Groq Llama API if Mistral fails
-            try:
-                logger.info("Falling back to Groq Llama API")
+            # Production primary service: Mistral API
+            if settings.MISTRAL_API_KEY:
+                logger.info("Initializing Mistral API for production")
+                self.primary_service = MistralAPIService()
+                self.use_mistral = True
+                logger.info("Mistral API initialized successfully")
+            else:
+                # Fallback to Groq if Mistral key is not set
+                logger.info("Initializing Groq Llama API as primary service")
                 self.primary_service = GroqLlamaAPIService()
                 self.use_groq = True
                 logger.info("Groq Llama API initialized successfully")
-            except Exception as fallback_error:
-                # Raise error if both Mistral and Groq fail in production
-                logger.error(f"Failed to initialize Groq Llama API: {str(fallback_error)}")
-                raise RuntimeError("No AI service available for CV improvement in production")
+
+            # Set up fallback service if both keys are available
+            if settings.MISTRAL_API_KEY and settings.GROQ_API_KEY:
+                logger.info("Initializing Groq Llama API as fallback")
+                self.fallback_service = GroqLlamaAPIService()
+                self.use_groq = True
+                logger.info("Groq Llama API fallback initialized successfully")
+        
+        except Exception as primary_error:
+            logger.error(f"Failed to initialize primary LLM service: {str(primary_error)}")
+            raise RuntimeError(f"No AI service available for CV improvement in production: {str(primary_error)}")
 
         self.improvement_prompts = {
             'professional_summary': {
