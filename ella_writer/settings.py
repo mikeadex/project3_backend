@@ -16,6 +16,8 @@ from django.conf.global_settings import CSRF_COOKIE_SECURE, SECURE_SSL_REDIRECT,
 from dotenv import load_dotenv
 import os
 import dj_database_url
+import base64
+
 
 load_dotenv()
 
@@ -27,7 +29,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-j@%g@u!!$pxjurml^d*css4h@-5kp8+*b91h9vfgn+fpaic0o%"
+SECRET_KEY = base64.b64decode(os.environ.get('DJANGO_SECRET_KEY', '')).decode('utf-8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -369,3 +371,47 @@ LINKEDIN_CONFIG = {
 # Add to existing settings.py
 MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Production-specific settings
+if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
+    # Security settings
+    DEBUG = False
+    
+    # Use environment variable for secret key in production
+    SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', SECRET_KEY)
+    
+    # Enforce HTTPS and secure cookies
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # Database configuration for Render
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+    
+    # Allowed hosts from environment variable
+    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
+    
+    # CORS settings for production
+    CORS_ALLOWED_ORIGINS = [
+        "https://www.ellacvwriter.com",
+        "https://ellacvwriter.com",
+    ]
+    
+    CSRF_TRUSTED_ORIGINS = [
+        "https://www.ellacvwriter.com",
+        "https://ellacvwriter.com",
+    ]
+    
+    # Logging for production
+    LOGGING['handlers']['file']['filename'] = '/var/log/ella/cv_writer.log'
+    LOGGING['loggers']['cv_writer']['level'] = 'INFO'
+
+# Ensure environment-specific LLM configuration
+ENVIRONMENT = 'production' if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') else 'development'
+CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS['development'])
