@@ -119,6 +119,8 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "https://www.ellacv.com",
     "https://ellacv.com",
+    "https://www.ellacvwriter.com",
+    "https://ellacvwriter.com",
     "http://localhost:5173",
 ]
 
@@ -148,6 +150,8 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "https://www.ellacv.com",
     "https://ellacv.com",
+    "https://www.ellacvwriter.com",
+    "https://ellacvwriter.com",
 ]
 
 # Production-specific settings
@@ -160,11 +164,13 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     
-    # Add your production domain to allowed hosts
+    # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
         'project3-backend-7ck4.onrender.com', 
         'www.ellacv.com', 
-        'ellacv.com'
+        'ellacv.com',
+        'www.ellacvwriter.com',
+        'ellacvwriter.com'
     ]
 
 REST_FRAMEWORK = {
@@ -430,11 +436,15 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     CORS_ALLOWED_ORIGINS = [
         "https://www.ellacv.com",
         "https://ellacv.com",
+        "https://www.ellacvwriter.com",
+        "https://ellacvwriter.com",
     ]
     
     CSRF_TRUSTED_ORIGINS = [
         "https://www.ellacv.com",
         "https://ellacv.com",
+        "https://www.ellacvwriter.com",
+        "https://ellacvwriter.com",
     ]
     
     # Logging for production
