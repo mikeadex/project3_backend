@@ -5,9 +5,21 @@ import time
 import uuid
 from typing import Optional, Dict, Any
 
-# External API imports
-import mistralai.client
-import groq
+# External API imports with robust error handling
+MISTRAL_AVAILABLE = False
+GROQ_AVAILABLE = False
+
+try:
+    import mistralai.client
+    MISTRAL_AVAILABLE = True
+except ImportError:
+    logging.warning("Mistral AI client not available")
+
+try:
+    import groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    logging.warning("Groq client not available")
 
 logger = logging.getLogger(__name__)
 
@@ -93,16 +105,16 @@ class LLMService:
         """Initialize the appropriate LLM for production."""
         try:
             # Prioritize Mistral in production
-            if self.mistral_api_key:
+            if MISTRAL_AVAILABLE and self.mistral_api_key:
                 llm_logger.info("Using Mistral AI for text generation")
                 return mistralai.client.MistralClient(api_key=self.mistral_api_key)
             
             # Fallback to Groq
-            if self.groq_api_key:
+            if GROQ_AVAILABLE and self.groq_api_key:
                 llm_logger.info("Using Groq for text generation")
                 return groq.Groq(api_key=self.groq_api_key)
             
-            raise ValueError("No LLM service available")
+            raise ValueError("No LLM service available. Please check your API keys and installed packages.")
         
         except Exception as e:
             llm_logger.error(f"LLM initialization error: {e}")
@@ -141,7 +153,7 @@ class LLMService:
                 return response.choices[0].message.content.strip()
             
             # Groq
-            if hasattr(self.model, 'chat'):
+            if hasattr(self.model, 'chat') and hasattr(self.model.chat, 'completions'):
                 response = self.model.chat.completions.create(
                     model="llama2-70b-4096",
                     messages=[
