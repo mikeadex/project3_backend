@@ -1,12 +1,17 @@
-from llama_cpp import Llama
+# Standard library imports
 import os
-import logging
-from typing import Dict, Optional
-from pathlib import Path
 import json
+import logging
+import time
+from pathlib import Path
+from typing import Dict, Optional, List, Any
+
+# Third-party library imports
 import requests
+from llama_cpp import Llama
 from django.conf import settings
 
+# Configure logger
 logger = logging.getLogger(__name__)
 
 class BaseLLMService:
@@ -84,24 +89,33 @@ class LocalLLMService(BaseLLMService):
             raise
 
     def _call_mistral_api(self, prompt: str, max_tokens: int = 500) -> str:
-        """Call Mistral API for text improvement"""
-        try:
-            response = requests.post(
-                'https://api.mistral.ai/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {self.config["api_key"]}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'model': 'mistral-medium',
-                    'messages': [{'role': 'user', 'content': prompt}],
-                    'max_tokens': max_tokens
-                }
-            )
-            return response.json()['choices'][0]['message']['content']
-        except Exception as e:
-            logger.error(f"Mistral API call failed: {e}")
-            raise
+        api_key = self.config.get('mistral_api_key')
+        if not api_key:
+            raise ValueError("Mistral API key not configured")
+        
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    'https://api.mistral.ai/v1/chat/completions',
+                    headers={
+                        'Authorization': f'Bearer {api_key}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'model': 'mistral-medium',
+                        'messages': [{'role': 'user', 'content': prompt}],
+                        'max_tokens': max_tokens
+                    },
+                    timeout=30  # 30-second timeout
+                )
+                response.raise_for_status()
+                return response.json()['choices'][0]['message']['content']
+            
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Mistral API attempt {attempt + 1} failed: {e}")
+                if attempt == self.max_retries - 1:
+                    raise
+                time.sleep(2 ** attempt)  # Exponential backoff
 
     def _call_groq_llama_api(self, prompt: str, max_tokens: int = 500) -> str:
         """Fallback to Groq Llama API"""
@@ -123,45 +137,43 @@ class LocalLLMService(BaseLLMService):
             logger.error(f"Groq API call failed: {e}")
             raise
 
-    def improve_text(self, section: str, content: str, max_tokens: int = 500) -> Optional[str]:
-        """Improve text with advanced provider fallback mechanism"""
-        try:
-            # validate input
-            if not content or not isinstance(content, str):
-                logger.info(f"Improving text for section: {section}")
-                prompt = self.prompts.get(section, "")
-                if not prompt:
-                    logger.error(f"No prompt template found for section: {section}")
-                    return None
-                    
-                formatted_prompt = prompt.format(content=content)
-                logger.debug(f"Generated prompt: {formatted_prompt}")
-                
-            formatted_prompt = prompt.format(content=content)
-            logger.debug(f"Generated prompt: {formatted_prompt}")
-            
-            # Local model for development
-            if self.config['provider'] == 'local':
-                return self._local_model_improve(formatted_prompt, section, max_tokens)
-            
-            # Production: Try Mistral first
+    def improve_text(self, section: str, content: str, max_tokens: int = 500) -> Dict[str, str]:
+        providers_map = {
+            'mistral': self._call_mistral_api,
+            'groq': self._call_groq_api,
+            'huggingface': self._call_huggingface_api,
+            'local': self._call_local_model
+        }
+        
+        # Prepare section-specific prompt templates
+        prompt_templates = {
+            'professional_summary': """Improve this professional summary...""",
+            'experience': """Transform this job description...""",
+            'skills': """Organize these skills..."""
+        }
+        
+        formatted_prompt = prompt_templates.get(section, "{content}").format(content=content)
+        
+        # Try providers in order
+        for provider in self.providers:
             try:
-                mistral_text = self._call_mistral_api(formatted_prompt, max_tokens)
-                return self._post_process_text(mistral_text, section)
-            except Exception as mistral_error:
-                logger.warning(f"Mistral API failed: {mistral_error}")
+                provider_func = providers_map.get(provider)
+                if not provider_func:
+                    continue
                 
-                # Fallback to Groq Llama
-                try:
-                    groq_text = self._call_groq_llama_api(formatted_prompt, max_tokens)
-                    return self._post_process_text(groq_text, section)
-                except Exception as groq_error:
-                    logger.error(f"Groq API failed: {groq_error}")
-                    raise RuntimeError("All LLM providers failed")
-
-        except Exception as e:
-            logger.error(f"Comprehensive error in improve_text: {e}", exc_info=True)
-            raise
+                improved_text = provider_func(formatted_prompt, max_tokens)
+                
+                return {
+                    'original': content,
+                    'improved': improved_text,
+                    'provider': provider
+                }
+            
+            except Exception as e:
+                self.logger.warning(f"{provider.upper()} provider failed: {e}")
+                continue
+        
+        raise RuntimeError("All LLM providers failed. Unable to improve text.")
 
     def _local_model_improve(self, formatted_prompt: str, section: str, max_tokens: int) -> str:
         """Improve text using local Llama model"""
@@ -509,3 +521,178 @@ class LocalLLMService(BaseLLMService):
                 edu['details'] = line.replace('Details:', '').strip()
                 
         return edu if edu else None
+
+class ResilientLLMService:
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize a resilient LLM service with multiple providers
+        
+        :param config: Configuration dictionary for LLM providers
+        """
+        # Default configuration
+        self.config = {
+            'providers': {
+                'mistral': {
+                    'url': 'https://api.mistral.ai/v1/chat/completions',
+                    'api_key': os.getenv('MISTRAL_API_KEY'),
+                    'model': 'mistral-medium'
+                },
+                'groq': {
+                    'url': 'https://api.groq.com/openai/v1/chat/completions',
+                    'api_key': os.getenv('GROQ_API_KEY'),
+                    'models': [
+                        'llama3-8b-8192',     # Default
+                        'llama3-70b-8192',    # High-performance option
+                        'mixtral-8x7b-32768'  # Alternative model
+                    ]
+                }
+            },
+            'max_retries': 3,
+            'timeout': 30
+        }
+        
+        # Override default config with provided config
+        if config:
+            self.config.update(config)
+        
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+    
+    def _call_mistral_api(self, prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
+        """
+        Call Mistral API with robust error handling
+        
+        :param prompt: Input text prompt
+        :param max_tokens: Maximum tokens to generate
+        :return: API response dictionary
+        """
+        provider_config = self.config['providers']['mistral']
+        
+        for attempt in range(self.config['max_retries']):
+            try:
+                response = requests.post(
+                    provider_config['url'],
+                    headers={
+                        'Authorization': f'Bearer {provider_config["api_key"]}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'model': provider_config['model'],
+                        'messages': [{'role': 'user', 'content': prompt}],
+                        'max_tokens': max_tokens
+                    },
+                    timeout=self.config['timeout']
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                return {
+                    'status': 'success',
+                    'provider': 'mistral',
+                    'model': provider_config['model'],
+                    'response': result['choices'][0]['message']['content']
+                }
+            
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Mistral API attempt {attempt + 1} failed: {e}")
+                if attempt == self.config['max_retries'] - 1:
+                    return {
+                        'status': 'error',
+                        'provider': 'mistral',
+                        'message': str(e)
+                    }
+                time.sleep(2 ** attempt)  # Exponential backoff
+    
+    def _call_groq_api(self, prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
+        """
+        Call Groq API with model fallback and robust error handling
+        
+        :param prompt: Input text prompt
+        :param max_tokens: Maximum tokens to generate
+        :return: API response dictionary
+        """
+        provider_config = self.config['providers']['groq']
+        
+        for model in provider_config['models']:
+            for attempt in range(self.config['max_retries']):
+                try:
+                    response = requests.post(
+                        provider_config['url'],
+                        headers={
+                            'Authorization': f'Bearer {provider_config["api_key"]}',
+                            'Content-Type': 'application/json'
+                        },
+                        json={
+                            'model': model,
+                            'messages': [{'role': 'user', 'content': prompt}],
+                            'max_tokens': max_tokens
+                        },
+                        timeout=self.config['timeout']
+                    )
+                    
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    return {
+                        'status': 'success',
+                        'provider': 'groq',
+                        'model': model,
+                        'response': result['choices'][0]['message']['content']
+                    }
+                
+                except requests.exceptions.RequestException as e:
+                    self.logger.warning(f"Groq API attempt with {model} failed: {e}")
+                    if attempt == self.config['max_retries'] - 1:
+                        break
+                    time.sleep(2 ** attempt)  # Exponential backoff
+        
+        return {
+            'status': 'error',
+            'provider': 'groq',
+            'message': 'All Groq models failed'
+        }
+    
+    def improve_text(self, section: str, content: str, max_tokens: int = 500) -> Dict[str, Any]:
+        """
+        Improve text using multiple LLM providers with fallback mechanism
+        
+        :param section: Type of section being improved
+        :param content: Text content to improve
+        :param max_tokens: Maximum tokens to generate
+        :return: Improved text dictionary
+        """
+        # Prompt templates for different sections
+        prompt_templates = {
+            'professional_summary': f"Improve this professional summary: {content}",
+            'experience': f"Transform this job description: {content}",
+            'skills': f"Categorize and enhance these skills: {content}",
+            'default': content
+        }
+        
+        # Select appropriate prompt template
+        prompt = prompt_templates.get(section, prompt_templates['default'])
+        
+        # Try Mistral first
+        mistral_result = self._call_mistral_api(prompt, max_tokens)
+        if mistral_result['status'] == 'success':
+            return mistral_result
+        
+        # Fallback to Groq
+        groq_result = self._call_groq_api(prompt, max_tokens)
+        if groq_result['status'] == 'success':
+            return groq_result
+        
+        # If all providers fail
+        return {
+            'status': 'error',
+            'message': 'All LLM providers failed to improve text',
+            'original_content': content
+        }
+
+# Optional: Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)

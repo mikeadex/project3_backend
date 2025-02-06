@@ -57,6 +57,15 @@ ALLOWED_HOSTS = []
 # Sites Framework
 SITE_ID = 1
 
+
+CURRENT_LLM_CONFIG = {
+    'provider': 'mistral',
+    'mistral_api_key': os.getenv('MISTRAL_API_KEY'),
+    'groq_api_key': os.getenv('GROQ_API_KEY'),
+    'huggingface_api_key': os.getenv('HUGGINGFACE_API_KEY'),
+    'model_path': '/path/to/local/llama/model.gguf'
+}
+
 # Application definition
 
 INSTALLED_APPS = [
