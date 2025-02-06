@@ -1,0 +1,22 @@
+# Core Dependencies
+Django>=4.2,<5.0
+python-dotenv>=1.0.0
+
+# Scientific Computing
+numpy>=1.19.3,<2.0.0
+scipy>=1.10.0,<1.11.0  # Adjusted to a valid version range
+pandas==2.0.1
+
+# Machine Learning and NLP
+scikit-learn==1.2.2
+spacy==3.5.2
+pydantic==2.6.4
+
+# Web and Utility
+requests==2.31.0
+streamlit==1.31.1
+pyarrow==15.0.1
+
+# Ensure compatibility
+packaging>=23.2
+smart-open==6.4.0

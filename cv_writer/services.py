@@ -16,7 +16,7 @@ from .models import (
     SocialMedia,
     CVImprovement,
 )
-from .local_llm import LocalLLMService
+from .local_llm import ResilientLLMService  # Corrected import
 
 logger = logging.getLogger(__name__)
 
@@ -171,156 +171,74 @@ class CVImprovementService:
             }
         }
 
-    async def improve_cv(self, cv_id: int) -> Dict:
-        """Improves all sections of a CV."""
+    def improve_cv(self, cv_id):
+        """
+        Improve different sections of a CV using the ResilientLLMService.
+        
+        Args:
+            cv_id (int): ID of the CV to improve
+        
+        Returns:
+            dict: Improvements for different sections of the CV
+        """
         try:
-            logger.info(f"Starting CV improvement for CV ID: {cv_id}")
+            # Retrieve the CV
             cv = CvWriter.objects.get(id=cv_id)
-            improvements = {}
-            improvement_records = []
             
-            # Determine service based on environment
-            is_production = os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production')
+            # Find the professional summary for this user, handling multiple summaries
+            professional_summaries = ProfessionalSummary.objects.filter(user=cv.user)
             
-            if not is_production:
-                # Use local LLM in development
-                self.llm_service = LocalLLMService(force_init=True)
-                improve_func = self.llm_service.improve_text
+            # If multiple summaries exist, use the most recently created one
+            if professional_summaries.count() > 1:
+                professional_summary_obj = professional_summaries.order_by('-created_at').first()
+            elif professional_summaries.count() == 1:
+                professional_summary_obj = professional_summaries.first()
             else:
-                # Use primary service in production
-                improve_func = self.primary_service.improve_text
+                # If no professional summary exists, create a default
+                professional_summary_obj = ProfessionalSummary.objects.create(
+                    user=cv.user,
+                    summary="Professional summary not found."
+                )
+            
+            original_summary = professional_summary_obj.summary
+            
+            # Use ResilientLLMService to improve the summary
+            llm_service = ResilientLLMService()
             
             # Improve professional summary
-            if hasattr(cv, 'professional_summary'):
-                logger.info("Improving professional summary")
-                improvement = CVImprovement.objects.create(
-                    cv=cv,
-                    section='professional_summary',
-                    original_content=cv.professional_summary.summary,
-                    improvement_type='full'
-                )
-                improvement_records.append(improvement)
-                
-                try:
-                    # Attempt improvement with primary service
-                    improved_summary = improve_func(
-                        self.improvement_prompts['professional_summary']['template'].format(
-                            industry=cv.industry or 'general',
-                            content=cv.professional_summary.summary
-                        )
-                    )
-                    
-                    # Fallback to secondary service if primary fails in production
-                    if is_production and not improved_summary and hasattr(self, 'fallback_service'):
-                        logger.warning("Primary service failed. Attempting fallback service.")
-                        improved_summary = self.fallback_service.improve_text(
-                            self.improvement_prompts['professional_summary']['template'].format(
-                                industry=cv.industry or 'general',
-                                content=cv.professional_summary.summary
-                            )
-                        )
-                    
-                    if improved_summary:
-                        improvement.improved_content = improved_summary
-                        improvement.save()
-                        improvements['professional_summary'] = improved_summary
-                        cv.professional_summary.summary = improved_summary
-                        cv.professional_summary.save()
-                    
-                except Exception as e:
-                    logger.error(f"Error improving professional summary: {str(e)}")
-                    improvement.status = 'failed'
-                    improvement.save()
-
-            # Improve experiences
-            experiences = []
-            for exp in cv.experiences.all():
-                logger.info(f"Improving experience: {exp.job_title}")
-                improvement = CVImprovement.objects.create(
-                    cv=cv,
-                    section='experience',
-                    original_content=str({
-                        'job_title': exp.job_title,
-                        'job_description': exp.job_description,
-                        'achievements': exp.achievements
-                    }),
-                    improvement_type='full'
-                )
-                improvement_records.append(improvement)
-                
-                try:
-                    improved_exp = await self._improve_section(
-                        'experience',
-                        {
-                            'job_title': exp.job_title,
-                            'job_description': exp.job_description,
-                            'achievements': exp.achievements
-                        }
-                    )
-                    experiences.append(improved_exp)
-                    improvement.improved_content = str(improved_exp['improved'])
-                    improvement.status = 'completed'
-                    improvement.tokens_used = len(str(improved_exp['improved']))
-                    logger.info(f"Experience improved successfully: {exp.job_title}")
-                except Exception as e:
-                    logger.error(f"Error improving experience: {str(e)}")
-                    improvement.status = 'failed'
-                    improvement.error_message = str(e)
-                improvement.save()
-                
-            improvements['experiences'] = experiences
-
-            # Improve skills
-            skills = []
-            for skill in cv.skills.all():
-                logger.info(f"Improving skill: {skill.name}")
-                improvement = CVImprovement.objects.create(
-                    cv=cv,
-                    section='skills',
-                    original_content=str({
-                        'name': skill.name,
-                        'proficiency': skill.proficiency
-                    }),
-                    improvement_type='full'
-                )
-                improvement_records.append(improvement)
-                
-                try:
-                    improved_skill = await self._improve_section(
-                        'skills',
-                        {
-                            'name': skill.name,
-                            'proficiency': skill.proficiency
-                        }
-                    )
-                    skills.append(improved_skill)
-                    improvement.improved_content = str(improved_skill['improved'])
-                    improvement.status = 'completed'
-                    improvement.tokens_used = len(str(improved_skill['improved']))
-                    logger.info(f"Skill improved successfully: {skill.name}")
-                except Exception as e:
-                    logger.error(f"Error improving skill: {str(e)}")
-                    improvement.status = 'failed'
-                    improvement.error_message = str(e)
-                improvement.save()
-                
-            improvements['skills'] = skills
-
-            logger.info("CV improvement completed successfully")
+            improved_summary = llm_service.improve_section(
+                section='professional_summary', 
+                content=original_summary
+            )
+            
+            # Update the professional summary
+            professional_summary_obj.summary = improved_summary
+            professional_summary_obj.save()
+            
+            # Create improvement record
+            CVImprovement.objects.create(
+                cv=cv,
+                section='professional_summary',
+                original_content=original_summary,
+                improved_content=improved_summary,
+                improvement_type='full',
+                tokens_used=0,  # You might want to track actual tokens used
+                status='completed'
+            )
+            
             return {
-                'status': 'success',
-                'improvements': improvements,
-                'improvement_ids': [imp.id for imp in improvement_records]
+                'professional_summary': improved_summary
             }
-
+        
         except CvWriter.DoesNotExist:
-            logger.error(f"CV not found: {cv_id}")
+            logger.error(f"CV with ID {cv_id} not found")
             raise
+        
         except Exception as e:
-            logger.error(f"Unexpected error during CV improvement: {str(e)}")
+            logger.error(f"Error improving CV: {str(e)}")
             raise
 
-    async def _improve_section(self, section: str, content: Dict) -> Dict:
+    def _improve_section(self, section: str, content: Dict) -> Dict:
         """Improves a specific section using available LLM."""
         try:
             prompt_data = self.improvement_prompts.get(section)
@@ -344,7 +262,7 @@ class CVImprovementService:
                     return {'original': content, 'improved': groq_result}
             
             if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'llm_service'):
-                return {'original': content, 'improved': self.llm_service.improve_text(formatted_prompt)}
+                return {'original': content, 'improved': self.llm_service.improve_section(section, content)}
             
             logger.warning("No AI service available for improvement")
             return {'original': content, 'improved': str(content)}

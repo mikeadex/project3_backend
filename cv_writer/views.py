@@ -45,7 +45,7 @@ from .serializers import (
     CVVersionSerializer
 )
 from .services import CVImprovementService
-from .local_llm import LocalLLMService
+from .local_llm import ResilientLLMService  # Updated import
 from django.db.models import Q
 import logging
 logger = logging.getLogger(__name__)
@@ -271,8 +271,7 @@ def improve_cv(request, cv_id):
         cv = CvWriter.objects.get(id=cv_id, user=request.user)
         
         # Get improvements
-        import asyncio
-        result = asyncio.run(cv_improvement_service.improve_cv(cv_id))
+        result = cv_improvement_service.improve_cv(cv_id)
         
         if result['status'] == 'success':
             return Response(result, status=status.HTTP_200_OK)
@@ -332,7 +331,7 @@ def improve_section(request):
         print(f"Content: {content}")
         
         try:
-            llm_service = LocalLLMService()
+            llm_service = ResilientLLMService()  # Updated
             result = llm_service.improve_section(section, content)
             
             # Save improvement to database if cv_id is provided
@@ -376,93 +375,75 @@ def improve_section(request):
 def improve_summary(request):
     """
     Real-time improvement of professional summary using local LLM.
+    Supports two scenarios:
+    1. Providing a CV ID to improve the summary of an existing CV
+    2. Providing a summary directly for improvement
     """
     try:
+        # Try to get CV ID or summary from request
+        cv_id = request.data.get('cv_id')
         summary = request.data.get('summary')
-        if not summary:
-            return Response(
-                {'error': 'No summary provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         
-        print(f"Received summary for improvement: {summary[:100]}...")
-        
-        # Initialize LLM service
-        try:
-            llm_service = LocalLLMService()
-            print("LLM service initialized successfully")
-        except Exception as e:
-            print(f"Failed to initialize LLM service: {str(e)}")
-            return Response(
-                {'error': f'Failed to initialize LLM service: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        # Improve summary with timeout handling
-        try:
-            print("Starting summary improvement...")
-            import threading
-            import queue
-            
-            def improve_in_thread(q):
-                try:
-                    result = llm_service.improve_section('professional_summary', summary)
-                    q.put(('success', result))
-                except Exception as e:
-                    q.put(('error', str(e)))
-            
-            # Create a queue for the result
-            result_queue = queue.Queue()
-            
-            # Start the improvement in a separate thread
-            improvement_thread = threading.Thread(
-                target=improve_in_thread, 
-                args=(result_queue,)
-            )
-            improvement_thread.daemon = True
-            improvement_thread.start()
-            
-            # Wait for the result with timeout
+        # Scenario 1: CV ID provided
+        if cv_id:
             try:
-                status_type, result = result_queue.get(timeout=90)  # 90-second timeout
+                cv = CvWriter.objects.get(id=cv_id, user=request.user)
                 
-                if status_type == 'error':
-                    raise Exception(result)
-                    
-                print(f"Improvement result: {result}")
-                
-                if not result:
-                    raise ValueError("No result returned from LLM service")
-                    
-                if not isinstance(result, dict) or 'improved' not in result:
-                    raise ValueError(f"Invalid result format: {result}")
-                
+                # Find the professional summary for this user
+                try:
+                    professional_summary = ProfessionalSummary.objects.get(user=request.user)
+                    summary = professional_summary.summary
+                except ProfessionalSummary.DoesNotExist:
+                    # If no professional summary exists, use a default
+                    summary = "Professional summary not found."
+            except CvWriter.DoesNotExist:
                 return Response({
-                    'status': 'success',
-                    'original': summary,
-                    'improved': result['improved']
-                }, status=status.HTTP_200_OK)
-                
-            except queue.Empty:
-                print("Operation timed out")
-                return Response(
-                    {'error': 'The operation took too long to complete. Please try again with a shorter summary.'},
-                    status=status.HTTP_504_GATEWAY_TIMEOUT
-                )
-            
-        except Exception as e:
-            print(f"Error during summary improvement: {str(e)}")
-            return Response(
-                {'error': f'Failed to improve summary: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    'error': f'CV with ID {cv_id} not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Scenario 2: Summary provided directly
+        elif summary:
+            # Use the provided summary
+            pass
+        
+        # No CV ID or summary provided
+        else:
+            return Response({
+                'error': 'Either cv_id or summary must be provided',
+                'hint': 'Send either a cv_id to improve an existing CV summary, or a summary string to improve directly'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Improve summary
+        improvement_service = CVImprovementService()
+        
+        # Create a temporary CV if not already created
+        if not cv_id:
+            temp_cv = CvWriter.objects.create(
+                user=request.user,
+                first_name='Temporary',
+                last_name='User'
             )
-            
+            temp_professional_summary = ProfessionalSummary.objects.create(
+                user=request.user,
+                summary=summary
+            )
+            cv_id = temp_cv.id
+        
+        # Improve the summary
+        improvements = improvement_service.improve_cv(cv_id)
+        
+        return Response({
+            'status': 'success',
+            'original': summary,
+            'improved': improvements.get('professional_summary', summary)
+        }, status=status.HTTP_200_OK)
+    
     except Exception as e:
-        print(f"Unexpected error in improve_summary view: {str(e)}")
-        return Response(
-            {'error': f'Unexpected error: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        logger.error(f"Error in improve_summary: {str(e)}")
+        return Response({
+            'error': str(e),
+            'original_summary': summary
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -482,7 +463,7 @@ def rewrite_cv(request):
         print("Received CV data for rewriting")
         
         try:
-            llm_service = LocalLLMService()
+            llm_service = ResilientLLMService()  # Updated
             print("LLM service initialized successfully")
         except Exception as e:
             print(f"Failed to initialize LLM service: {str(e)}")

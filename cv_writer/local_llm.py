@@ -1,17 +1,13 @@
-# Standard library imports
-import os
-import json
-import logging
-import time
-from pathlib import Path
-from typing import Dict, Optional, List, Any
-
-# Third-party library imports
-import requests
 from llama_cpp import Llama
+import os
+import logging
+import requests
+import time
+from typing import Dict, Optional, List, Any
+from pathlib import Path
+import json
 from django.conf import settings
 
-# Configure logger
 logger = logging.getLogger(__name__)
 
 class BaseLLMService:
@@ -523,11 +519,12 @@ class LocalLLMService(BaseLLMService):
         return edu if edu else None
 
 class ResilientLLMService:
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Dict[str, Any] = None, force_init: bool = False):
         """
         Initialize a resilient LLM service with multiple providers
         
-        :param config: Configuration dictionary for LLM providers
+        :param config: Optional configuration dictionary for LLM providers
+        :param force_init: Force initialization even without API keys
         """
         # Default configuration
         self.config = {
@@ -558,7 +555,17 @@ class ResilientLLMService:
         # Setup logging
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
-    
+        
+        # Validate API keys or check force_init
+        if not force_init:
+            missing_keys = [
+                provider for provider, details in self.config['providers'].items()
+                if not details.get('api_key')
+            ]
+            
+            if missing_keys:
+                raise ValueError(f"Missing API keys for providers: {', '.join(missing_keys)}")
+
     def _call_mistral_api(self, prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         """
         Call Mistral API with robust error handling
@@ -690,6 +697,42 @@ class ResilientLLMService:
             'message': 'All LLM providers failed to improve text',
             'original_content': content
         }
+
+    def improve_section(self, section: str, content: str, max_tokens: int = 500) -> str:
+        """
+        Improve a specific section of text, maintaining compatibility with previous implementation
+        
+        :param section: Type of section being improved
+        :param content: Text content to improve
+        :param max_tokens: Maximum tokens to generate
+        :return: Improved text string
+        """
+        self.logger.info(f"Attempting to improve {section} section")
+        
+        # Use improve_text method and return just the response
+        result = self.improve_text(section, content, max_tokens)
+        
+        if result['status'] == 'success':
+            # Clean and validate the response
+            improved_text = result['response'].strip()
+            
+            # Remove any leading/trailing quotes or unnecessary prefixes
+            if improved_text.startswith('"') and improved_text.endswith('"'):
+                improved_text = improved_text[1:-1].strip()
+            
+            # Remove any "Improved Summary:" or similar prefixes
+            for prefix in ['Improved Summary:', 'Improved:', 'Summary:', 'Result:']:
+                if improved_text.startswith(prefix):
+                    improved_text = improved_text[len(prefix):].strip()
+            
+            # Validate the improved text
+            if len(improved_text) > 10:
+                self.logger.info(f"Successfully improved {section} section using {result['provider']} provider")
+                return improved_text
+        
+        # Fallback to original content if improvement fails
+        self.logger.warning(f"Failed to improve {section} section: {result.get('message', 'Unknown error')}")
+        return content
 
 # Optional: Configure logging
 logging.basicConfig(
