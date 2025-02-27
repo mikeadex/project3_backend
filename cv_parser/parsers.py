@@ -7,11 +7,20 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List
 from dateutil import parser as date_parser
-import pytesseract  # for OCR
-from PIL import Image
 import io
 import pdfplumber  # Alternative PDF parsing library
 import os
+
+# Graceful pytesseract import
+try:
+    import pytesseract
+    from PIL import Image
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    pytesseract = None
+    Image = None
+    PYTESSERACT_AVAILABLE = False
+    print("Warning: pytesseract or Pillow not available. OCR functionality will be limited.")
 
 logger = logging.getLogger(__name__)
 

@@ -80,6 +80,107 @@ Ella is an innovative AI-driven platform designed to revolutionize professional 
      * Compliance with job application guidelines
      * Multi-platform support (LinkedIn, Indeed, etc.)
 
+## 🔗 Full-Stack Implementation
+
+### Frontend Integration
+- **Repository**: [Ella Frontend](../Ella-frontend/README.md)
+- **Core Technologies**: React, Vite
+- **Frontend Entry Point**: [React Application](../Ella-frontend/src/App.jsx)
+
+### Key Integration Points
+1. **Authentication Flow**
+   - JWT Token generation and validation
+   - Social login support
+   - [Frontend Auth Components](../Ella-frontend/src/pages/auth/)
+   - [Backend Auth Views](authentication/views.py)
+
+2. **CV Writer Module**
+   - RESTful API endpoints
+   - AI-powered CV improvements
+   - [Frontend CV Builder](../Ella-frontend/src/components/CVBuilder/)
+   - [Backend CV Services](cv_writer/services.py)
+
+3. **Jobstract Integration**
+   - Job market intelligence endpoints
+   - Recommendation generation
+   - [Frontend Job Insights](../Ella-frontend/src/pages/JobMarket/)
+   - [Backend Jobstract Models](jobstract/models.py)
+
+4. **Application Tracking**
+   - Comprehensive job application APIs
+   - Status management
+   - [Frontend Application Dashboard](../Ella-frontend/src/pages/Applications/)
+   - [Backend Application Views](job_applications/views.py)
+
+### API Configuration
+- **CORS Configuration**:
+  ```python
+  # settings.py
+  CORS_ALLOWED_ORIGINS = [
+      "http://localhost:3000",
+      "https://ellatech.com",
+      "https://www.ellatech.com"
+  ]
+  ```
+
+- **DRF Settings**:
+  ```python
+  REST_FRAMEWORK = {
+      'DEFAULT_AUTHENTICATION_CLASSES': [
+          'rest_framework_simplejwt.authentication.JWTAuthentication',
+      ],
+      'DEFAULT_PERMISSION_CLASSES': [
+          'rest_framework.permissions.IsAuthenticated',
+      ]
+  }
+  ```
+
+### Environment Configuration
+- **Development**: Local Django server
+- **Staging**: Containerized deployment
+- **Production**: Cloud-native infrastructure
+
+### Deployment Architecture
+```
+Backend (Django)
+│
+├── Hosted on Heroku/AWS
+│
+└── ↔️ Serves RESTful API to
+    
+Frontend (React)
+│
+├── Hosted on Vercel/Netlify
+│
+└── Consumes API Endpoints
+```
+
+### API Documentation
+- **Swagger/OpenAPI**: `/api/docs`
+- **Postman Collection**: [Ella API Collection](../docs/postman_collection.json)
+
+### Performance Optimization
+- **Caching**: Redis
+- **Database**: PostgreSQL with indexing
+- **Async Tasks**: Celery + RabbitMQ
+
+### Monitoring & Logging
+- **Error Tracking**: Sentry
+- **Metrics**: Prometheus
+- **Logging**: Structured logging with context
+
+## 🌐 Cross-Repository Links
+- [Frontend Repository](../Ella-frontend/)
+- [Deployment Scripts](../deployment/)
+- [Documentation](../docs/)
+
+## 🤝 Collaborative Development
+1. Ensure frontend is configured
+2. Set `.env` with correct settings
+3. Run backend with `python manage.py runserver`
+4. Verify API accessibility
+5. Test all integration points
+
 ## 🔧 Technical Architecture (Backend)
 
 ### Core Technologies
