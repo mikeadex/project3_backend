@@ -22,6 +22,15 @@ except ImportError:
     PYTESSERACT_AVAILABLE = False
     print("Warning: pytesseract or Pillow not available. OCR functionality will be limited.")
 
+# Graceful pdfplumber import
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    pdfplumber = None
+    PDFPLUMBER_AVAILABLE = False
+    print("Warning: pdfplumber not available. PDF parsing functionality will be limited.")
+
 logger = logging.getLogger(__name__)
 
 class AdvancedDocumentParser:
@@ -44,26 +53,25 @@ class AdvancedDocumentParser:
             str: Extracted text
         """
         try:
-            # Try pdfplumber first
-            with pdfplumber.open(file_path) as pdf:
-                text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
+            # Try pdfplumber first if available
+            if PDFPLUMBER_AVAILABLE:
+                with pdfplumber.open(file_path) as pdf:
+                    text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
+                    if text.strip():
+                        return text
             
-            # Fallback to PyPDF2 if pdfplumber fails
-            if not text.strip():
-                with open(file_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    text = " ".join(page.extract_text() for page in pdf_reader.pages)
+            # Fallback to PyPDF2
+            with open(file_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                text = " ".join(page.extract_text() for page in pdf_reader.pages)
+                if text.strip():
+                    return text
             
             # OCR fallback for scanned PDFs
-            if not text.strip():
-                try:
-                    text = self._ocr_pdf(file_path)
-                except Exception as ocr_error:
-                    logger.error(f"OCR parsing failed: {ocr_error}")
-            
-            return text
+            return self._ocr_pdf(file_path)
+        
         except Exception as e:
-            logger.error(f"PDF parsing error: {e}")
+            logger.error(f"PDF parsing failed: {e}")
             return ""
 
     def _ocr_pdf(self, file_path: str) -> str:
