@@ -29,19 +29,14 @@ class LocalLLMService(BaseLLMService):
             self._initialize_model()
         
         self.prompts = {
-            'professional_summary': """[INST] You are an expert CV writer. Improve this professional summary to be more impactful. Focus on years of experience, key achievements, core skills, and career objectives. Keep it concise (100-150 words). Use active voice and strong verbs. 
-
-            Original summary:
-            {content}
-
-            Return only the improved summary: [/INST]""",
-                        'experience': """[INST] You are an expert CV writer. Transform this job description into achievement-focused bullet points. Use strong action verbs, include metrics, and emphasize leadership impact. 
+            'professional_summary': self._improve_professional_summary_prompt,
+            'experience': """[INST] You are an expert CV writer. Transform this job description into achievement-focused bullet points. Use strong action verbs, include metrics, and emphasize leadership impact. 
 
             Original description:
             {content}
 
             Return only the improved description: [/INST]""",
-                        'skills': """[INST] You are an expert CV writer. Organize these skills into clear categories with proficiency levels. Format them as follows:
+            'skills': """[INST] You are an expert CV writer. Organize these skills into clear categories with proficiency levels. Format them as follows:
             Technical Skills: skill1 (Expert), skill2 (Advanced)
             Soft Skills: skill1, skill2
             Domain Knowledge: area1, area2
@@ -50,7 +45,7 @@ class LocalLLMService(BaseLLMService):
             {content}
 
             Return only the categorized skills: [/INST]"""
-                    }
+        }
 
     def _initialize_model(self):
         """Initialize the LLM model with optimized settings."""
@@ -148,7 +143,7 @@ class LocalLLMService(BaseLLMService):
             'skills': """Organize these skills..."""
         }
         
-        formatted_prompt = prompt_templates.get(section, "{content}").format(content=content)
+        formatted_prompt = self.prompts.get(section, "{content}").format(content=content)
         
         # Try providers in order
         for provider in self.providers:
@@ -249,7 +244,7 @@ class LocalLLMService(BaseLLMService):
                             current_category = cat
                             formatted_lines.append(f"\n{current_category}")
                             break
-                elif line and current_category:
+                elif current_category and line:
                     # Clean and add skills
                     skills = [skill.strip() for skill in line.split(',') if skill.strip()]
                     if skills:
@@ -260,95 +255,174 @@ class LocalLLMService(BaseLLMService):
         return text
         
     def improve_section(self, section_type, content):
-            """Improve a section of the CV with optimized prompting."""
-            if not self.model:
-                raise ValueError("Model not initialized")
+        """Improve a section of the CV with optimized prompting."""
+        # Pre-processing for professional summary
+        if section_type == 'professional_summary':
+            # Remove common opening phrases
+            content = content.replace('As a ', '', 1)  # Remove first occurrence
+            content = content.replace('As an ', '', 1)  # Handle 'As an' case
+            content = content.replace('A seasoned ', '', 1)  # Handle 'A seasoned' case
+            content = content.strip()  # Remove leading/trailing whitespace
 
-            try:
-                # Select appropriate prompt based on section type
-                if section_type == 'professional_summary':
-                    prompt = f"""As an expert CV writer, improve this professional summary while maintaining complete accuracy of experience and qualifications. Never add years of experience or specific technologies unless they are explicitly mentioned in the original text. Focus on strengthening the language and impact while keeping the facts unchanged.
+        if not self.model:
+            raise ValueError("Model not initialized")
 
-                    Guidelines:
-                    1. Keep all facts and experience levels exactly as stated
-                    2. Improve the language and structure
-                    3. Focus on potential and eagerness to learn for graduate profiles
-                    4. Don't add specific technologies unless mentioned
-                    5. Keep it concise and professional
+        try:
+            # Select appropriate prompt based on section type
+            if section_type == 'professional_summary':
+                prompt = f"""EXECUTIVE NARRATIVE ENGINEERING: TECHNOLOGY SECTOR CFO STRATEGIC POSITIONING PROTOCOL
 
-                    Original summary: {content}
-                    
-                    Improved summary:"""
-                    
-                elif section_type == 'job_description':
-                    prompt = f"""As an expert CV writer, enhance this job description to be more impactful and achievement-oriented. Focus on quantifiable results and specific contributions while maintaining complete accuracy.
+MISSION-CRITICAL OPTIMIZATION FRAMEWORK:
+-------------------------------------
+OBJECTIVE: Generate a world-class professional summary that:
+- Crystallizes 15+ years of technology sector financial leadership
+- Communicates strategic value with surgical precision
+- Positions the executive as a transformative industry architect
 
-                    Guidelines:
-                    1. Start each bullet point with a strong action verb
-                    2. Include metrics and specific achievements where present
-                    3. Focus on impact and results, not just responsibilities
-                    4. Highlight technical skills and tools actually used
-                    5. Keep descriptions concise and achievement-focused
-                    6. Never fabricate numbers or achievements
-                    7. Maintain all factual information exactly as provided
+NARRATIVE CONSTRUCTION MANDATES:
+1. STRATEGIC LEADERSHIP ESSENCE
+   - ABSOLUTE PROHIBITION: Do NOT start with "As a...", "As an...", or "A seasoned..."
+   - Distill 15+ years of financial leadership into 3-4 sentences
+   - Highlight unique value proposition transcending traditional financial management
+   - Demonstrate strategic vision that eclipses operational excellence
 
-                    Original description: {content}
-                    
-                    Improved description:"""
-                    
-                elif section_type == 'achievement':
-                    prompt = f"""As an expert CV writer, enhance this achievement to be more impactful and results-oriented. Focus on the specific impact and value delivered while maintaining complete accuracy.
+2. QUANTIFIABLE IMPACT ARCHITECTURE
+   - MANDATORY: Embed measurable financial transformations
+   - Showcase data-driven decision-making with concrete metrics
+   - Illustrate leadership's direct organizational growth contribution
+   - Quantify impact vectors:
+     * Revenue growth percentages
+     * Cost optimization metrics
+     * Shareholder value enhancement
+     * Technology-driven efficiency gains
 
-                    Guidelines:
-                    1. Start with a powerful action verb
-                    2. Emphasize quantifiable results where present
-                    3. Highlight the specific impact on the business/project
-                    4. Include relevant technical skills actually used
-                    5. Structure as: Action → Task → Result
-                    6. Never fabricate metrics or outcomes
-                    7. Keep the achievement concise but detailed
+3. TECHNOLOGICAL INNOVATION POSITIONING
+   - Articulate technology-driven financial strategies
+   - Demonstrate cutting-edge financial technology proficiency
+   - Showcase adaptability in dynamic technology ecosystems
+   - Highlight digital transformation leadership capabilities
 
-                    Original achievement: {content}
-                    
-                    Improved achievement:"""
-                else:
-                    raise ValueError(f"Unsupported section type: {section_type}")
+4. EXECUTIVE COMMUNICATION PRECISION
+   - Deploy executive-caliber action verbs EXCLUSIVELY
+     Preferred Verbs:
+     * Spearhead
+     * Engineer
+     * Architect
+     * Transform
+     * Orchestrate
+   - Eliminate passive constructions
+   - Use language resonating with technology sector leadership
+   - Create narrative simultaneously strategic and authentic
 
-                # Generate with optimized parameters
-                logger.info("Generating improvement")
-                response = self.model.create_completion(
-                    prompt,
-                    max_tokens=300,        # Limit output length
-                    temperature=0.7,       # Balanced creativity
-                    top_p=0.9,            # Focused sampling
-                    repeat_penalty=1.1,    # Prevent repetition
-                    stop=["Original", "\n\n"],  # Clear stop conditions
-                )
+5. LEADERSHIP PHILOSOPHY CRYSTALLIZATION
+   - Capture leadership approach in a singular, powerful paragraph
+   - Balance technical expertise with visionary thinking
+   - Communicate cross-functional leadership capabilities
+   - Project forward-thinking, innovation-driven mindset
 
-                # Extract and clean the response
-                improved_text = response['choices'][0]['text'].strip()
+OPTIMIZATION GUARDRAILS:
+✓ Zero tolerance for credential inflation
+✓ Absolute preservation of original professional narrative
+✓ Strict adherence to factual career trajectory
+✓ Eliminate redundant executive vernacular
+
+CONTEXTUAL TRANSFORMATION FOCUS:
+- Technology sector financial leadership
+- Strategic financial planning
+- Operational optimization
+- Data-driven decision architecture
+- Team empowerment and innovation culture
+- Shareholder value maximization
+
+ORIGINAL PROFESSIONAL PROFILE:
+{content}
+
+EXECUTIVE NARRATIVE GENERATION PROTOCOL:
+Produce a world-class technology sector CFO professional summary that:
+- Communicates strategic leadership potential
+- Demonstrates measurable financial impact
+- Positions executive as a transformative technology leader
+- Maintains absolute narrative authenticity
+
+CRITICAL CONSTRAINTS:
+- Maximum Length: 250 words
+- Minimum Sentences: 3
+- Maximum Sentences: 4
+- MUST reflect original professional experience
+- MUST NOT fabricate achievements
+- MUST NOT start with "As a...", "As an...", or "A seasoned..."
+
+RETURN ONLY: Optimized Technology Sector CFO Strategic Narrative"""
                 
-                # Basic validation
-                if len(improved_text) < 10:
-                    raise ValueError("Generated text is too short")
+            elif section_type == 'job_description':
+                prompt = f"""As an expert CV writer, enhance this job description to be more impactful and achievement-oriented. Focus on quantifiable results and specific contributions while maintaining complete accuracy.
 
-                # Validate no fabricated experience is added
-                if "years of experience" in improved_text.lower() and "years of experience" not in content.lower():
-                    raise ValueError("Generated text contains fabricated experience")
+                Guidelines:
+                1. Start each bullet point with a strong action verb
+                2. Include metrics and specific achievements where present
+                3. Focus on impact and results, not just responsibilities
+                4. Highlight technical skills and tools actually used
+                5. Keep descriptions concise and achievement-focused
+                6. Never fabricate numbers or achievements
+                7. Maintain all factual information exactly as provided
 
-                # Validate no fabricated metrics
-                if any(metric in improved_text.lower() and metric not in content.lower() 
-                    for metric in ['%', 'percent', 'increased', 'decreased', 'reduced', 'improved by']):
-                    raise ValueError("Generated text contains fabricated metrics")
+                Original description: {content}
 
-                return {
-                    'improved': improved_text,
-                    'original': content
-                }
+                Improved description:"""
+                    
+            elif section_type == 'achievement':
+                prompt = f"""As an expert CV writer, enhance this achievement to be more impactful and results-oriented. Focus on the specific impact and value delivered while maintaining complete accuracy.
 
-            except Exception as e:
-                logger.error(f"Error in improve_section: {str(e)}")
-                raise
+                Guidelines:
+                1. Start with a powerful action verb
+                2. Emphasize quantifiable results where present
+                3. Highlight the specific impact on the business/project
+                4. Include relevant technical skills actually used
+                5. Structure as: Action → Task → Result
+                6. Never fabricate metrics or outcomes
+                7. Keep the achievement concise but detailed
+
+                Original achievement: {content}
+
+                Improved achievement:"""
+            else:
+                raise ValueError(f"Unsupported section type: {section_type}")
+
+            # Generate with optimized parameters
+            logger.info("Generating improvement")
+            response = self.model.create_completion(
+                prompt,
+                max_tokens=300,        # Limit output length
+                temperature=0.7,       # Balanced creativity
+                top_p=0.9,            # Focused sampling
+                repeat_penalty=1.1,    # Prevent repetition
+                stop=["Original", "\n\n"],  # Clear stop conditions
+            )
+
+            # Extract and clean the response
+            improved_text = response['choices'][0]['text'].strip()
+            
+            # Basic validation
+            if len(improved_text) < 10:
+                raise ValueError("Generated text is too short")
+
+            # Validate no fabricated experience is added
+            if "years of experience" in improved_text.lower() and "years of experience" not in content.lower():
+                raise ValueError("Generated text contains fabricated experience")
+
+            # Validate no fabricated metrics
+            if any(metric in improved_text.lower() and metric not in content.lower() 
+                for metric in ['%', 'percent', 'increased', 'decreased', 'reduced', 'improved by']):
+                raise ValueError("Generated text contains fabricated metrics")
+
+            return {
+                'improved': improved_text,
+                'original': content
+            }
+
+        except Exception as e:
+            logger.error(f"Error in improve_section: {str(e)}")
+            raise
 
     def rewrite_cv(self, cv_data):
         """Rewrite the entire CV to be more professional and impactful."""
@@ -448,14 +522,14 @@ class LocalLLMService(BaseLLMService):
 
             elif current_section == 'skills':
                 # Detect skill categories
-                if any(cat in line for cat in ['Technical Skills', 'Soft Skills', 'Domain Knowledge']):
-                    for cat in ['Technical Skills', 'Soft Skills', 'Domain Knowledge']:
+                if any(cat in line for cat in ['Technical Skills:', 'Soft Skills:', 'Domain Knowledge:']):
+                    for cat in ['Technical Skills:', 'Soft Skills:', 'Domain Knowledge:']:
                         if cat in line:
                             current_skill_category = cat
                             break
                 elif current_skill_category and line:
-                    # Split skills, handling potential proficiency levels
-                    skills = [skill.strip() for skill in line.split(',')]
+                    # Clean and add skills
+                    skills = [skill.strip() for skill in line.split(',') if skill.strip()]
                     sections['skills'][current_skill_category].extend(skills)
 
             elif current_section == 'education':
@@ -517,6 +591,91 @@ class LocalLLMService(BaseLLMService):
                 edu['details'] = line.replace('Details:', '').strip()
                 
         return edu if edu else None
+
+    def _improve_professional_summary_prompt(self, content):
+        """
+        Generate a hyper-specialized prompt for technology sector CFO professional summary optimization.
+        
+        Args:
+            content (str): Original professional summary text
+        
+        Returns:
+            str: Precision-engineered improvement prompt
+        """
+        return f"""[INST] TECHNOLOGY SECTOR CFO: STRATEGIC NARRATIVE OPTIMIZATION PROTOCOL
+
+CORE TRANSFORMATION IMPERATIVE:
+- Crystallize 15+ years of technology sector financial leadership
+- Elevate strategic positioning through microscopic linguistic refinement
+- Capture transformative leadership trajectory with unparalleled precision
+
+OPTIMIZATION ARCHITECTURE:
+
+1. PROFESSIONAL NARRATIVE FIDELITY
+   * ABSOLUTE PRESERVATION of original professional context
+   * Maintain authentic executive voice
+   * Capture nuanced financial leadership capabilities
+   * NO artificial narrative expansion or credential inflation
+
+2. NARRATIVE STRUCTURAL ENGINEERING
+   - Compress into a SINGULAR, high-impact paragraph (100-150 words)
+   - Create a compelling technology sector financial leadership narrative
+   - Highlight quantifiable transformative contributions
+   - Demonstrate strategic vision with measurable impact
+
+3. EXECUTIVE COMMUNICATION PRECISION
+   - Transmute technical financial language into strategic narrative
+   - Deploy executive-caliber action verbs specific to technology finance
+   - Emphasize data-driven financial transformations
+   - Articulate leadership philosophy with crystalline clarity
+   - Showcase unique value proposition with surgical accuracy
+
+4. STRATEGIC LEADERSHIP POSITIONING
+   - Amplify cross-functional technology finance leadership capabilities
+   - Illustrate organizational transformation through financial innovation
+   - Demonstrate sophisticated technology sector financial insight
+   - Balance technical financial expertise with visionary leadership
+   - Communicate leadership impact beyond immediate financial function
+
+EXECUTIVE PERFORMANCE CALIBRATION:
+✓ Maintains original professional DNA
+✓ Projects authoritative technology sector financial leadership
+✓ Communicates strategic value instantaneously
+✓ Positions executive as a transformative industry leader
+
+OPTIMIZATION GUARDRAILS:
+- Zero tolerance for credential inflation
+- Strict adherence to original career narrative
+- Eliminate generic executive vernacular
+- Preserve authentic leadership essence
+
+LINGUISTIC TRANSFORMATION PROTOCOL:
+- Eliminate passive financial terminology
+- Use direct, impactful technology-centric language
+- Prioritize active voice in financial narrative
+- Remove redundant descriptors
+- Focus on measurable financial and technological impact
+- Highlight technology sector financial innovation
+
+CONTEXTUAL OPTIMIZATION FOCUS:
+- 15+ years technology sector financial leadership
+- Data-driven financial decision-making
+- Operational optimization in tech environments
+- Strategic financial planning for technology companies
+- Shareholder value maximization in tech sector
+- Team development and innovation culture
+- Technology-driven financial efficiency
+
+Original Executive Profile:
+{content}
+
+MISSION CRITICAL DELIVERABLE:
+Produce a laser-focused technology sector CFO professional summary that:
+- Crystallizes 15+ years of financial leadership potential
+- Communicates strategic technological financial value with immediacy
+- Maintains uncompromised professional integrity
+
+RETURN ONLY: Optimized Technology Sector CFO Professional Narrative [/INST]"""
 
 class ResilientLLMService:
     def __init__(self, config: Dict[str, Any] = None, force_init: bool = False):
