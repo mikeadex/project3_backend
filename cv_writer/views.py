@@ -374,75 +374,110 @@ def improve_section(request):
 @permission_classes([IsAuthenticated])
 def improve_summary(request):
     """
-    Real-time improvement of professional summary using local LLM.
-    Supports two scenarios:
-    1. Providing a CV ID to improve the summary of an existing CV
-    2. Providing a summary directly for improvement
+    Real-time improvement of professional summary using AI.
+    
+    Supports two improvement scenarios:
+    1. Improving summary for an existing CV
+    2. Improving a provided summary directly
+    
+    Request should contain either:
+    - cv_id: ID of the CV to improve summary for
+    - summary: Direct summary text to improve
     """
     try:
-        # Try to get CV ID or summary from request
+        # Extract parameters from request
         cv_id = request.data.get('cv_id')
         summary = request.data.get('summary')
         
-        # Scenario 1: CV ID provided
-        if cv_id:
-            try:
-                cv = CvWriter.objects.get(id=cv_id, user=request.user)
-                
-                # Find the professional summary for this user
-                try:
-                    professional_summary = ProfessionalSummary.objects.get(user=request.user)
-                    summary = professional_summary.summary
-                except ProfessionalSummary.DoesNotExist:
-                    # If no professional summary exists, use a default
-                    summary = "Professional summary not found."
-            except CvWriter.DoesNotExist:
-                return Response({
-                    'error': f'CV with ID {cv_id} not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Scenario 2: Summary provided directly
-        elif summary:
-            # Use the provided summary
-            pass
-        
-        # No CV ID or summary provided
-        else:
+        # Validate input
+        if not cv_id and not summary:
             return Response({
                 'error': 'Either cv_id or summary must be provided',
                 'hint': 'Send either a cv_id to improve an existing CV summary, or a summary string to improve directly'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Improve summary
+        # Scenario 1: Improve summary from CV
+        if cv_id:
+            try:
+                cv = CvWriter.objects.get(id=cv_id, user=request.user)
+                
+                # Attempt to retrieve existing professional summary
+                try:
+                    professional_summary = ProfessionalSummary.objects.get(user=request.user, cv=cv)
+                    summary = professional_summary.summary
+                except ProfessionalSummary.DoesNotExist:
+                    return Response({
+                        'error': 'No professional summary found for this CV',
+                        'status': 'no_summary'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            except CvWriter.DoesNotExist:
+                return Response({
+                    'error': f'CV with ID {cv_id} not found',
+                    'status': 'cv_not_found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Validate summary is not empty
+        if not summary or len(summary.strip()) < 10:
+            return Response({
+                'error': 'Summary is too short or empty',
+                'hint': 'Provide a meaningful professional summary of at least 10 characters'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Prepare improvement prompt
+        improvement_prompt = f"""Professional Summary Optimization Protocol
+
+OBJECTIVE: Refine and elevate a professional summary to highlight key strengths, achievements, and career trajectory.
+
+OPTIMIZATION GUIDELINES:
+- Maintain original professional essence
+- Enhance clarity and impact
+- Use powerful, action-oriented language
+- Highlight unique professional value proposition
+- Ensure conciseness (3-4 sentences maximum)
+
+ORIGINAL SUMMARY:
+{summary}
+
+IMPROVEMENT INSTRUCTIONS:
+- Preserve core professional identity
+- Emphasize quantifiable achievements
+- Use strong, descriptive verbs
+- Create a compelling narrative of professional growth
+"""
+        
+        # Improve summary using AI service
         improvement_service = CVImprovementService()
+        improved_summary = improvement_service.primary_service.improve_text(improvement_prompt)
         
-        # Create a temporary CV if not already created
-        if not cv_id:
-            temp_cv = CvWriter.objects.create(
-                user=request.user,
-                first_name='Temporary',
-                last_name='User'
-            )
-            temp_professional_summary = ProfessionalSummary.objects.create(
-                user=request.user,
-                summary=summary
-            )
-            cv_id = temp_cv.id
+        # If improvement fails, return original
+        if not improved_summary:
+            return Response({
+                'status': 'partial_success',
+                'original': summary,
+                'improved': summary,
+                'message': 'AI improvement unavailable. Original summary returned.'
+            }, status=status.HTTP_200_OK)
         
-        # Improve the summary
-        improvements = improvement_service.improve_cv(cv_id)
+        # Update professional summary if CV context exists
+        if cv_id:
+            try:
+                professional_summary.summary = improved_summary
+                professional_summary.save()
+            except Exception as update_error:
+                logger.warning(f"Could not update professional summary: {str(update_error)}")
         
         return Response({
             'status': 'success',
             'original': summary,
-            'improved': improvements.get('professional_summary', summary)
+            'improved': improved_summary
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
-        logger.error(f"Error in improve_summary: {str(e)}")
+        logger.error(f"Unexpected error in improve_summary: {str(e)}")
         return Response({
-            'error': str(e),
-            'original_summary': summary
+            'error': 'An unexpected error occurred during summary improvement',
+            'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
