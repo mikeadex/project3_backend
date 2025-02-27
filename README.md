@@ -144,13 +144,13 @@ Ella is an innovative AI-driven platform designed to revolutionize professional 
 ```
 Backend (Django)
 │
-├── Hosted on Heroku/AWS
+├── Hosted on Render
 │
 └── ↔️ Serves RESTful API to
     
 Frontend (React)
 │
-├── Hosted on Vercel/Netlify
+├── Hosted on Vercel
 │
 └── Consumes API Endpoints
 ```
