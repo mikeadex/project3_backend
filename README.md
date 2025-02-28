@@ -83,7 +83,7 @@ Ella is an innovative AI-driven platform designed to revolutionize professional 
 ## 🔗 Full-Stack Implementation
 
 ### Frontend Integration
-- **Repository**: [Ella Frontend](../Ella-frontend/README.md)
+- **Repository**: [Ella Frontend](https://github.com/mikeadex/Ella-frontend)
 - **Core Technologies**: React, Vite
 - **Frontend Entry Point**: [React Application](../Ella-frontend/src/App.jsx)
 
@@ -169,10 +169,29 @@ Frontend (React)
 - **Metrics**: Prometheus
 - **Logging**: Structured logging with context
 
+## 🌐 Project Information
+
+**Project Domain**: [https://www.ellacv.com](https://www.ellacv.com)
+
+## 🔗 Repository
+
+**Backend Repository**: https://github.com/mikeadex/project3_backend
+
+### Repository Structure
+- `cv_parser/`: Advanced CV parsing and OCR modules
+- `ella_writer/`: Core Django application settings
+- `authentication/`: User authentication and management
+- `jobstract/`: Job market intelligence services
+
 ## 🌐 Cross-Repository Links
-- [Frontend Repository](../Ella-frontend/)
-- [Deployment Scripts](../deployment/)
-- [Documentation](../docs/)
+- [Frontend Repository](https://github.com/mikeadex/Ella-frontend)
+- [Backend Repository](https://github.com/mikeadex/project3_backend)
+
+### Repository Structure
+- `cv_parser/`: Advanced CV parsing and OCR modules
+- `ella_writer/`: Core Django application settings
+- `authentication/`: User authentication and management
+- `jobstract/`: Job market intelligence services
 
 ## 🤝 Collaborative Development
 1. Ensure frontend is configured
