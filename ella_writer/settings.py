@@ -24,6 +24,10 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+DEEPSEEK_TIMEOUT = int(os.getenv('DEEPSEEK_TIMEOUT', 20))  # Default to 20 seconds if not set
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -94,6 +98,7 @@ INSTALLED_APPS = [
     "models_trainer",
     "linkedin_parser",
     "jobstract",
+    "ai_cv_parser",
 ]
 
 MIDDLEWARE = [

@@ -30,21 +30,8 @@ class LocalLLMService(BaseLLMService):
         
         self.prompts = {
             'professional_summary': self._improve_professional_summary_prompt,
-            'experience': """[INST] You are an expert CV writer. Transform this job description into achievement-focused bullet points. Use strong action verbs, include metrics, and emphasize leadership impact. 
-
-            Original description:
-            {content}
-
-            Return only the improved description: [/INST]""",
-            'skills': """[INST] You are an expert CV writer. Organize these skills into clear categories with proficiency levels. Format them as follows:
-            Technical Skills: skill1 (Expert), skill2 (Advanced)
-            Soft Skills: skill1, skill2
-            Domain Knowledge: area1, area2
-
-            Original skills:
-            {content}
-
-            Return only the categorized skills: [/INST]"""
+            'experience': self._improve_experience_prompt,
+            'skills': self._improve_skills_prompt
         }
 
     def _initialize_model(self):
@@ -138,9 +125,9 @@ class LocalLLMService(BaseLLMService):
         
         # Prepare section-specific prompt templates
         prompt_templates = {
-            'professional_summary': """Improve this professional summary...""",
-            'experience': """Transform this job description...""",
-            'skills': """Organize these skills..."""
+            'professional_summary': self.prompts['professional_summary'],
+            'experience': self.prompts['experience'],
+            'skills': self.prompts['skills']
         }
         
         formatted_prompt = self.prompts.get(section, "{content}").format(content=content)
@@ -270,121 +257,11 @@ class LocalLLMService(BaseLLMService):
         try:
             # Select appropriate prompt based on section type
             if section_type == 'professional_summary':
-                prompt = f"""EXECUTIVE NARRATIVE ENGINEERING: TECHNOLOGY SECTOR CFO STRATEGIC POSITIONING PROTOCOL
-
-MISSION-CRITICAL OPTIMIZATION FRAMEWORK:
--------------------------------------
-OBJECTIVE: Generate a world-class professional summary that:
-- Crystallizes 15+ years of technology sector financial leadership
-- Communicates strategic value with surgical precision
-- Positions the executive as a transformative industry architect
-
-NARRATIVE CONSTRUCTION MANDATES:
-1. STRATEGIC LEADERSHIP ESSENCE
-   - ABSOLUTE PROHIBITION: Do NOT start with "As a...", "As an...", or "A seasoned..."
-   - Distill 15+ years of financial leadership into 3-4 sentences
-   - Highlight unique value proposition transcending traditional financial management
-   - Demonstrate strategic vision that eclipses operational excellence
-
-2. QUANTIFIABLE IMPACT ARCHITECTURE
-   - MANDATORY: Embed measurable financial transformations
-   - Showcase data-driven decision-making with concrete metrics
-   - Illustrate leadership's direct organizational growth contribution
-   - Quantify impact vectors:
-     * Revenue growth percentages
-     * Cost optimization metrics
-     * Shareholder value enhancement
-     * Technology-driven efficiency gains
-
-3. TECHNOLOGICAL INNOVATION POSITIONING
-   - Articulate technology-driven financial strategies
-   - Demonstrate cutting-edge financial technology proficiency
-   - Showcase adaptability in dynamic technology ecosystems
-   - Highlight digital transformation leadership capabilities
-
-4. EXECUTIVE COMMUNICATION PRECISION
-   - Deploy executive-caliber action verbs EXCLUSIVELY
-     Preferred Verbs:
-     * Spearhead
-     * Engineer
-     * Architect
-     * Transform
-     * Orchestrate
-   - Eliminate passive constructions
-   - Use language resonating with technology sector leadership
-   - Create narrative simultaneously strategic and authentic
-
-5. LEADERSHIP PHILOSOPHY CRYSTALLIZATION
-   - Capture leadership approach in a singular, powerful paragraph
-   - Balance technical expertise with visionary thinking
-   - Communicate cross-functional leadership capabilities
-   - Project forward-thinking, innovation-driven mindset
-
-OPTIMIZATION GUARDRAILS:
-✓ Zero tolerance for credential inflation
-✓ Absolute preservation of original professional narrative
-✓ Strict adherence to factual career trajectory
-✓ Eliminate redundant executive vernacular
-
-CONTEXTUAL TRANSFORMATION FOCUS:
-- Technology sector financial leadership
-- Strategic financial planning
-- Operational optimization
-- Data-driven decision architecture
-- Team empowerment and innovation culture
-- Shareholder value maximization
-
-ORIGINAL PROFESSIONAL PROFILE:
-{content}
-
-EXECUTIVE NARRATIVE GENERATION PROTOCOL:
-Produce a world-class technology sector CFO professional summary that:
-- Communicates strategic leadership potential
-- Demonstrates measurable financial impact
-- Positions executive as a transformative technology leader
-- Maintains absolute narrative authenticity
-
-CRITICAL CONSTRAINTS:
-- Maximum Length: 250 words
-- Minimum Sentences: 3
-- Maximum Sentences: 4
-- MUST reflect original professional experience
-- MUST NOT fabricate achievements
-- MUST NOT start with "As a...", "As an...", or "A seasoned..."
-
-RETURN ONLY: Optimized Technology Sector CFO Strategic Narrative"""
-                
-            elif section_type == 'job_description':
-                prompt = f"""As an expert CV writer, enhance this job description to be more impactful and achievement-oriented. Focus on quantifiable results and specific contributions while maintaining complete accuracy.
-
-                Guidelines:
-                1. Start each bullet point with a strong action verb
-                2. Include metrics and specific achievements where present
-                3. Focus on impact and results, not just responsibilities
-                4. Highlight technical skills and tools actually used
-                5. Keep descriptions concise and achievement-focused
-                6. Never fabricate numbers or achievements
-                7. Maintain all factual information exactly as provided
-
-                Original description: {content}
-
-                Improved description:"""
-                    
-            elif section_type == 'achievement':
-                prompt = f"""As an expert CV writer, enhance this achievement to be more impactful and results-oriented. Focus on the specific impact and value delivered while maintaining complete accuracy.
-
-                Guidelines:
-                1. Start with a powerful action verb
-                2. Emphasize quantifiable results where present
-                3. Highlight the specific impact on the business/project
-                4. Include relevant technical skills actually used
-                5. Structure as: Action → Task → Result
-                6. Never fabricate metrics or outcomes
-                7. Keep the achievement concise but detailed
-
-                Original achievement: {content}
-
-                Improved achievement:"""
+                prompt = self.prompts['professional_summary']
+            elif section_type == 'experience':
+                prompt = self.prompts['experience']
+            elif section_type == 'skills':
+                prompt = self.prompts['skills']
             else:
                 raise ValueError(f"Unsupported section type: {section_type}")
 
@@ -425,12 +302,128 @@ RETURN ONLY: Optimized Technology Sector CFO Strategic Narrative"""
             raise
 
     def rewrite_cv(self, cv_data):
-        """Rewrite the entire CV to be more professional and impactful."""
-        improved_cv = {}
-        for section, content in cv_data.items():
-            if section in ['professional_summary', 'experience', 'skills']:
-                improved_cv[section] = self.improve_text(section, content)
-        return improved_cv
+        """
+        Rewrite the entire CV with better structured context integration and awareness
+        of different sections to ensure a cohesive result.
+        
+        Args:
+            cv_data (dict): Dictionary containing CV sections and their content
+            
+        Returns:
+            dict: Dictionary with original and rewritten CV data
+        """
+        try:
+            # Extract and structure all relevant information
+            structured_cv = {
+                "professional_summary": cv_data.get("professional_summary", ""),
+                "personal_info": {
+                    "name": cv_data.get("name", ""),
+                    "title": cv_data.get("title", ""),
+                    "email": cv_data.get("email", ""),
+                    "phone": cv_data.get("phone", ""),
+                    "location": cv_data.get("location", ""),
+                    "linkedin": cv_data.get("linkedin", "")
+                },
+                "experiences": self._format_experiences(cv_data.get("experiences", [])),
+                "education": self._format_education(cv_data.get("education", [])),
+                "skills": cv_data.get("skills", []),
+                "certifications": cv_data.get("certifications", []),
+                "languages": cv_data.get("languages", [])
+            }
+            
+            # Process each section independently with appropriate prompts
+            improved_sections = {}
+            
+            # Improve professional summary with awareness of experience and skills
+            if structured_cv["professional_summary"]:
+                context = f"""
+                JOB TITLE/INDUSTRY: {structured_cv["personal_info"]["title"]}
+                
+                KEY SKILLS: {', '.join(structured_cv["skills"][:10] if isinstance(structured_cv["skills"], list) else [])}
+                
+                MAIN EXPERIENCE AREAS: {structured_cv["experiences"][:500] if structured_cv["experiences"] else ""}
+                """
+                
+                professional_summary_prompt = f"""[INST] PROFESSIONAL SUMMARY OPTIMIZATION
+
+CANDIDATE CONTEXT:
+{context}
+
+ORIGINAL SUMMARY:
+{structured_cv["professional_summary"]}
+
+Create a powerful, concise professional summary (3-5 sentences) that:
+1. Highlights the most relevant skills and experience
+2. Uses strong action verbs and industry-appropriate language
+3. Balances technical expertise with transferable skills
+4. Avoids clichés and generic language
+5. Demonstrates clear value proposition
+
+RETURN ONLY: An optimized professional summary. [/INST]"""
+
+                summary_result = self.improve_text("professional_summary", professional_summary_prompt)
+                improved_sections["professional_summary"] = summary_result.get("improved", structured_cv["professional_summary"])
+            
+            # Improve experience entries with awareness of skills
+            if structured_cv["experiences"]:
+                skills_context = ', '.join(structured_cv["skills"][:15] if isinstance(structured_cv["skills"], list) else [])
+                experience_prompt = f"""[INST] WORK EXPERIENCE OPTIMIZATION
+
+CANDIDATE SKILLS CONTEXT:
+{skills_context}
+
+WORK EXPERIENCE TO OPTIMIZE:
+{structured_cv["experiences"]}
+
+Transform this work experience into achievement-focused bullet points that:
+1. Begin each bullet with strong action verbs
+2. Include specific metrics and results where available
+3. Highlight relevant skills from the context
+4. Focus on business impact and leadership
+5. Remove redundancies and passive language
+
+RETURN ONLY: Optimized work experience bullet points organized by position. [/INST]"""
+
+                experience_result = self.improve_text("experience", experience_prompt)
+                improved_sections["experiences"] = experience_result.get("improved", structured_cv["experiences"])
+            
+            # Improve skills with awareness of experience
+            if structured_cv["skills"]:
+                experience_summary = structured_cv["experiences"][:300] if structured_cv["experiences"] else ""
+                skills_prompt = f"""[INST] SKILLS SECTION OPTIMIZATION
+
+EXPERIENCE CONTEXT:
+{experience_summary}
+
+SKILLS TO ORGANIZE:
+{', '.join(structured_cv["skills"]) if isinstance(structured_cv["skills"], list) else structured_cv["skills"]}
+
+Categorize and enhance these skills into a structured format that:
+1. Groups related skills into logical categories (Technical, Soft Skills, Domain Knowledge)
+2. Prioritizes skills most relevant to the experience context
+3. Adds appropriate proficiency levels (Expert, Advanced, Intermediate)
+4. Removes redundant or basic skills
+5. Ensures consistency in formatting and capitalization
+
+RETURN ONLY: Organized skills section with clear categories and proficiency levels. [/INST]"""
+
+                skills_result = self.improve_text("skills", skills_prompt)
+                improved_sections["skills"] = skills_result.get("improved", structured_cv["skills"])
+            
+            # Create a cohesive CV with improved sections
+            return {
+                "original": cv_data,
+                "rewritten": improved_sections
+            }
+        
+        except Exception as e:
+            logger.error(f"Error rewriting CV: {str(e)}")
+            # Return original data if rewriting fails
+            return {
+                "original": cv_data,
+                "rewritten": cv_data,
+                "error": str(e)
+            }
     
     def _format_experiences(self, experiences):
         """Format experiences for the prompt."""
@@ -594,88 +587,165 @@ RETURN ONLY: Optimized Technology Sector CFO Strategic Narrative"""
 
     def _improve_professional_summary_prompt(self, content):
         """
-        Generate a hyper-specialized prompt for technology sector CFO professional summary optimization.
+        Generate a versatile prompt for improving professional summaries across different career types.
         
         Args:
             content (str): Original professional summary text
         
         Returns:
-            str: Precision-engineered improvement prompt
+            str: Improved professional summary prompt
         """
-        return f"""[INST] TECHNOLOGY SECTOR CFO: STRATEGIC NARRATIVE OPTIMIZATION PROTOCOL
+        return f"""[INST] PROFESSIONAL SUMMARY OPTIMIZATION
 
-CORE TRANSFORMATION IMPERATIVE:
-- Crystallize 15+ years of technology sector financial leadership
-- Elevate strategic positioning through microscopic linguistic refinement
-- Capture transformative leadership trajectory with unparalleled precision
+CORE TRANSFORMATION GOAL:
+- Create a concise, impactful professional summary that effectively showcases qualifications
+- Target 3-5 sentences maximum (100-150 words)
+- Maintain authentic career narrative and professional voice
 
-OPTIMIZATION ARCHITECTURE:
+OPTIMIZATION GUIDELINES:
 
-1. PROFESSIONAL NARRATIVE FIDELITY
-   * ABSOLUTE PRESERVATION of original professional context
-   * Maintain authentic executive voice
-   * Capture nuanced financial leadership capabilities
-   * NO artificial narrative expansion or credential inflation
+1. NARRATIVE STRUCTURE
+   * Maintain the original professional context and experience level
+   * Create a logical flow: skills → experience → value proposition → career goal
+   * Balance technical expertise with transferable skills
+   * Include appropriate years of experience if mentioned in original
 
-2. NARRATIVE STRUCTURAL ENGINEERING
-   - Compress into a SINGULAR, high-impact paragraph (100-150 words)
-   - Create a compelling technology sector financial leadership narrative
-   - Highlight quantifiable transformative contributions
-   - Demonstrate strategic vision with measurable impact
+2. LANGUAGE QUALITY
+   - Use powerful, precise action verbs appropriate to the profession
+   - Avoid clichés and generic language ("team player", "detail-oriented")
+   - Convert passive language to active voice
+   - Focus on specific achievements rather than general responsibilities
+   - Include relevant industry keywords for ATS optimization
 
-3. EXECUTIVE COMMUNICATION PRECISION
-   - Transmute technical financial language into strategic narrative
-   - Deploy executive-caliber action verbs specific to technology finance
-   - Emphasize data-driven financial transformations
-   - Articulate leadership philosophy with crystalline clarity
-   - Showcase unique value proposition with surgical accuracy
+3. CONTENT FOCUS
+   - Emphasize most relevant skills and achievements for current career trajectory
+   - Highlight unique selling points that differentiate from competitors
+   - Include measurable impacts and results where available
+   - Showcase relevant technical expertise and methodologies
+   - Demonstrate soft skills through specific examples rather than generic claims
 
-4. STRATEGIC LEADERSHIP POSITIONING
-   - Amplify cross-functional technology finance leadership capabilities
-   - Illustrate organizational transformation through financial innovation
-   - Demonstrate sophisticated technology sector financial insight
-   - Balance technical financial expertise with visionary leadership
-   - Communicate leadership impact beyond immediate financial function
+4. PROFESSIONAL TONE
+   - Match writing style to industry expectations
+   - Maintain appropriate level of formality
+   - Project confidence without arrogance
+   - Avoid unnecessary jargon unless standard in the field
+   - Ensure proper grammar, syntax, and punctuation
 
-EXECUTIVE PERFORMANCE CALIBRATION:
-✓ Maintains original professional DNA
-✓ Projects authoritative technology sector financial leadership
-✓ Communicates strategic value instantaneously
-✓ Positions executive as a transformative industry leader
-
-OPTIMIZATION GUARDRAILS:
-- Zero tolerance for credential inflation
-- Strict adherence to original career narrative
-- Eliminate generic executive vernacular
-- Preserve authentic leadership essence
-
-LINGUISTIC TRANSFORMATION PROTOCOL:
-- Eliminate passive financial terminology
-- Use direct, impactful technology-centric language
-- Prioritize active voice in financial narrative
-- Remove redundant descriptors
-- Focus on measurable financial and technological impact
-- Highlight technology sector financial innovation
-
-CONTEXTUAL OPTIMIZATION FOCUS:
-- 15+ years technology sector financial leadership
-- Data-driven financial decision-making
-- Operational optimization in tech environments
-- Strategic financial planning for technology companies
-- Shareholder value maximization in tech sector
-- Team development and innovation culture
-- Technology-driven financial efficiency
-
-Original Executive Profile:
+Original Professional Summary:
 {content}
 
-MISSION CRITICAL DELIVERABLE:
-Produce a laser-focused technology sector CFO professional summary that:
-- Crystallizes 15+ years of financial leadership potential
-- Communicates strategic technological financial value with immediacy
-- Maintains uncompromised professional integrity
+RETURN ONLY: An optimized, concise professional summary that maintains the authentic career narrative while enhancing impact and clarity. [/INST]"""
 
-RETURN ONLY: Optimized Technology Sector CFO Professional Narrative [/INST]"""
+
+    def _improve_experience_prompt(self, content):
+        """
+        Generate a versatile prompt for improving work experience descriptions.
+        
+        Args:
+            content (str): Original experience description
+            
+        Returns:
+            str: Improved experience prompt
+        """
+        return f"""[INST] WORK EXPERIENCE OPTIMIZATION
+
+CORE TRANSFORMATION GOAL:
+- Transform job descriptions into achievement-focused bullet points
+- Showcase specific contributions, skills, and measurable results
+- Create a compelling narrative of professional growth and competence
+
+OPTIMIZATION GUIDELINES:
+
+1. BULLET POINT STRUCTURE
+   * Begin each bullet with a strong, relevant action verb
+   * Focus on accomplishments rather than just responsibilities
+   * Present in order of importance/relevance, not chronologically
+   * Keep each bullet to 1-2 lines for readability
+   * Ensure each bullet stands alone as a complete thought
+
+2. CONTENT ENHANCEMENT
+   - Include specific metrics and quantifiable results where possible (%, $, time saved)
+   - Highlight leadership, collaboration, and initiative
+   - Demonstrate problem-solving abilities with specific examples
+   - Show progression and growth in responsibilities
+   - Include relevant technologies, methodologies, and tools used
+
+3. LANGUAGE OPTIMIZATION
+   - Eliminate first-person pronouns (I, me, my)
+   - Use present tense for current positions, past tense for previous roles
+   - Vary action verbs to avoid repetition
+   - Remove filler words and unnecessary adverbs
+   - Incorporate relevant industry keywords for ATS optimization
+
+4. TECHNICAL PRECISION
+   - Use proper terminology for tools, technologies, and methodologies
+   - Be specific about technical skills applied in each role
+   - Balance technical details with business impact
+   - Include certifications or specialized training if relevant
+   - Mention specific projects or initiatives by name when appropriate
+
+Original job description:
+{content}
+
+RETURN ONLY: A set of 3-5 optimized, achievement-focused bullet points that effectively showcase the value and impact delivered in this role. [/INST]"""
+
+
+    def _improve_skills_prompt(self, content):
+        """
+        Generate a versatile prompt for organizing and improving skills sections.
+        
+        Args:
+            content (str): Original skills content
+            
+        Returns:
+            str: Improved skills prompt
+        """
+        return f"""[INST] SKILLS SECTION OPTIMIZATION
+
+CORE TRANSFORMATION GOAL:
+- Organize skills into logical, scannable categories
+- Prioritize most relevant and in-demand skills
+- Present proficiency levels where appropriate
+- Balance technical skills with soft skills and domain knowledge
+
+OPTIMIZATION GUIDELINES:
+
+1. CATEGORIZATION STRUCTURE
+   * Group similar skills into meaningful categories
+   * Prioritize categories based on relevance to target roles
+   * Use standard industry terminology for category names
+   * Create 3-5 main categories maximum for readability
+   * Place most relevant technical skills first
+
+2. SKILL SELECTION & PRIORITIZATION
+   - Focus on current, in-demand skills in the industry
+   - Include both technical and transferable skills
+   - Remove outdated or overly basic skills
+   - Add proficiency levels for technical skills (Expert, Advanced, Intermediate)
+   - Ensure skills mentioned align with experience described elsewhere in CV
+
+3. FORMATTING RECOMMENDATIONS
+   - Present in clean, scannable format
+   - Use consistent format across all categories
+   - List most advanced/relevant skills first in each category
+   - Group related technologies/tools together
+   - Include soft skills that differentiate from competition
+
+4. TECHNICAL PRECISION
+   - Use proper capitalization for technologies, languages, and tools
+   - Include version numbers only if relevant
+   - Specify frameworks and specialized tools within broader categories
+   - Use industry-standard terminology and abbreviations
+   - Avoid vague skills like "Microsoft Office" in favor of specifics
+
+Original skills:
+{content}
+
+RETURN ONLY: An organized skills section with logical categories and proper formatting, optimized for both human readability and ATS scanning. Use this format:
+
+Technical Skills: skill1 (Expert), skill2 (Advanced), skill3 (Intermediate)
+Soft Skills: skill1, skill2, skill3
+Domain Knowledge: domain1, domain2, domain3 [/INST]"""
 
 class ResilientLLMService:
     def __init__(self, config: Dict[str, Any] = None, force_init: bool = False):
@@ -715,6 +785,9 @@ class ResilientLLMService:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         
+        # Initialize the local service to use its formatting methods
+        self.local_service = LocalLLMService(force_init=False)
+        
         # Validate API keys or check force_init
         if not force_init:
             missing_keys = [
@@ -723,7 +796,7 @@ class ResilientLLMService:
             ]
             
             if missing_keys:
-                raise ValueError(f"Missing API keys for providers: {', '.join(missing_keys)}")
+                self.logger.warning(f"Missing API keys for providers: {', '.join(missing_keys)}")
 
     def _call_mistral_api(self, prompt: str, max_tokens: int = 500) -> Dict[str, Any]:
         """
@@ -892,6 +965,162 @@ class ResilientLLMService:
         # Fallback to original content if improvement fails
         self.logger.warning(f"Failed to improve {section} section: {result.get('message', 'Unknown error')}")
         return content
+
+    def rewrite_cv(self, cv_data):
+        """
+        Rewrite the entire CV using fallback between different LLM providers to ensure
+        the most reliable and high-quality results.
+        
+        Args:
+            cv_data (dict): Dictionary containing CV sections and their content
+            
+        Returns:
+            dict: Dictionary with original and rewritten CV data
+        """
+        self.logger.info("Starting CV rewrite with resilient service")
+        
+        try:
+            # Use the local service's formatting methods
+            formatted_cv = {
+                "professional_summary": cv_data.get("professional_summary", ""),
+                "personal_info": {
+                    "name": cv_data.get("name", ""),
+                    "title": cv_data.get("title", ""),
+                    "email": cv_data.get("email", ""),
+                    "phone": cv_data.get("phone", ""),
+                    "location": cv_data.get("location", ""),
+                    "linkedin": cv_data.get("linkedin", "")
+                },
+                "experiences": self.local_service._format_experiences(cv_data.get("experiences", [])),
+                "education": self.local_service._format_education(cv_data.get("education", [])),
+                "skills": cv_data.get("skills", []),
+                "certifications": cv_data.get("certifications", []),
+                "languages": cv_data.get("languages", [])
+            }
+            
+            # Process each section independently with provider fallback
+            improved_sections = {}
+            
+            # Track successful providers for telemetry
+            providers_used = {}
+            
+            # Process professional summary
+            if formatted_cv["professional_summary"]:
+                self.logger.info("Processing professional summary")
+                
+                # Create context-aware prompt
+                skills_str = ', '.join(formatted_cv["skills"][:10] if isinstance(formatted_cv["skills"], list) else [])
+                exp_summary = formatted_cv["experiences"][:300] if formatted_cv["experiences"] else ""
+                
+                context_prompt = f"""Professional Summary Improvement Request
+
+CONTEXT:
+- Position: {formatted_cv["personal_info"]["title"] or "Not specified"}
+- Key skills: {skills_str}
+- Experience summary: {exp_summary}
+
+ORIGINAL SUMMARY:
+{formatted_cv["professional_summary"]}
+
+INSTRUCTIONS:
+Create a powerful, concise professional summary (3-5 sentences) that highlights relevant skills and experience,
+uses strong action verbs, and demonstrates a clear value proposition while avoiding clichés.
+
+IMPROVED SUMMARY:"""
+                
+                # Try to improve with fallback between providers
+                summary_result = self.improve_text("professional_summary", context_prompt)
+                if summary_result['status'] == 'success':
+                    improved_sections["professional_summary"] = summary_result['response']
+                    providers_used["summary"] = summary_result['provider']
+                else:
+                    improved_sections["professional_summary"] = formatted_cv["professional_summary"]
+                    providers_used["summary"] = "original"
+            
+            # Process experience
+            if formatted_cv["experiences"]:
+                self.logger.info("Processing work experience")
+                
+                # Create context-aware prompt
+                skills_str = ', '.join(formatted_cv["skills"][:10] if isinstance(formatted_cv["skills"], list) else [])
+                
+                experience_prompt = f"""Work Experience Improvement Request
+
+CONTEXT:
+- Position: {formatted_cv["personal_info"]["title"] or "Not specified"}
+- Key skills: {skills_str}
+
+ORIGINAL EXPERIENCE:
+{formatted_cv["experiences"]}
+
+INSTRUCTIONS:
+Transform this work experience into achievement-focused bullet points that begin with strong action verbs,
+include specific metrics where available, highlight relevant skills, and focus on business impact.
+
+IMPROVED EXPERIENCE:"""
+                
+                # Try to improve with fallback
+                experience_result = self.improve_text("experience", experience_prompt)
+                if experience_result['status'] == 'success':
+                    improved_sections["experiences"] = experience_result['response']
+                    providers_used["experience"] = experience_result['provider']
+                else:
+                    improved_sections["experiences"] = formatted_cv["experiences"]
+                    providers_used["experience"] = "original"
+            
+            # Process skills
+            if formatted_cv["skills"]:
+                self.logger.info("Processing skills section")
+                
+                # Create context-aware prompt for skills
+                exp_summary = formatted_cv["experiences"][:200] if formatted_cv["experiences"] else ""
+                
+                skills_list = formatted_cv["skills"]
+                if isinstance(skills_list, list):
+                    skills_text = ', '.join(skills_list)
+                else:
+                    skills_text = str(skills_list)
+                
+                skills_prompt = f"""Skills Section Improvement Request
+
+CONTEXT:
+- Position: {formatted_cv["personal_info"]["title"] or "Not specified"}
+- Experience summary: {exp_summary}
+
+ORIGINAL SKILLS:
+{skills_text}
+
+INSTRUCTIONS:
+Organize these skills into logical categories (Technical Skills, Soft Skills, Domain Knowledge),
+add appropriate proficiency levels, and ensure consistent formatting.
+
+IMPROVED SKILLS SECTION:"""
+                
+                # Try to improve with fallback
+                skills_result = self.improve_text("skills", skills_prompt)
+                if skills_result['status'] == 'success':
+                    improved_sections["skills"] = skills_result['response']
+                    providers_used["skills"] = skills_result['provider']
+                else:
+                    improved_sections["skills"] = formatted_cv["skills"]
+                    providers_used["skills"] = "original"
+            
+            # Return comprehensively improved CV
+            self.logger.info(f"CV rewrite complete. Providers used: {providers_used}")
+            
+            return {
+                "original": cv_data,
+                "rewritten": improved_sections,
+                "providers": providers_used
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in rewrite_cv: {str(e)}", exc_info=True)
+            return {
+                "original": cv_data,
+                "rewritten": cv_data,
+                "error": str(e)
+            }
 
 # Optional: Configure logging
 logging.basicConfig(

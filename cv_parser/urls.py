@@ -3,9 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import CVParserViewSet
 
 router = DefaultRouter()
-router.register(r'', CVParserViewSet, basename='cv-parser')
+router.register(r'parsed_cvs', CVParserViewSet, basename='parsed_cv')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('parse_document/', CVParserViewSet.as_view({'post': 'parse_document'}), name='parse_document'),
 ]

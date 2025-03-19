@@ -1,10 +1,12 @@
 from tokenize import blank_re
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from cv_writer.models import (
     CvWriter, Education, Experience, Skill, Language, Certification, Reference, ProfessionalSummary, Interest, SocialMedia
 )
 from .parsers import DocumentParser
+
+User = get_user_model()
 
 # Create your models here.
 class CVDocument(models.Model):
@@ -143,3 +145,17 @@ class ParsingMetaData(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ParsedCV(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='parsed_cvs')
+    original_file = models.FileField(upload_to='parsed_cvs/')
+    parsed_data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Parsed CV for {self.user.email} - {self.created_at}"

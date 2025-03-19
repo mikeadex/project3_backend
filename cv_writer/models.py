@@ -1,6 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.text import slugify
+from django.db.utils import OperationalError
+from django.db import connection, transaction, close_old_connections
+from datetime import datetime
+import logging
+import time
 
 
 class CvWriter(models.Model):
@@ -49,31 +54,34 @@ class CvWriter(models.Model):
         return f"{self.first_name} {self.last_name}'s CV{version_info}"
         
     def save(self, *args, **kwargs):
-        # If this is the first version for the user, set as primary
-        if not self.pk:  # Only on first save
-            existing_versions = CvWriter.objects.filter(user=self.user).count()
-            if existing_versions == 0:
-                self.is_primary = True
-                self.version_name = 'Version 1'
-            else:
-                # Ensure unique version name
-                base_name = 'Version'
-                counter = 2  # Start from 2 since first version is already 'Version 1'
-                while CvWriter.objects.filter(user=self.user, version_name=f'{base_name} {counter}').exists():
-                    counter += 1
-                self.version_name = f'{base_name} {counter}'
-
-        # Generate slug if not provided
-        if not self.slug:
-            base_slug = slugify(f"{self.first_name}-{self.last_name}-cv")
-            unique_slug = base_slug
-            counter = 1
-            # Ensure unique slug
-            while CvWriter.objects.filter(slug=unique_slug).exclude(id=self.id).exists():
-                unique_slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = unique_slug
-
+        # Check if this is a new CV (no ID yet)
+        is_new = self.pk is None
+        
+        if is_new:
+            try:
+                # Get count of existing CVs for this user
+                close_old_connections()
+                
+                try:
+                    # Use transaction to ensure atomicity
+                    with transaction.atomic():
+                        existing_versions = CvWriter.objects.filter(user=self.user).count()
+                        
+                        # Set title to include version number if not already set 
+                        if not self.title or self.title == "Untitled":
+                            self.title = f"My CV #{existing_versions + 1}"
+                except OperationalError:
+                    # If there's a connection error, use a fallback title with timestamp
+                    self.title = f"My CV ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+            except Exception as e:
+                # Fallback in case of any other errors
+                logger = logging.getLogger('cv_writer')
+                logger.error(f"Error setting CV title: {str(e)}")
+                
+                if not self.title or self.title == "Untitled":
+                    self.title = f"My CV ({int(time.time())})"
+        
+        # Call the original save method
         super().save(*args, **kwargs)
 
     def clone(self):
@@ -161,7 +169,8 @@ class Education(models.Model):
 
 class ProfessionalSummary(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="professional_summary")
-    summary = models.TextField()
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="professional_summary", blank=True, null=True)
+    summary = models.TextField(help_text="Professional summary of the CV")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

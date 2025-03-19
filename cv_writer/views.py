@@ -48,7 +48,8 @@ from .services import CVImprovementService
 from .local_llm import ResilientLLMService  # Updated import
 from django.db.models import Q
 import logging
-logger = logging.getLogger(__name__)
+from ai_cv_parser.services import CVRewriteService
+from .services import DeepSeekAPIService
 
 cv_improvement_service = CVImprovementService()
 
@@ -483,97 +484,31 @@ IMPROVEMENT INSTRUCTIONS:
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def rewrite_cv(request):
+async def rewrite_cv(request):
     """
-    Rewrite the entire CV to be more professional and impactful.
+    Rewrite and improve CV content using DeepSeek.
     """
     try:
         cv_data = request.data.get('cv_data')
         if not cv_data:
             return Response(
-                {'error': 'No CV data provided'},
+                {'error': 'CV data is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Initialize services
+        deepseek_service = DeepSeekAPIService()
+        cv_rewrite_service = CVRewriteService(deepseek_service=deepseek_service)
+
+        # Process CV rewrite
+        result = await cv_rewrite_service.rewrite_cv(cv_data, request.user)
         
-        print("Received CV data for rewriting")
-        
-        try:
-            llm_service = ResilientLLMService()  # Updated
-            print("LLM service initialized successfully")
-        except Exception as e:
-            print(f"Failed to initialize LLM service: {str(e)}")
-            return Response(
-                {'error': f'Failed to initialize LLM service: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        try:
-            print("Starting CV rewrite...")
-            import threading
-            import queue
-            
-            def rewrite_in_thread(q):
-                try:
-                    result = llm_service.rewrite_cv(cv_data)
-                    q.put(('success', result))
-                except Exception as e:
-                    q.put(('error', str(e)))
-            
-            # Create a queue for the result
-            result_queue = queue.Queue()
-            
-            # Start the rewrite in a separate thread
-            rewrite_thread = threading.Thread(
-                target=rewrite_in_thread, 
-                args=(result_queue,)
-            )
-            rewrite_thread.daemon = True
-            rewrite_thread.start()
-            
-            # Wait for the result with timeout
-            try:
-                status_type, result = result_queue.get(timeout=180)  # 3-minute timeout
-                
-                if status_type == 'error':
-                    raise Exception(result)
-                
-                print("CV rewrite completed successfully")
-                
-                # Save the rewritten CV to the database
-                cv = CvWriter.objects.create(
-                    user=request.user,
-                    title=cv_data.get('title', 'Rewritten CV'),
-                    content=result['rewritten'],
-                    original_content=result['original'],
-                    status='completed'
-                )
-                
-                return Response({
-                    'status': 'success',
-                    'cv_id': cv.id,
-                    'original': result['original'],
-                    'rewritten': result['rewritten'],
-                    'message': 'CV has been rewritten and saved'
-                }, status=status.HTTP_200_OK)
-                
-            except queue.Empty:
-                print("Operation timed out")
-                return Response(
-                    {'error': 'The operation took too long to complete. Please try again.'},
-                    status=status.HTTP_504_GATEWAY_TIMEOUT
-                )
-            
-        except Exception as e:
-            print(f"Error during CV rewrite: {str(e)}")
-            return Response(
-                {'error': f'Failed to rewrite CV: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-            
+        return Response(result, status=status.HTTP_200_OK)
+
     except Exception as e:
-        print(f"Unexpected error in rewrite_cv view: {str(e)}")
+        logger.error(f"Error in rewrite_cv view: {str(e)}", exc_info=True)
         return Response(
-            {'error': f'Unexpected error: {str(e)}'},
+            {'error': f'Failed to rewrite CV: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
