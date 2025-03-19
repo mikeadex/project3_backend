@@ -93,12 +93,14 @@ INSTALLED_APPS = [
     "corsheaders",
     "api",
     "home",
+    "users.apps.UsersConfig",
     "cv_parser",
     "cv_writer",
     "models_trainer",
     "linkedin_parser",
     "jobstract",
     "ai_cv_parser",
+    "subscription",
 ]
 
 MIDDLEWARE = [

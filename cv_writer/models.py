@@ -1,11 +1,13 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils.text import slugify
 from django.db.utils import OperationalError
 from django.db import connection, transaction, close_old_connections
 from datetime import datetime
 import logging
 import time
+
+User = get_user_model()
 
 
 class CvWriter(models.Model):

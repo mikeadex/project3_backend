@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, Optional
 from .models import ParsedCV
 from cv_writer.models import CvWriter, ProfessionalSummary, Experience, Education, Skill
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from asgiref.sync import sync_to_async
 from django.db import close_old_connections, connection, transaction
 from functools import wraps
@@ -11,6 +11,8 @@ import asyncio
 import django.db.utils
 
 logger = logging.getLogger(__name__)
+
+User = get_user_model()
 
 @sync_to_async
 def create_cv_writer(**kwargs):
