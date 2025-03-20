@@ -8,7 +8,7 @@ services:
       python -m pip install --upgrade pip
       pip install -r requirements.txt
       python manage.py collectstatic --noinput
-    startCommand: gunicorn ella_writer.wsgi:application
+    startCommand: "./bin/start_gunicorn.sh"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: ella_writer.settings
@@ -28,6 +28,8 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: PORT
+        value: "8000"
 
 databases:
   - name: ella-postgres
