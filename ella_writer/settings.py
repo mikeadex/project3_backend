@@ -60,7 +60,16 @@ SECRET_KEY = get_secret_key()
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "www.ellacvwriter.com",
+    "ellacvwriter.com",
+    "www.ellacv.com",
+    "ellacv.com",
+    "ellacvwriter.vercel.app",
+    "www.ellacvwriter.vercel.app",
+    "localhost",
+    "127.0.0.1",
+]
 
 # Sites Framework
 SITE_ID = 1
@@ -133,15 +142,16 @@ MIDDLEWARE = [
 
 # }
 
-ALLOWED_HOSTS = ["*"]
-
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "https://www.ellacv.com",
-    "https://ellacv.com",
     "https://www.ellacvwriter.com",
     "https://ellacvwriter.com",
+    "https://www.ellacv.com",
+    "https://ellacv.com",
+    "https://ellacvwriter.vercel.app",
+    "https://www.ellacvwriter.vercel.app",
     "http://localhost:5173",
+    "http://localhost:3000",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -168,10 +178,12 @@ CORS_ALLOW_HEADERS = [
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://www.ellacv.com",
-    "https://ellacv.com",
     "https://www.ellacvwriter.com",
     "https://ellacvwriter.com",
+    "https://www.ellacv.com",
+    "https://ellacv.com",
+    "https://ellacvwriter.vercel.app",
+    "https://www.ellacvwriter.vercel.app",
 ]
 
 # Production-specific settings
@@ -187,10 +199,12 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
         'project3-backend-7ck4.onrender.com', 
-        'www.ellacv.com', 
-        'ellacv.com',
         'www.ellacvwriter.com',
-        'ellacvwriter.com'
+        'ellacvwriter.com',
+        'www.ellacv.com',
+        'ellacv.com',
+        'ellacvwriter.vercel.app',
+        'www.ellacvwriter.vercel.app',
     ]
 
 REST_FRAMEWORK = {
@@ -454,17 +468,21 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     
     # CORS settings for production
     CORS_ALLOWED_ORIGINS = [
-        "https://www.ellacv.com",
-        "https://ellacv.com",
         "https://www.ellacvwriter.com",
         "https://ellacvwriter.com",
+        "https://www.ellacv.com",
+        "https://ellacv.com",
+        "https://ellacvwriter.vercel.app",
+        "https://www.ellacvwriter.vercel.app",
     ]
     
     CSRF_TRUSTED_ORIGINS = [
-        "https://www.ellacv.com",
-        "https://ellacv.com",
         "https://www.ellacvwriter.com",
         "https://ellacvwriter.com",
+        "https://www.ellacv.com",
+        "https://ellacv.com",
+        "https://ellacvwriter.vercel.app",
+        "https://www.ellacvwriter.vercel.app",
     ]
     
     # Logging for production
