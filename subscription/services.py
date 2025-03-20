@@ -3,7 +3,7 @@ from django.db import transaction
 from django.conf import settings
 import stripe
 import logging
-from .models import SubscriptionPlan, Subscription, FeatureUsage, SubscriptionUsageLog
+from .models import SubscriptionPlan, UserSubscription, SubscriptionUsageLog
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class SubscriptionService:
         """
         try:
             # Get user's active subscription
-            subscription = Subscription.objects.filter(
+            subscription = UserSubscription.objects.filter(
                 user=user,
                 status='active',
                 end_date__gt=timezone.now()
@@ -29,23 +29,29 @@ class SubscriptionService:
                 logger.info(f"No active subscription found for user {user.email}")
                 return False
                 
-            # Check if feature is included in plan
-            features = subscription.plan.features
-            if not features.get(feature, False):
-                logger.info(f"Feature {feature} not available in user's plan")
-                return False
-                
-            # Check usage limits if applicable
-            feature_usage = FeatureUsage.objects.filter(
-                subscription=subscription,
-                feature_name=feature
-            ).first()
-            
-            if feature_usage:
-                limit = features.get(f"{feature}_limit")
-                if limit and feature_usage.usage_count >= limit:
-                    logger.info(f"Usage limit reached for feature {feature}")
+            # Check if the feature is available in the plan and within limits
+            if feature == 'cv_generation':
+                if subscription.cv_generations_used >= subscription.plan.max_cv_generations:
+                    logger.info(f"CV generation limit reached for user {user.email}")
                     return False
+            elif feature == 'job_application':
+                if subscription.job_applications_used >= subscription.plan.max_job_applications:
+                    logger.info(f"Job application limit reached for user {user.email}")
+                    return False
+            elif feature == 'saved_job':
+                if subscription.saved_jobs_count >= subscription.plan.max_saved_jobs:
+                    logger.info(f"Saved jobs limit reached for user {user.email}")
+                    return False
+            
+            # Check other feature access based on plan
+            if feature == 'cv_analytics' and not subscription.plan.has_cv_analytics:
+                return False
+            elif feature == 'job_alerts' and not subscription.plan.has_job_alerts:
+                return False
+            elif feature == 'priority_support' and not subscription.plan.has_priority_support:
+                return False
+            elif feature == 'ai_interview_prep' and not subscription.plan.has_ai_interview_prep:
+                return False
             
             return True
             
@@ -60,7 +66,7 @@ class SubscriptionService:
         """
         try:
             with transaction.atomic():
-                subscription = Subscription.objects.filter(
+                subscription = UserSubscription.objects.filter(
                     user=user,
                     status='active',
                     end_date__gt=timezone.now()
@@ -70,14 +76,15 @@ class SubscriptionService:
                     logger.warning(f"No active subscription found for user {user.email}")
                     return False
                 
-                # Update or create feature usage counter
-                feature_usage, _ = FeatureUsage.objects.get_or_create(
-                    subscription=subscription,
-                    feature_name=feature,
-                    defaults={'usage_count': 0}
-                )
-                feature_usage.usage_count += 1
-                feature_usage.save()
+                # Update the appropriate usage counter based on feature
+                if feature == 'cv_generation':
+                    subscription.cv_generations_used += 1
+                elif feature == 'job_application':
+                    subscription.job_applications_used += 1
+                elif feature == 'job_save':
+                    subscription.saved_jobs_count += 1
+                
+                subscription.save()
                 
                 # Create usage log
                 SubscriptionUsageLog.objects.create(
@@ -122,11 +129,14 @@ class SubscriptionService:
                     )
                 
                 # Create local subscription
-                subscription = Subscription.objects.create(
+                subscription = UserSubscription.objects.create(
                     user=user,
                     plan=plan,
                     status='pending' if payment_method_id else 'active',
                     start_date=timezone.now(),
+                    cv_generations_used=0,
+                    job_applications_used=0,
+                    saved_jobs_count=0,
                     stripe_subscription_id=stripe_subscription.id if payment_method_id else None,
                     stripe_customer_id=user.stripe_customer_id if payment_method_id else None
                 )
@@ -145,7 +155,7 @@ class SubscriptionService:
         """
         try:
             with transaction.atomic():
-                subscription = Subscription.objects.select_for_update().get(id=subscription_id)
+                subscription = UserSubscription.objects.select_for_update().get(id=subscription_id)
                 
                 # Cancel Stripe subscription if exists
                 if subscription.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
@@ -168,7 +178,7 @@ class SubscriptionService:
         Get a summary of user's subscription status and usage
         """
         try:
-            subscription = Subscription.objects.filter(
+            subscription = UserSubscription.objects.filter(
                 user=user,
                 status='active',
                 end_date__gt=timezone.now()
@@ -178,12 +188,31 @@ class SubscriptionService:
                 return {
                     'has_active_subscription': False,
                     'subscription': None,
-                    'feature_usage': None,
+                    'usage': None,
                     'recent_activity': None
                 }
             
-            # Get feature usage
-            feature_usage = FeatureUsage.objects.filter(subscription=subscription)
+            # Get usage directly from subscription
+            usage = {
+                'cv_generations': {
+                    'used': subscription.cv_generations_used,
+                    'total': subscription.plan.max_cv_generations,
+                    'percentage': (subscription.cv_generations_used / subscription.plan.max_cv_generations * 100) 
+                        if subscription.plan.max_cv_generations > 0 else 0
+                },
+                'job_applications': {
+                    'used': subscription.job_applications_used,
+                    'total': subscription.plan.max_job_applications,
+                    'percentage': (subscription.job_applications_used / subscription.plan.max_job_applications * 100) 
+                        if subscription.plan.max_job_applications > 0 else 0
+                },
+                'saved_jobs': {
+                    'used': subscription.saved_jobs_count,
+                    'total': subscription.plan.max_saved_jobs,
+                    'percentage': (subscription.saved_jobs_count / subscription.plan.max_saved_jobs * 100) 
+                        if subscription.plan.max_saved_jobs > 0 else 0
+                }
+            }
             
             # Get recent activity
             recent_activity = SubscriptionUsageLog.objects.filter(
@@ -197,22 +226,27 @@ class SubscriptionService:
                     'status': subscription.status,
                     'start_date': subscription.start_date,
                     'end_date': subscription.end_date,
-                    'features': subscription.plan.features
-                },
-                'feature_usage': {
-                    usage.feature_name: usage.usage_count 
-                    for usage in feature_usage
-                },
-                'recent_activity': [
-                    {
-                        'action': log.action,
-                        'timestamp': log.timestamp,
-                        'details': log.details
+                    'features': {
+                        'cv_analytics': subscription.plan.has_cv_analytics,
+                        'job_alerts': subscription.plan.has_job_alerts,
+                        'priority_support': subscription.plan.has_priority_support,
+                        'ai_interview_prep': subscription.plan.has_ai_interview_prep
                     }
-                    for log in recent_activity
-                ]
+                },
+                'usage': usage,
+                'recent_activity': [{
+                    'action': log.action,
+                    'timestamp': log.timestamp,
+                    'details': log.details
+                } for log in recent_activity]
             }
-            
+                
         except Exception as e:
             logger.error(f"Error getting subscription summary: {str(e)}")
-            return None 
+            return {
+                'has_active_subscription': False,
+                'subscription': None,
+                'usage': None,
+                'recent_activity': None,
+                'error': str(e)
+            }

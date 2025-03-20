@@ -1,17 +1,18 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count
 from django.db import transaction
 from datetime import datetime, timedelta
 import stripe
 from django.conf import settings
-from .models import SubscriptionPlan, UserSubscription, SubscriptionUsageLog, Subscription
+from .models import SubscriptionPlan, UserSubscription, SubscriptionUsageLog
 from .serializers import (
     SubscriptionPlanSerializer, UserSubscriptionSerializer,
     SubscriptionUsageLogSerializer, SubscriptionSummarySerializer,
-    SubscriptionSerializer, SubscriptionCreateSerializer
+    SubscriptionCreateSerializer
 )
 from .services import SubscriptionService
 import logging
@@ -21,24 +22,26 @@ logger = logging.getLogger(__name__)
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for viewing subscription plans
+    ViewSet for viewing subscription plans.
+    This endpoint is publicly accessible as pricing information
+    should be available to all users.
     """
-    queryset = SubscriptionPlan.objects.filter(is_active=True)
+    queryset = SubscriptionPlan.objects.filter(status='active')
     serializer_class = SubscriptionPlanSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
-class SubscriptionViewSet(viewsets.ModelViewSet):
+class UserSubscriptionViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing subscriptions
+    ViewSet for managing user subscriptions
     """
-    serializer_class = SubscriptionSerializer
+    serializer_class = UserSubscriptionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         """
         Filter subscriptions to return only those belonging to the current user
         """
-        return Subscription.objects.filter(user=self.request.user)
+        return UserSubscription.objects.filter(user=self.request.user)
 
     def get_serializer_class(self):
         """
@@ -65,7 +68,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 payment_method_id=payment_method_id
             )
             
-            response_serializer = SubscriptionSerializer(subscription)
+            response_serializer = UserSubscriptionSerializer(subscription)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
             
         except Exception as e:
@@ -88,7 +91,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            plan = get_object_or_404(SubscriptionPlan, id=plan_id, is_active=True)
+            plan = get_object_or_404(SubscriptionPlan, id=plan_id, status='active')
             
             # Create or get customer
             if not request.user.stripe_customer_id:
@@ -111,7 +114,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             )
 
             # Create a pending subscription
-            subscription = Subscription.objects.create(
+            subscription = UserSubscription.objects.create(
                 user=request.user,
                 plan=plan,
                 status='pending',
@@ -120,7 +123,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
             return Response({
                 'clientSecret': intent.client_secret,
-                'subscription': SubscriptionSerializer(subscription).data
+                'subscription': UserSubscriptionSerializer(subscription).data
             })
 
         except stripe.error.StripeError as e:
@@ -169,7 +172,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             subscription.status = 'active'
             subscription.save()
 
-            return Response(SubscriptionSerializer(subscription).data)
+            return Response(UserSubscriptionSerializer(subscription).data)
 
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error: {str(e)}")
@@ -222,115 +225,35 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             "feature": feature
         })
 
-class UserSubscriptionViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing user subscriptions
-    """
-    serializer_class = UserSubscriptionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return UserSubscription.objects.filter(user=self.request.user)
-
-    @action(detail=True, methods=['post'])
-    def cancel(self, request, pk=None):
-        """
-        Cancel a subscription
-        """
-        subscription = self.get_object()
-
-        try:
-            # Cancel Stripe subscription
-            if subscription.stripe_subscription_id:
-                stripe.Subscription.delete(subscription.stripe_subscription_id)
-
-            # Update subscription record
-            subscription.status = 'canceled'
-            subscription.canceled_at = timezone.now()
-            subscription.save()
-
-            return Response(UserSubscriptionSerializer(subscription).data)
-
-        except stripe.error.StripeError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    @action(detail=False, methods=['get'])
-    def summary(self, request):
-        """
-        Get subscription summary including usage and limits
-        """
-        user = request.user
-        
-        # Get active subscription
-        active_subscription = self.get_queryset().filter(
-            status='active',
-            end_date__gt=timezone.now()
-        ).first()
-
-        # Get available plans
-        available_plans = SubscriptionPlan.objects.filter(status='active')
-
-        # Get usage for current month
-        month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        usage_this_month = SubscriptionUsageLog.objects.filter(
-            subscription__user=user,
-            timestamp__gte=month_start
-        ).values('action').annotate(count=Count('id'))
-
-        # Get recent activity
-        recent_activity = SubscriptionUsageLog.objects.filter(
-            subscription__user=user
-        ).order_by('-timestamp')[:10]
-
-        data = {
-            'active_subscription': active_subscription,
-            'available_plans': available_plans,
-            'usage_this_month': {
-                log['action']: log['count'] for log in usage_this_month
-            },
-            'recent_activity': recent_activity
-        }
-
-        serializer = SubscriptionSummarySerializer(data)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'])
-    def log_usage(self, request, pk=None):
+    @action(detail=False, methods=['post'])
+    def log_feature(self, request):
         """
         Log usage of a subscription feature
         """
-        subscription = self.get_object()
-        action = request.data.get('action')
-        details = request.data.get('details', {})
-
-        if not action:
+        feature = request.data.get('feature')
+        if not feature:
             return Response(
-                {'error': 'Action is required'},
+                {"error": "feature is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        with transaction.atomic():
-            # Create usage log
-            log = SubscriptionUsageLog.objects.create(
-                subscription=subscription,
-                action=action,
-                details=details
+            
+        success = SubscriptionService.log_feature_usage(
+            user=request.user,
+            feature=feature,
+            details=request.data.get('details', {})
+        )
+        
+        if not success:
+            return Response(
+                {"error": "Failed to log feature usage"},
+                status=status.HTTP_400_BAD_REQUEST
             )
-
-            # Update usage counters
-            if action == 'cv_generation':
-                subscription.cv_generations_used += 1
-            elif action == 'job_application':
-                subscription.job_applications_used += 1
-            elif action == 'job_save':
-                subscription.saved_jobs_count += 1
-
-            subscription.save()
-
-        return Response(SubscriptionUsageLogSerializer(log).data)
+            
+        return Response({
+            "success": True,
+            "message": f"Logged usage of feature: {feature}",
+            "feature": feature
+        })
 
 class SubscriptionWebhookView(viewsets.ViewSet):
     """

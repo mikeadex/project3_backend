@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
 # Set up Django environment
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ella.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ella_writer.settings')
 django.setup()
 
 from cv_writer.models import CvWriter
