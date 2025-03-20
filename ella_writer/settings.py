@@ -69,6 +69,7 @@ ALLOWED_HOSTS = [
     "www.ellacvwriter.vercel.app",
     "localhost",
     "127.0.0.1",
+    "ella-backend-gw8c.onrender.com",
 ]
 
 # Sites Framework
@@ -199,6 +200,7 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
         'project3-backend-7ck4.onrender.com', 
+        'ella-backend-gw8c.onrender.com', 
         'www.ellacvwriter.com',
         'ellacvwriter.com',
         'www.ellacv.com',
