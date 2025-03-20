@@ -9,6 +9,7 @@ services:
       pip install -r requirements.txt
       python manage.py collectstatic --noinput
     startCommand: "./bin/start_gunicorn.sh"
+    healthCheckPath: /api/health/
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: ella_writer.settings
@@ -17,9 +18,9 @@ services:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
-        value: www.ellacvwriter.com,ellacvwriter.com
+        value: www.ellacvwriter.com,ellacvwriter.com,ella-backend-gw8c.onrender.com,www.ellacv.com,ellacv.com,ellacvwriter.vercel.app,www.ellacvwriter.vercel.app
       - key: CORS_ALLOWED_ORIGINS
-        value: https://www.ellacvwriter.com,https://ellacvwriter.com
+        value: https://www.ellacvwriter.com,https://ellacvwriter.com,https://www.ellacv.com,https://ellacv.com,https://ellacvwriter.vercel.app,https://www.ellacvwriter.vercel.app
       - key: DATABASE_URL
         fromDatabase:
           name: ella-postgres

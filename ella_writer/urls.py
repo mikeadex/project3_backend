@@ -14,6 +14,15 @@ from api.views import (
 from dj_rest_auth.views import PasswordResetConfirmView
 from dj_rest_auth.registration.views import VerifyEmailView
 from allauth.account.views import confirm_email
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+# Simple health check view that doesn't require authentication
+@api_view(['GET', 'HEAD'])
+@permission_classes([AllowAny])
+def health_check(request):
+    return JsonResponse({"status": "ok"}, status=200)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -27,6 +36,9 @@ urlpatterns = [
     path("api/jobstract/", include("jobstract.urls")),
     path("api/ai_cv_parser/", include("ai_cv_parser.urls")),
     path("api/subscription/", include("subscription.urls")),
+    
+    # Health check endpoint for monitoring
+    path("api/health/", health_check, name="health_check"),
     
     # Authentication endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="get_token"),
