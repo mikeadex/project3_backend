@@ -469,14 +469,8 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
     
     # CORS settings for production
-    CORS_ALLOWED_ORIGINS = [
-        "https://www.ellacvwriter.com",
-        "https://ellacvwriter.com",
-        "https://www.ellacv.com",
-        "https://ellacv.com",
-        "https://ellacvwriter.vercel.app",
-        "https://www.ellacvwriter.vercel.app",
-    ]
+    # Note: We're not redefining CORS_ALLOWED_ORIGINS here anymore since it's defined globally above
+    # and already includes all the production domains
     
     CSRF_TRUSTED_ORIGINS = [
         "https://www.ellacvwriter.com",
