@@ -36,9 +36,12 @@ urlpatterns = [
     path("api/jobstract/", include("jobstract.urls")),
     path("api/ai_cv_parser/", include("ai_cv_parser.urls")),
     path("api/subscription/", include("subscription.urls")),
-    
+    path("api/blog/", include("blog.urls")),  
     # Health check endpoint for monitoring
     path("api/health/", health_check, name="health_check"),
+    
+    # TinyMCE URLs
+    path("tinymce/", include('tinymce.urls')),
     
     # Authentication endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="get_token"),
@@ -46,17 +49,16 @@ urlpatterns = [
     path("api/user/register/", CreateUserView.as_view(), name="register"),
     
     # Email confirmation
-    path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
-    path('accounts/confirm-email/', TemplateView.as_view(template_name='account/verification_sent.html'), name='account_email_verification_sent'),
-    path('api/auth/registration/account-confirm-email/<str:key>/', TemplateView.as_view(template_name='account/email_confirm.html'), name='account_confirm_email'),
-    path('api/auth/registration/account-confirm-email/', VerifyEmailView.as_view(), name='account_email_verification_sent'),
-    re_path(r'^api/auth/registration/account-confirm-email/(?P<key>[-:\w]+)/$', TemplateView.as_view(template_name='account/email_confirm.html'), name='account_confirm_email'),
-    
-    # Password reset endpoints
-    path("api/auth/password/reset/", CustomPasswordResetView.as_view(), name="rest_password_reset"),
-    path("api/auth/password/reset/confirm/", CustomPasswordResetConfirmView.as_view(), name="password_reset_confirm"),
+    path("api/user/verify-email/<key>", CustomConfirmEmailView.as_view(), name="account_confirm_email"),
+    path("api/user/verify-email/", VerifyEmailView.as_view(), name="account_email_verification_sent"),
+    path("api/user/password/reset/", CustomPasswordResetView.as_view(), name="rest_password_reset"),
+    path("api/user/password/reset/confirm/<uidb64>/<token>/", CustomPasswordResetConfirmView.as_view(), name="password_reset_confirm"),
     
     # dj-rest-auth URLs
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

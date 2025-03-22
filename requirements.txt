@@ -281,3 +281,6 @@ wsproto==1.2.0
 xxhash==3.4.1
 yarl==1.9.4
 zipp==3.21.0
+
+# Analytics
+user-agents==2.2.0

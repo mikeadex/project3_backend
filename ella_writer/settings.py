@@ -115,6 +115,9 @@ INSTALLED_APPS = [
     "jobstract",
     "ai_cv_parser",
     "subscription",
+    "blog",
+    "django_filters",  
+    "tinymce",
 ]
 
 MIDDLEWARE = [
@@ -368,8 +371,9 @@ USE_TZ = True
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATIC_URL = '/static/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+# Media files (User uploaded files)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Email settings (console backend for development)
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
@@ -379,6 +383,9 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 
 EMAIL_USE_TLS = True
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -442,6 +449,41 @@ LINKEDIN_CONFIG = {
 # Add to existing settings.py
 MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# TinyMCE LinkedIn-style configuration
+TINYMCE_DEFAULT_CONFIG = {
+    'selector': 'textarea',
+    'height': 360,
+    'width': '100%',
+    'menubar': False,
+    'statusbar': False,
+    'plugins': 'link image lists paste code hr table',
+    'toolbar': 'undo redo | styleselect | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | removeformat',
+    'toolbar_mode': 'sliding',
+    'contextmenu': 'link image table',
+    'paste_data_images': True,
+    'paste_as_text': False,
+    'paste_merge_formats': True,
+    'paste_webkit_styles': 'font-family font-size color background-color',
+    'browser_spellcheck': True,
+    'image_advtab': True,
+    'image_caption': True,
+    'style_formats': [
+        {'title': 'Paragraph', 'format': 'p'},
+        {'title': 'Heading 2', 'format': 'h2'},
+        {'title': 'Heading 3', 'format': 'h3'},
+        {'title': 'Heading 4', 'format': 'h4'},
+        {'title': 'Blockquote', 'format': 'blockquote'}
+    ],
+    'valid_elements': 'p,br,strong/b,em/i,u,strike,a[href|target=_blank|rel=nofollow],img[src|alt|width|height],h2,h3,h4,blockquote,ul,ol,li,table,tr,td,th,thead,tbody,hr,code,pre',
+    'convert_urls': False,
+    'relative_urls': False,
+    'remove_script_host': False,
+    'content_css': [
+        'https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css',
+        'https://fonts.googleapis.com/css?family=Roboto:400,700'
+    ],
+}
 
 # Production-specific settings
 if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
