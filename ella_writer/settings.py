@@ -124,6 +124,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "api.middleware.CorsMiddleware",  # Our custom CORS middleware
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -161,6 +162,22 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_ALL_ORIGINS = True  # Temporarily allow all origins for troubleshooting
 CORS_ORIGIN_ALLOW_ALL = True   # Legacy setting for Django CORS Headers < 3.0
 
+# Add explicit CORS configuration for credentials
+CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
+
+# Ensure CSRF settings don't interfere with API requests
+CSRF_TRUSTED_ORIGINS = [
+    "https://www.ellacvwriter.com",
+    "https://ellacvwriter.com",
+    "https://www.ellacv.com",
+    "https://ellacv.com",
+    "https://ellacvwriter.vercel.app",
+    "https://www.ellacvwriter.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -180,19 +197,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-]
-
-CORS_ALLOW_CREDENTIALS = True
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://www.ellacvwriter.com",
-    "https://ellacvwriter.com",
-    "https://www.ellacv.com",
-    "https://ellacv.com",
-    "https://ellacvwriter.vercel.app",
-    "https://www.ellacvwriter.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
+    'access-control-allow-origin',
 ]
 
 # Production-specific settings
