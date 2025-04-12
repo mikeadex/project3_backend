@@ -332,125 +332,199 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     'error': 'Failed to retrieve CV data'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+            # Initialize response data with default structure
+            analysis_data = {
+                "overall_score": 5,
+                "strengths": [],
+                "weaknesses": [],
+                "improvement_suggestions": [],
+                "section_scores": {
+                    "content_completeness": 5,
+                    "format_structure": 5,
+                    "skills_relevance": 5,
+                    "job_history": 5,
+                    "education": 5,
+                    "overall_impact": 5
+                },
+                "ats_readiness": {
+                    "score": 5,
+                    "issues": [],
+                    "suggestions": []
+                },
+                "experience_level": {
+                    "classification": "unknown",
+                    "years_experience": 0,
+                    "career_stage": "Unable to determine due to AI service error"
+                },
+                "skills_assessment": {
+                    "technical_skills": [],
+                    "soft_skills": [],
+                    "skills_gaps": []
+                },
+                "potential_roles": {
+                    "best_matches": [],
+                    "match_reasons": [],
+                    "suggested_industries": []
+                },
+                "ai_service_error": False
+            }
+            
             # Analyze employment gaps separately using our dedicated analyzer
+            # This will work even if the DeepSeek API fails
             from .employment_gaps import analyze_employment_gaps
             try:
                 employment_gaps_analysis = analyze_employment_gaps(cv_data)
                 logger.info(f"Employment gaps analysis completed: {len(employment_gaps_analysis.get('gaps', []))} gaps found")
+                
+                # Add employment gaps analysis to the response data
+                analysis_data['employment_gaps'] = employment_gaps_analysis
             except Exception as e:
                 logger.error(f"Error analyzing employment gaps: {str(e)}")
-                employment_gaps_analysis = {
+                analysis_data['employment_gaps'] = {
                     "summary": "Employment gaps analysis failed due to an error.",
-                    "gaps": []
+                    "gaps": [],
+                    "has_significant_gaps": False,
+                    "error": str(e)
                 }
             
-            # Use DeepSeek service to analyze CV
-            from .deepseek_service import DeepSeekService
-            service = DeepSeekService()
-            
-            # Prepare the prompt for analysis
-            prompt = f"""
-            Please analyze this CV data and provide structured feedback on its strengths, weaknesses, and specific improvement suggestions.
-            
-            Evaluation criteria:
-            - Content completeness
-            - Format and structure
-            - Skills relevance
-            - Job history description quality
-            - Education presentation
-            - Overall impact
-            - ATS readiness (will it pass Applicant Tracking Systems)
-            - Experience level classification (entry-level, mid-career, senior professional)
-            - Potential matching job roles
-            
-            CV Data:
-            {json.dumps(cv_data, indent=2)}
-            
-            Please provide your analysis in JSON format with the following structure:
-            {{
-                "overall_score": (number between 1-10),
-                "strengths": [list of strengths],
-                "weaknesses": [list of weaknesses],
-                "improvement_suggestions": [specific actionable suggestions],
-                "section_scores": {{
-                    "content_completeness": (score 1-10),
-                    "format_structure": (score 1-10),
-                    "skills_relevance": (score 1-10),
-                    "job_history": (score 1-10),
-                    "education": (score 1-10),
-                    "overall_impact": (score 1-10)
-                }},
-                "ats_readiness": {{
-                    "score": (score 1-10),
-                    "issues": [list of ATS issues],
-                    "suggestions": [list of ATS optimization suggestions]
-                }},
-                "experience_level": {{
-                    "classification": (entry-level, junior, mid-level, senior, executive),
-                    "years_experience": (estimated years),
-                    "career_stage": (brief description of career stage)
-                }},
-                "skills_assessment": {{
-                    "technical_skills": [list of technical skills with ratings],
-                    "soft_skills": [list of soft skills with ratings],
-                    "skills_gaps": [potential skills gaps based on career goals or industry standards]
-                }},
-                "potential_roles": {{
-                    "best_matches": [list of top 5 job roles that best match this CV],
-                    "match_reasons": [brief explanations for why these roles are good matches],
-                    "suggested_industries": [list of industries where this CV would be most competitive]
+            # Try to get AI analysis from DeepSeek, but continue even if it fails
+            ai_analysis_successful = False
+            try:
+                # Use DeepSeek service to analyze CV
+                from .deepseek_service import DeepSeekService
+                service = DeepSeekService()
+                
+                # Prepare the prompt for analysis
+                prompt = f"""
+                Please analyze this CV data and provide structured feedback on its strengths, weaknesses, and specific improvement suggestions.
+                
+                Evaluation criteria:
+                - Content completeness
+                - Format and structure
+                - Skills relevance
+                - Job history description quality
+                - Education presentation
+                - Overall impact
+                - ATS readiness (will it pass Applicant Tracking Systems)
+                - Experience level classification (entry-level, mid-career, senior professional)
+                - Potential matching job roles
+                
+                CV Data:
+                {json.dumps(cv_data, indent=2)}
+                
+                Please provide your analysis in JSON format with the following structure:
+                {{
+                    "overall_score": (number between 1-10),
+                    "strengths": [list of strengths],
+                    "weaknesses": [list of weaknesses],
+                    "improvement_suggestions": [specific actionable suggestions],
+                    "section_scores": {{
+                        "content_completeness": (score 1-10),
+                        "format_structure": (score 1-10),
+                        "skills_relevance": (score 1-10),
+                        "job_history": (score 1-10),
+                        "education": (score 1-10),
+                        "overall_impact": (score 1-10)
+                    }},
+                    "ats_readiness": {{
+                        "score": (score 1-10),
+                        "issues": [list of ATS issues],
+                        "suggestions": [list of ATS optimization suggestions]
+                    }},
+                    "experience_level": {{
+                        "classification": (entry-level, junior, mid-level, senior, executive),
+                        "years_experience": (estimated years),
+                        "career_stage": (brief description of career stage)
+                    }},
+                    "skills_assessment": {{
+                        "technical_skills": [list of technical skills with ratings],
+                        "soft_skills": [list of soft skills with ratings],
+                        "skills_gaps": [potential skills gaps based on career goals or industry standards]
+                    }},
+                    "potential_roles": {{
+                        "best_matches": [list of top 5 job roles that best match this CV],
+                        "match_reasons": [brief explanations for why these roles are good matches],
+                        "suggested_industries": [list of industries where this CV would be most competitive]
+                    }}
                 }}
-            }}
-            
-            Be specific, accurate, and actionable in your analysis.
-            """
-            
-            # Since DeepSeekService uses async methods, we need to run it in an event loop
-            import asyncio
-            
-            # Call the async generate method and wait for the result
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(service.generate(prompt, temperature=0.7, max_tokens=2000))
-            finally:
-                loop.close()
-            
-            # Try to extract JSON from the response
-            try:
-                # First try direct JSON parsing
-                analysis_data = json.loads(result)
-            except json.JSONDecodeError:
-                # If that fails, try to extract JSON from markdown code blocks
+                
+                Be specific, accurate, and actionable in your analysis.
+                """
+                
+                # Since DeepSeekService uses async methods, we need to run it in an event loop
+                import asyncio
+                
+                # Call the async generate method and wait for the result
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 try:
-                    # Look for content between ```json and ``` markers
-                    if "```json" in result:
-                        json_start = result.find("```json") + 7
-                        json_end = result.find("```", json_start)
-                        if json_end > json_start:
-                            json_content = result[json_start:json_end].strip()
-                            analysis_data = json.loads(json_content)
-                        else:
-                            raise ValueError("Could not find closing JSON code block")
-                    # Try to find any JSON-like structure with braces
-                    elif "{" in result and "}" in result:
-                        json_start = result.find("{")
-                        json_end = result.rfind("}") + 1
-                        if json_end > json_start:
-                            json_content = result[json_start:json_end].strip()
-                            analysis_data = json.loads(json_content)
-                        else:
-                            raise ValueError("Could not extract valid JSON from content")
-                    else:
-                        raise ValueError("Response does not contain any JSON structure")
-                except (ValueError, json.JSONDecodeError) as e:
-                    logger.error(f"Failed to extract JSON from DeepSeek response: {str(e)}")
-                    return Response({
-                        'error': 'Failed to parse AI response'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    result = loop.run_until_complete(service.generate(prompt, temperature=0.7, max_tokens=2000))
+                    
+                    # Try to extract JSON from the response
+                    try:
+                        # First try direct JSON parsing
+                        ai_data = json.loads(result)
+                        
+                        # Update the main analysis data with AI results
+                        for key, value in ai_data.items():
+                            # Don't overwrite employment gaps data
+                            if key != 'employment_gaps':
+                                analysis_data[key] = value
+                        
+                        ai_analysis_successful = True
+                    except json.JSONDecodeError:
+                        # If that fails, try to extract JSON from markdown code blocks
+                        try:
+                            # Look for content between ```json and ``` markers
+                            if "```json" in result:
+                                json_start = result.find("```json") + 7
+                                json_end = result.find("```", json_start)
+                                if json_end > json_start:
+                                    json_content = result[json_start:json_end].strip()
+                                    ai_data = json.loads(json_content)
+                                    
+                                    # Update the main analysis data with AI results
+                                    for key, value in ai_data.items():
+                                        # Don't overwrite employment gaps data
+                                        if key != 'employment_gaps':
+                                            analysis_data[key] = value
+                                    
+                                    ai_analysis_successful = True
+                                else:
+                                    raise ValueError("Could not find closing JSON code block")
+                            # Try to find any JSON-like structure with braces
+                            elif "{" in result and "}" in result:
+                                json_start = result.find("{")
+                                json_end = result.rfind("}") + 1
+                                if json_end > json_start:
+                                    json_content = result[json_start:json_end].strip()
+                                    ai_data = json.loads(json_content)
+                                    
+                                    # Update the main analysis data with AI results
+                                    for key, value in ai_data.items():
+                                        # Don't overwrite employment gaps data
+                                        if key != 'employment_gaps':
+                                            analysis_data[key] = value
+                                    
+                                    ai_analysis_successful = True
+                                else:
+                                    raise ValueError("Could not extract valid JSON from content")
+                            else:
+                                raise ValueError("Response does not contain any JSON structure")
+                        except (ValueError, json.JSONDecodeError) as e:
+                            logger.error(f"Failed to extract JSON from DeepSeek response: {str(e)}")
+                            analysis_data['ai_service_error'] = True
+                            analysis_data['ai_error_message'] = "Failed to parse AI response"
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Error with DeepSeek API: {str(e)}")
+                analysis_data['ai_service_error'] = True
+                analysis_data['ai_error_message'] = str(e)
             
-            # Add employment gaps analysis to the response
-            analysis_data['employment_gaps'] = employment_gaps_analysis
+            # If AI analysis failed, add a notice in the response
+            if not ai_analysis_successful:
+                analysis_data['notification'] = "The AI-powered analysis is currently unavailable. Employment gaps analysis is still provided."
             
             return Response(analysis_data)
             
