@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import aiohttp
+import asyncio
 import time
 from datetime import datetime
 
@@ -213,3 +214,103 @@ class DeepSeekService:
         except Exception as e:
             logger.error(f"Error extracting sections: {str(e)}")
             return [] 
+    
+    async def analyze_cv(self, parsed_data, max_retries=2):
+        """
+        Analyze parsed CV data to provide detailed analysis, feedback, and suggestions for improvement
+        
+        Returns a structured JSON with analysis metrics, scores, and recommendations
+        """
+        logger.info("Analyzing parsed CV data with DeepSeek")
+        start_time = time.time()
+        
+        # Convert parsed data to a string for the prompt
+        parsed_data_str = json.dumps(parsed_data, indent=2)
+        
+        analysis_prompt = f"""
+        Analyze the following parsed CV data and provide a detailed assessment. 
+        
+        Your task is to evaluate this CV and provide structured feedback in the following JSON format:
+        
+        {{
+            "overall_score": <score from 1-10>,
+            "section_scores": {{
+                "professional_summary": <score from 1-10>,
+                "experience": <score from 1-10>,
+                "education": <score from 1-10>,
+                "skills": <score from 1-10>
+            }},
+            "strengths": [<list of CV strengths>],
+            "weaknesses": [<list of CV weaknesses>],
+            "improvement_suggestions": [<list of specific suggestions>],
+            "ats_readiness": {{
+                "score": <score from 1-10>,
+                "issues": [<list of ATS issues>],
+                "recommendations": [<list of recommendations>]
+            }},
+            "experience_level": {{
+                "years_experience": <estimated years>,
+                "classification": <"Entry-Level", "Mid-Level", "Senior", or "Executive">
+            }},
+            "skills_assessment": {{
+                "technical_skills": [
+                    {{"skill": <skill name>, "level": <score from 1-10>}}
+                ],
+                "soft_skills": [
+                    {{"skill": <skill name>, "level": <score from 1-10>}}
+                ]
+            }},
+            "potential_roles": {{
+                "best_matches": [<list of suitable job roles>],
+                "match_reasons": [<list of reasons why these roles match>],
+                "suggested_industries": [<list of suitable industries>]
+            }}
+        }}
+        
+        Focus on providing actionable insights and specific suggestions for improvement.
+        Evaluate whether keywords are effectively used for ATS systems.
+        Analyze the clarity, impact, and quantification of achievements.
+        Assess whether the CV effectively showcases relevant skills and experience.
+        
+        PARSED CV DATA:
+        {parsed_data_str}
+        """
+        
+        attempts = 0
+        last_error = None
+        
+        while attempts < max_retries:
+            try:
+                attempts += 1
+                logger.info(f"Attempt {attempts} to analyze CV")
+                response = await self._call_api(analysis_prompt)
+                
+                # Try to extract JSON from the response
+                try:
+                    # First try to parse directly
+                    analysis_data = json.loads(response)
+                    logger.info(f"Successfully analyzed CV in {time.time() - start_time:.2f} seconds")
+                    return analysis_data
+                except json.JSONDecodeError:
+                    # Try to extract JSON if surrounded by markdown code blocks or other text
+                    if "```json" in response:
+                        json_content = response.split("```json")[1].split("```")[0].strip()
+                        analysis_data = json.loads(json_content)
+                        logger.info(f"Successfully analyzed CV from markdown in {time.time() - start_time:.2f} seconds")
+                        return analysis_data
+                    elif "```" in response:
+                        json_content = response.split("```")[1].split("```")[0].strip()
+                        analysis_data = json.loads(json_content)
+                        logger.info(f"Successfully analyzed CV from code block in {time.time() - start_time:.2f} seconds")
+                        return analysis_data
+                    else:
+                        raise ValueError("Could not extract valid JSON from DeepSeek analysis response")
+                        
+            except (ValueError, json.JSONDecodeError) as e:
+                last_error = str(e)
+                logger.warning(f"Attempt {attempts} failed: {last_error}. Retrying...")
+                await asyncio.sleep(2)  # Short delay before retry
+        
+        # If we get here, all attempts failed
+        logger.error(f"Failed to analyze CV after {max_retries} attempts. Last error: {last_error}")
+        raise ValueError(f"Failed to analyze CV data. Last error: {last_error}")

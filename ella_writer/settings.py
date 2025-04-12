@@ -146,7 +146,6 @@ MIDDLEWARE = [
 
 # }
 
-CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "https://www.ellacvwriter.com",
     "https://ellacvwriter.com",
@@ -188,6 +187,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://ellacv.com",
     "https://ellacvwriter.vercel.app",
     "https://www.ellacvwriter.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
 ]
 
 # Production-specific settings

@@ -1,13 +1,13 @@
 import logging
 from typing import Dict, Any, Optional
-from .models import ParsedCV
+from .models import ParsedCV, CVRewriteSession
 from cv_writer.models import CvWriter, ProfessionalSummary, Experience, Education, Skill
 from django.contrib.auth import get_user_model
 from asgiref.sync import sync_to_async
-from django.db import close_old_connections, connection, transaction
+import asyncio
+from django.db import connection, transaction
 from functools import wraps
 from .deepseek_service import DeepSeekService
-import asyncio
 import django.db.utils
 
 logger = logging.getLogger(__name__)
@@ -42,17 +42,43 @@ def create_skill(**kwargs):
 @sync_to_async
 def connect_db():
     """Connect to database in a sync context"""
-    close_old_connections()
-    if connection.connection is None or connection.connection.closed:
-        connection.connect()
+    connection.ensure_connection()
     return True
+
+@sync_to_async
+def get_session_user(session):
+    """Get user from session in a sync context"""
+    return session.user
+
+@sync_to_async
+def get_session_input_data(session):
+    """Get input data from session in a sync context"""
+    return session.input_data
+
+@sync_to_async
+def update_session_status(session, status, error_message=None):
+    """Update session status in a sync context"""
+    session.status = status
+    if error_message:
+        session.error_message = error_message
+    session.save()
+    return session
+
+@sync_to_async
+def update_session_with_results(session, output_data, new_cv_id):
+    """Update session with results in a sync context"""
+    session.status = 'completed'
+    session.output_data = output_data
+    session.new_cv_id = new_cv_id
+    session.save()
+    return session
 
 def ensure_database_connection(f):
     @wraps(f)
     async def wrapper(*args, **kwargs):
         try:
             # Close any stale connections before starting
-            await sync_to_async(close_old_connections)()
+            await sync_to_async(connection.close)()
             
             # Execute the function
             result = await f(*args, **kwargs)
@@ -75,14 +101,13 @@ def ensure_database_connection(f):
             raise
         finally:
             # Always close connections after the operation
-            await sync_to_async(close_old_connections)()
+            await sync_to_async(connection.close)()
     return wrapper
 
-@sync_to_async
-def run_in_transaction(func, *args, **kwargs):
+async def run_in_transaction(func, *args, **kwargs):
     """Run a function in a transaction with proper connection handling."""
     # Close any existing connections first
-    close_old_connections()
+    connection.close()
     
     # Create a fresh connection
     connection.ensure_connection()
@@ -90,16 +115,22 @@ def run_in_transaction(func, *args, **kwargs):
     try:
         # Execute in transaction
         with transaction.atomic():
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            
+            # If the result is a coroutine, await it
+            if asyncio.iscoroutine(result):
+                result = await result
+                
+            return result
     finally:
         # Always close connection when done
-        close_old_connections()
+        connection.close()
 
 @sync_to_async
 def create_cv_with_sections(user, cv_data, improved_sections):
     """Create a complete CV with all sections in a single transaction."""
     # Close any existing connections first
-    close_old_connections()
+    connection.close()
     
     # Make sure we have a fresh connection
     connection.ensure_connection()
@@ -208,19 +239,21 @@ def create_cv_with_sections(user, cv_data, improved_sections):
                         Skill.objects.create(
                             user=user,
                             cv=new_cv,
-                            skill_name=skill_name[:100],
-                            skill_level=skill_level[:100]
+                            name=skill_name[:100],
+                            level=skill_level[:100],
+                            category="Technical Skills"
                         )
                         created_skills.add(skill_name.lower())
                         skill_count += 1
-                    except Exception:
+                    except Exception as e:
                         # Continue even if one skill fails
+                        logger.error(f"Error creating skill '{skill_name}': {str(e)}")
                         continue
             
             return new_cv
     finally:
         # Always close connection when done
-        close_old_connections()
+        connection.close()
 
 class CVRewriteService:
     """Service for rewriting and improving CV content using DeepSeek."""
@@ -407,6 +440,140 @@ class CVRewriteService:
                 'error': str(e)
             }
 
+    async def process_rewrite_session(self, session):
+        """
+        Process a CV rewrite session by improving the CV content using DeepSeek.
+        This method is designed to be called after a session has already been created,
+        solving the connection closed issue by separating database operations.
+        
+        Args:
+            session: CVRewriteSession instance with input data
+            
+        Returns:
+            Dictionary with rewritten content and new CV ID
+        """
+        try:
+            # Ensure database connection
+            await connect_db()
+            
+            # Extract data from the session using sync_to_async helpers
+            cv_data = await get_session_input_data(session)
+            user = await get_session_user(session)
+            
+            logger.info(f"Processing CV rewrite session {session.id} for user {user.username}")
+            
+            # Update session status
+            await update_session_status(session, 'processing')
+            
+            # Extract data from the CV for improvement
+            professional_summary = cv_data.get('professional_summary', '')
+            experience_items = cv_data.get('experience', [])
+            skills = cv_data.get('skills', '')
+            industry = cv_data.get('industry', 'technology')
+            
+            # Initialize a dictionary to hold improved sections
+            improved_sections = {}
+            
+            # Improve professional summary
+            if professional_summary:
+                logger.info("Improving professional summary...")
+                try:
+                    improved_summary = await self._improve_section('professional_summary', professional_summary, industry)
+                    if improved_summary:
+                        improved_sections['professional_summary'] = improved_summary
+                        logger.info("Successfully improved professional summary")
+                    else:
+                        logger.warning("Failed to improve professional summary - using original")
+                        improved_sections['professional_summary'] = professional_summary
+                except Exception as e:
+                    logger.error(f"Error improving professional summary: {str(e)}")
+                    improved_sections['professional_summary'] = professional_summary
+            
+            # Improve experience descriptions
+            if experience_items:
+                logger.info(f"Processing {len(experience_items)} experience items...")
+                improved_experiences = []
+                
+                for i, exp in enumerate(experience_items):
+                    exp_description = exp.get('description', '')
+                    if exp_description:
+                        try:
+                            logger.info(f"Improving experience {i+1}/{len(experience_items)}")
+                            improved_description = await self._improve_section('experience', exp_description, industry)
+                            if improved_description:
+                                # Create a copy of the original experience with improved description
+                                improved_exp = {**exp, 'description': improved_description}
+                                improved_experiences.append(improved_exp)
+                                logger.info(f"Successfully improved experience {i+1}")
+                            else:
+                                # If improvement failed, use the original
+                                improved_experiences.append(exp)
+                                logger.warning(f"Failed to improve experience {i+1} - using original")
+                        except Exception as e:
+                            logger.error(f"Error improving experience {i+1}: {str(e)}")
+                            improved_experiences.append(exp)
+                    else:
+                        improved_experiences.append(exp)
+                
+                improved_sections['experience'] = improved_experiences
+            
+            # Improve skills
+            if skills:
+                logger.info("Improving skills...")
+                try:
+                    improved_skills = await self._improve_section('skills', skills, industry)
+                    if improved_skills:
+                        improved_sections['skills'] = improved_skills
+                        logger.info("Successfully improved skills")
+                    else:
+                        logger.warning("Failed to improve skills - using original")
+                        improved_sections['skills'] = skills
+                except Exception as e:
+                    logger.error(f"Error improving skills: {str(e)}")
+                    improved_sections['skills'] = skills
+            
+            # Create a new CV with improved content
+            logger.info("Creating new CV with improved content...")
+            await connect_db()
+            
+            # We use a separate function to handle the transaction atomically
+            raw_cv_id = await run_in_transaction(
+                create_cv_with_sections,
+                user,
+                cv_data,
+                improved_sections
+            )
+            
+            # Make sure we have a number, not a coroutine
+            new_cv_id = await raw_cv_id if asyncio.iscoroutine(raw_cv_id) else raw_cv_id
+            
+            logger.info(f"Created new CV with ID: {new_cv_id}")
+            
+            # Update session with results
+            await update_session_with_results(session, improved_sections, new_cv_id)
+            
+            # Return improved content and the new CV ID
+            return {
+                'status': 'success',
+                'message': 'CV rewritten successfully',
+                'rewritten': improved_sections,
+                'new_cv_id': new_cv_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in process_rewrite_session: {str(e)}", exc_info=True)
+            
+            # Update session with error status
+            try:
+                await update_session_status(session, 'failed', str(e))
+            except Exception as update_error:
+                logger.error(f"Error updating session status: {str(update_error)}")
+                
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
     async def _improve_section(
         self,
         section_type: str,
@@ -482,7 +649,7 @@ class CVRewriteService:
                 logger.error(f"Database connection error creating CV version (attempt {attempt}/{max_retries}): {str(e)}")
                 
                 # Close any broken connections
-                await sync_to_async(close_old_connections)()
+                await sync_to_async(connection.close)()
                 
                 if attempt < max_retries:
                     # Wait before retrying (exponential backoff)

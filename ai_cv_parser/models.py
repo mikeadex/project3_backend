@@ -38,3 +38,36 @@ class ParsedCV(models.Model):
         verbose_name = "Parsed CV"
         verbose_name_plural = "Parsed CVs"
         ordering = ['-uploaded_at']
+
+class CVRewriteSession(models.Model):
+    """Model to store temporary CV rewrite session data"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cv_rewrite_sessions')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Input data
+    input_data = models.JSONField(default=dict)
+    
+    # Output data after AI processing
+    output_data = models.JSONField(default=dict, blank=True)
+    
+    # Processing status
+    status = models.CharField(max_length=50, default='pending', 
+                             choices=[
+                                 ('pending', 'Pending'),
+                                 ('processing', 'Processing'),
+                                 ('completed', 'Completed'),
+                                 ('failed', 'Failed')
+                             ])
+    error_message = models.TextField(blank=True)
+    
+    # New CV created from this session
+    new_cv_id = models.IntegerField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"CV Rewrite Session - {self.user.username} ({self.status})"
+    
+    class Meta:
+        verbose_name = "CV Rewrite Session"
+        verbose_name_plural = "CV Rewrite Sessions"
+        ordering = ['-created_at']

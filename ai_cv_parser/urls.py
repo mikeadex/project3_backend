@@ -8,5 +8,7 @@ router.register(r'parser', AICVParserViewSet, basename='ai-cv-parser')
 
 urlpatterns = [
     path('rewrite/', views.rewrite_cv, name='rewrite-cv'),
+    path('rewrite/create_session/', views.create_rewrite_session, name='create-rewrite-session'),
+    path('rewrite/process/<int:session_id>/', views.process_rewrite_session, name='process-rewrite-session'),
     path('', include(router.urls)),
-] 
+]
