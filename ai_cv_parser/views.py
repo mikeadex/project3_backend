@@ -513,14 +513,51 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                                 raise ValueError("Response does not contain any JSON structure")
                         except (ValueError, json.JSONDecodeError) as e:
                             logger.error(f"Failed to extract JSON from DeepSeek response: {str(e)}")
-                            analysis_data['ai_service_error'] = True
-                            analysis_data['ai_error_message'] = "Failed to parse AI response"
+                            # Try fallback service instead
+                            raise Exception("Falling back to alternative AI service")
                 finally:
                     loop.close()
             except Exception as e:
-                logger.error(f"Error with DeepSeek API: {str(e)}")
+                logger.warning(f"DeepSeek API unavailable, using fallback service: {str(e)}")
                 analysis_data['ai_service_error'] = True
                 analysis_data['ai_error_message'] = str(e)
+                
+                # Try fallback service as a backup
+                try:
+                    from .fallback_service import FallbackService
+                    fallback = FallbackService()
+                    
+                    # Use the same prompt for consistency
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        logger.info("Attempting to use fallback AI service")
+                        fallback_result = loop.run_until_complete(fallback.generate(prompt, temperature=0.7, max_tokens=2000))
+                        
+                        # Try to parse the fallback response
+                        try:
+                            fallback_data = json.loads(fallback_result)
+                            
+                            # Update the analysis data with fallback results
+                            for key, value in fallback_data.items():
+                                # Don't overwrite employment gaps data
+                                if key != 'employment_gaps':
+                                    analysis_data[key] = value
+                            
+                            # Mark as successful with fallback service note
+                            ai_analysis_successful = True
+                            analysis_data['ai_service_note'] = "Using fallback AI service due to DeepSeek API issues"
+                            analysis_data['ai_service_error'] = False  # Clear the error since fallback worked
+                            
+                            logger.info("Successfully used fallback AI service")
+                        except json.JSONDecodeError as je:
+                            logger.error(f"Failed to parse fallback service response: {str(je)}")
+                            # Keep original error state
+                    finally:
+                        loop.close()
+                except Exception as fallback_error:
+                    logger.error(f"Fallback service also failed: {str(fallback_error)}")
+                    # Keep original error state
             
             # If AI analysis failed, add a notice in the response
             if not ai_analysis_successful:

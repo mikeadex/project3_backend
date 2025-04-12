@@ -157,6 +157,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 
+# Add this to fix CORS issues in production
+CORS_ALLOW_ALL_ORIGINS = True  # Temporarily allow all origins for troubleshooting
+CORS_ORIGIN_ALLOW_ALL = True   # Legacy setting for Django CORS Headers < 3.0
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -200,6 +204,11 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    
+    # Keep CORS settings permissive in production for now
+    # We'll maintain CORS_ALLOW_ALL_ORIGINS = True from above
+    # Important: This is a temporary measure to fix immediate issues
+    # TODO: Once stable, replace with specific allowed origins for better security
     
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
