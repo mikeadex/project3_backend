@@ -215,6 +215,10 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     # Important: This is a temporary measure to fix immediate issues
     # TODO: Once stable, replace with specific allowed origins for better security
     
+    # Disable Django's CORS middleware in production since we're handling CORS at the WSGI level
+    # This prevents duplicate headers that cause browser errors
+    MIDDLEWARE = [m for m in MIDDLEWARE if 'corsheaders.middleware.CorsMiddleware' not in m]
+    
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
         'project3-backend-7ck4.onrender.com', 

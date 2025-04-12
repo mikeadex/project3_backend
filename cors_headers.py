@@ -18,45 +18,53 @@ class CORSMiddleware:
             # Check for the origin header in the request
             origin = environ.get('HTTP_ORIGIN', '')
             
-            # Access control headers to add
-            cors_headers = [
-                ('Access-Control-Allow-Origin', origin or '*'),
-                ('Access-Control-Allow-Credentials', 'true'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
-                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'),
-                ('Access-Control-Max-Age', '86400'),  # 24 hours
-            ]
+            # Track which CORS headers are already present
+            existing_headers = {header[0].lower(): True for header in headers}
             
-            # Add CORS headers to every response
-            new_headers = []
-            for header in headers:
-                # Skip existing CORS headers to avoid duplicates
-                if not header[0].startswith('Access-Control-'):
-                    new_headers.append(header)
+            # Access control headers to add (only if not already present)
+            cors_headers = []
             
-            # Add our CORS headers
-            new_headers.extend(cors_headers)
+            # Only add headers that don't already exist
+            if 'access-control-allow-origin' not in existing_headers:
+                cors_headers.append(('Access-Control-Allow-Origin', origin or '*'))
+                
+            if 'access-control-allow-credentials' not in existing_headers:
+                cors_headers.append(('Access-Control-Allow-Credentials', 'true'))
+                
+            if 'access-control-allow-methods' not in existing_headers:
+                cors_headers.append(('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'))
+                
+            if 'access-control-allow-headers' not in existing_headers:
+                cors_headers.append(('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'))
+                
+            if 'access-control-max-age' not in existing_headers:
+                cors_headers.append(('Access-Control-Max-Age', '86400'))  # 24 hours
+            
+            # Combine existing headers with our CORS headers
+            new_headers = list(headers) + cors_headers
             
             # Special handling for OPTIONS requests (preflight)
-            if environ.get('REQUEST_METHOD') == 'OPTIONS':
-                # Return 200 OK for preflight requests with CORS headers only
+            if environ.get('REQUEST_METHOD') == 'OPTIONS' and status.startswith('404'):
+                # Return 200 OK for preflight requests
                 return start_response('200 OK', new_headers, exc_info)
                 
             return start_response(status, new_headers, exc_info)
         
         # Handle OPTIONS preflight request directly
         if environ.get('REQUEST_METHOD') == 'OPTIONS':
-            # For OPTIONS requests, return a 200 OK with CORS headers immediately
-            headers = [
-                ('Content-Type', 'text/plain'),
-                ('Access-Control-Allow-Origin', environ.get('HTTP_ORIGIN', '*')),
-                ('Access-Control-Allow-Credentials', 'true'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
-                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'),
-                ('Access-Control-Max-Age', '86400'),  # 24 hours
-            ]
-            start_response('200 OK', headers)
-            return [b'']  # Empty response body
+            # For OPTIONS requests, check if this seems to be a preflight
+            if 'HTTP_ACCESS_CONTROL_REQUEST_METHOD' in environ:
+                # This is a preflight request, handle it directly
+                headers = [
+                    ('Content-Type', 'text/plain'),
+                    ('Access-Control-Allow-Origin', environ.get('HTTP_ORIGIN', '*')),
+                    ('Access-Control-Allow-Credentials', 'true'),
+                    ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
+                    ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'),
+                    ('Access-Control-Max-Age', '86400'),  # 24 hours
+                ]
+                start_response('200 OK', headers)
+                return [b'']  # Empty response body
             
         # For non-OPTIONS requests, continue with normal processing
         return self.app(environ, custom_start_response)
