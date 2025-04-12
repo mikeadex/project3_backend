@@ -5,66 +5,97 @@ This module can be used by wsgi.py or asgi.py to apply CORS headers
 at the server level, bypassing Django's internal CORS handling
 """
 import os
+import logging
 from urllib.parse import urlparse
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('cors_middleware')
 
 class CORSMiddleware:
     """Apply CORS headers at the WSGI/ASGI level before Django processes the request"""
     
     def __init__(self, app):
         self.app = app
+        logger.info("CORS Middleware initialized")
     
     def __call__(self, environ, start_response):
-        def custom_start_response(status, headers, exc_info=None):
-            # Check for the origin header in the request
-            origin = environ.get('HTTP_ORIGIN', '')
+        # Always log the request type and path
+        request_method = environ.get('REQUEST_METHOD', 'UNKNOWN')
+        path_info = environ.get('PATH_INFO', 'UNKNOWN')
+        origin = environ.get('HTTP_ORIGIN', 'UNKNOWN')
+        
+        logger.info(f"CORS: {request_method} request to {path_info} from origin {origin}")
+        
+        # For OPTIONS preflight requests, we'll handle them directly
+        if request_method == 'OPTIONS':
+            logger.info(f"Handling OPTIONS preflight request to {path_info}")
             
-            # Track which CORS headers are already present
-            existing_headers = {header[0].lower(): True for header in headers}
+            # Get headers needed for CORS response
+            headers = [
+                ('Content-Type', 'text/plain'),
+                ('Access-Control-Allow-Origin', origin),
+                ('Access-Control-Allow-Credentials', 'true'),
+                ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
+                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept'),
+                ('Access-Control-Max-Age', '86400'),  # 24 hours
+                ('Vary', 'Origin'),  # Important for caching
+            ]
             
-            # Access control headers to add (only if not already present)
-            cors_headers = []
+            # Start the response ourselves
+            start_response('200 OK', headers)
+            return [b'']  # Empty response body
+        
+        # Define a wrapper for start_response that adds CORS headers
+        def cors_start_response(status, headers, exc_info=None):
+            # Create a new list with all original headers
+            new_headers = list(headers)
             
-            # Only add headers that don't already exist
-            if 'access-control-allow-origin' not in existing_headers:
-                cors_headers.append(('Access-Control-Allow-Origin', origin or '*'))
-                
-            if 'access-control-allow-credentials' not in existing_headers:
-                cors_headers.append(('Access-Control-Allow-Credentials', 'true'))
-                
-            if 'access-control-allow-methods' not in existing_headers:
-                cors_headers.append(('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'))
-                
-            if 'access-control-allow-headers' not in existing_headers:
-                cors_headers.append(('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'))
-                
-            if 'access-control-max-age' not in existing_headers:
-                cors_headers.append(('Access-Control-Max-Age', '86400'))  # 24 hours
+            # Add CORS headers if not present
+            cors_headers = {
+                'Access-Control-Allow-Origin': origin,
+                'Access-Control-Allow-Credentials': 'true',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept',
+                'Vary': 'Origin'
+            }
             
-            # Combine existing headers with our CORS headers
-            new_headers = list(headers) + cors_headers
+            # Existing header names (lowercase for case-insensitive comparison)
+            existing_headers = {h[0].lower(): h[0] for h in headers}
             
-            # Special handling for OPTIONS requests (preflight)
-            if environ.get('REQUEST_METHOD') == 'OPTIONS' and status.startswith('404'):
-                # Return 200 OK for preflight requests
-                return start_response('200 OK', new_headers, exc_info)
-                
+            # Add CORS headers, ensuring no duplicates
+            for name, value in cors_headers.items():
+                if name.lower() not in existing_headers:
+                    new_headers.append((name, value))
+                else:
+                    # Replace the existing header to ensure correct value
+                    original_name = existing_headers[name.lower()]
+                    # Find index of existing header
+                    for i, (header_name, _) in enumerate(new_headers):
+                        if header_name == original_name:
+                            new_headers[i] = (original_name, value)
+                            break
+            
+            logger.debug(f"Response status: {status}")
+            logger.debug(f"Response headers: {new_headers}")
+            
+            # Call the original start_response with our modified headers
             return start_response(status, new_headers, exc_info)
         
-        # Handle OPTIONS preflight request directly
-        if environ.get('REQUEST_METHOD') == 'OPTIONS':
-            # For OPTIONS requests, check if this seems to be a preflight
-            if 'HTTP_ACCESS_CONTROL_REQUEST_METHOD' in environ:
-                # This is a preflight request, handle it directly
-                headers = [
-                    ('Content-Type', 'text/plain'),
-                    ('Access-Control-Allow-Origin', environ.get('HTTP_ORIGIN', '*')),
-                    ('Access-Control-Allow-Credentials', 'true'),
-                    ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
-                    ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With'),
-                    ('Access-Control-Max-Age', '86400'),  # 24 hours
-                ]
-                start_response('200 OK', headers)
-                return [b'']  # Empty response body
+        # Continue with normal processing for non-OPTIONS requests
+        try:
+            return self.app(environ, cors_start_response)
+        except Exception as e:
+            logger.error(f"Error in CORS middleware: {str(e)}")
             
-        # For non-OPTIONS requests, continue with normal processing
-        return self.app(environ, custom_start_response)
+            # Even on error, ensure CORS headers are returned
+            headers = [
+                ('Content-Type', 'text/plain'),
+                ('Access-Control-Allow-Origin', origin),
+                ('Access-Control-Allow-Credentials', 'true'),
+                ('Vary', 'Origin'),
+            ]
+            
+            # Return a 500 error with CORS headers
+            start_response('500 Internal Server Error', headers)
+            return [b'Internal Server Error']
