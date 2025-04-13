@@ -22,10 +22,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ella_writer.settings")
 # Get the standard Django WSGI application
 application = get_wsgi_application()
 
-# Import and apply our CORS middleware
+# First, apply our production-ready enterprise middleware
+from server_middleware import EnterpriseMiddleware
+application = EnterpriseMiddleware(application)
+
+# Then, add CORS middleware as a fallback
 from cors_headers import CORSMiddleware
 application = CORSMiddleware(application)
 
-# Add a debug message to verify this code is running in production
+# Report middleware configuration status
 if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
+    print("Enterprise middleware applied at WSGI level")
     print("CORS headers middleware applied at WSGI level")

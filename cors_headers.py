@@ -51,30 +51,23 @@ class CORSMiddleware:
             # Create a new list with all original headers
             new_headers = list(headers)
             
-            # Add CORS headers if not present
-            cors_headers = {
-                'Access-Control-Allow-Origin': origin,
-                'Access-Control-Allow-Credentials': 'true',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept',
-                'Vary': 'Origin'
-            }
+            # Check if CORS headers already exist (added by EnterpriseMiddleware)
+            existing_header_names = {h[0].lower() for h in headers}
             
-            # Existing header names (lowercase for case-insensitive comparison)
-            existing_headers = {h[0].lower(): h[0] for h in headers}
-            
-            # Add CORS headers, ensuring no duplicates
-            for name, value in cors_headers.items():
-                if name.lower() not in existing_headers:
-                    new_headers.append((name, value))
-                else:
-                    # Replace the existing header to ensure correct value
-                    original_name = existing_headers[name.lower()]
-                    # Find index of existing header
-                    for i, (header_name, _) in enumerate(new_headers):
-                        if header_name == original_name:
-                            new_headers[i] = (original_name, value)
-                            break
+            # Only add CORS headers if they haven't been added already
+            if 'access-control-allow-origin' not in existing_header_names:
+                cors_headers = {
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept',
+                    'Vary': 'Origin'
+                }
+                
+                # Add CORS headers that don't already exist
+                for name, value in cors_headers.items():
+                    if name.lower() not in existing_header_names:
+                        new_headers.append((name, value))
             
             logger.debug(f"Response status: {status}")
             logger.debug(f"Response headers: {new_headers}")
