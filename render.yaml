@@ -11,6 +11,31 @@ services:
       python manage.py migrate
     startCommand: "./bin/start_gunicorn.sh"
     healthCheckPath: /api/health/
+    headers:
+      - path: /*
+        name: Access-Control-Allow-Origin
+        value: https://www.ellacv.com
+      - path: /*
+        name: Access-Control-Allow-Methods
+        value: "GET, POST, PUT, DELETE, OPTIONS"
+      - path: /*
+        name: Access-Control-Allow-Headers
+        value: "Origin, Content-Type, Accept, Authorization, X-Requested-With"
+      - path: /*
+        name: Access-Control-Allow-Credentials
+        value: "true"
+      - path: /*
+        name: Access-Control-Max-Age
+        value: "86400"
+      - path: /*
+        name: Vary
+        value: "Origin"
+      - path: /*
+        name: X-Content-Type-Options
+        value: "nosniff"
+      - path: /*
+        name: X-Frame-Options
+        value: "DENY"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: ella_writer.settings
