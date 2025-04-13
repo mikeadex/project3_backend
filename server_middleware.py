@@ -87,6 +87,25 @@ class EnterpriseMiddleware:
         origin = environ.get('HTTP_ORIGIN', 'UNKNOWN')
         content_length = environ.get('CONTENT_LENGTH', '0')
         
+        # Early optimization for health checks to avoid Django processing overhead
+        if request_method == 'GET' and path_info == '/api/health/':
+            # For health checks, bypass the entire Django stack
+            origin_header = []
+            if origin and origin != 'UNKNOWN':
+                origin_header = [('Access-Control-Allow-Origin', origin)]
+                
+            headers = [
+                ('Content-Type', 'application/json'),
+                ('Cache-Control', 'max-age=5'), # Allow caching for 5 seconds
+            ] + origin_header
+            
+            # Only count unique health checks in logs (limit noise)
+            if self.request_count % 10 == 0:
+                logger.info(f"[{request_id}] Health check (showing 1 of 10)")
+            
+            start_response('200 OK', headers)
+            return [b'{"status":"healthy"}']
+            
         # Special handling for large requests or file uploads
         is_file_upload = False
         try:

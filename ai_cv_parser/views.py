@@ -250,101 +250,122 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 ProfessionalSummary.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    summary=parsed_data.get('professional_summary')
+                    content=parsed_data.get('professional_summary')
                 )
+                logger.info(f"Added professional summary to CV Writer")
             
-            # Create experiences if available
-            if parsed_data.get('experience'):
-                for exp_data in parsed_data.get('experience'):
-                    Experience.objects.create(
-                        user=request.user,
-                        cv=cv_writer,
-                        job_title=exp_data.get('job_title', ''),
-                        company_name=exp_data.get('company', ''),
-                        location=exp_data.get('location', ''),
-                        start_date=exp_data.get('start_date', ''),
-                        end_date=exp_data.get('end_date', ''),
-                        job_description=exp_data.get('description', '')
-                    )
+            # Create experiences
+            experiences = parsed_data.get('experience', [])
+            for exp_data in experiences:
+                # Default start/end dates if not available
+                start_date = exp_data.get('start_date', None)
+                end_date = exp_data.get('end_date', None)
+                
+                Experience.objects.create(
+                    user=request.user,
+                    cv=cv_writer,
+                    company=exp_data.get('company', 'Unknown Company'),
+                    title=exp_data.get('title', 'Unknown Position'),
+                    start_date=start_date,
+                    end_date=end_date,
+                    current=exp_data.get('current', False),
+                    description=exp_data.get('description', '')
+                )
+            logger.info(f"Added {len(experiences)} experiences to CV Writer")
             
-            # Create education entries if available
-            if parsed_data.get('education'):
-                for edu_data in parsed_data.get('education'):
-                    Education.objects.create(
-                        user=request.user,
-                        cv=cv_writer,
-                        school_name=edu_data.get('school', ''),
-                        degree=edu_data.get('degree', ''),
-                        field_of_study=edu_data.get('field', ''),
-                        start_date=edu_data.get('start_date', ''),
-                        end_date=edu_data.get('end_date', ''),
-                        details=edu_data.get('description', '')
-                    )
+            # Create education entries
+            education_entries = parsed_data.get('education', [])
+            for edu_data in education_entries:
+                # Default start/end dates if not available
+                start_date = edu_data.get('start_date', None)
+                end_date = edu_data.get('end_date', None)
+                
+                Education.objects.create(
+                    user=request.user,
+                    cv=cv_writer,
+                    institution=edu_data.get('institution', 'Unknown Institution'),
+                    degree=edu_data.get('degree', 'Unknown Degree'),
+                    field=edu_data.get('field', ''),
+                    start_date=start_date,
+                    end_date=end_date,
+                    description=edu_data.get('description', '')
+                )
+            logger.info(f"Added {len(education_entries)} education entries to CV Writer")
             
-            # Create skills if available
-            if parsed_data.get('skills'):
-                for skill_data in parsed_data.get('skills'):
-                    if isinstance(skill_data, dict):
-                        Skill.objects.create(
-                            user=request.user,
-                            cv=cv_writer,
-                            name=skill_data.get('name', ''),
-                            level=skill_data.get('level', 'Intermediate'),
-                            category="Technical Skills"
-                        )
-                    elif isinstance(skill_data, str):
-                        Skill.objects.create(
-                            user=request.user,
-                            cv=cv_writer,
-                            name=skill_data,
-                            level='Intermediate',
-                            category="General"
-                        )
+            # Create skills
+            skills = parsed_data.get('skills', [])
+            for skill_data in skills:
+                # Handle both string and object formats
+                if isinstance(skill_data, str):
+                    skill_name = skill_data
+                    skill_level = 'Intermediate'  # Default level
+                else:
+                    skill_name = skill_data.get('name', 'Unknown Skill')
+                    skill_level = skill_data.get('level', 'Intermediate')
+                
+                Skill.objects.create(
+                    user=request.user,
+                    cv=cv_writer,
+                    name=skill_name,
+                    level=skill_level
+                )
+            logger.info(f"Added {len(skills)} skills to CV Writer")
             
-            # Create languages if available
-            if parsed_data.get('languages'):
-                for lang_data in parsed_data.get('languages'):
-                    if isinstance(lang_data, dict):
-                        Language.objects.create(
-                            user=request.user,
-                            cv=cv_writer,
-                            language=lang_data.get('language', ''),
-                            proficiency=lang_data.get('level', 'Intermediate')
-                        )
-                    elif isinstance(lang_data, str):
-                        Language.objects.create(
-                            user=request.user,
-                            cv=cv_writer,
-                            language=lang_data,
-                            proficiency='Intermediate'
-                        )
+            # Create languages
+            languages = parsed_data.get('languages', [])
+            for lang_data in languages:
+                # Handle both string and object formats
+                if isinstance(lang_data, str):
+                    lang_name = lang_data
+                    proficiency = 'Intermediate'  # Default level
+                else:
+                    lang_name = lang_data.get('name', 'Unknown Language')
+                    proficiency = lang_data.get('proficiency', 'Intermediate')
+                
+                Language.objects.create(
+                    user=request.user,
+                    cv=cv_writer,
+                    name=lang_name,
+                    proficiency=proficiency
+                )
+            logger.info(f"Added {len(languages)} languages to CV Writer")
             
-            # Create certifications if available
-            if parsed_data.get('certifications'):
-                for cert_data in parsed_data.get('certifications'):
-                    if isinstance(cert_data, dict):
-                        Certification.objects.create(
-                            user=request.user,
-                            cv=cv_writer,
-                            name=cert_data.get('name', ''),
-                            issuer=cert_data.get('issuer', ''),
-                            date=cert_data.get('date', '')
-                        )
+            # Create certifications
+            certifications = parsed_data.get('certifications', [])
+            for cert_data in certifications:
+                # Handle both string and object formats
+                if isinstance(cert_data, str):
+                    cert_name = cert_data
+                    issuer = ''
+                    issue_date = None
+                else:
+                    cert_name = cert_data.get('name', 'Unknown Certification')
+                    issuer = cert_data.get('issuer', '')
+                    issue_date = cert_data.get('issue_date', None)
+                
+                Certification.objects.create(
+                    user=request.user,
+                    cv=cv_writer,
+                    name=cert_name,
+                    issuer=issuer,
+                    issue_date=issue_date
+                )
+            logger.info(f"Added {len(certifications)} certifications to CV Writer")
             
-            logger.info(f"Data successfully transferred to CV Writer with ID: {cv_writer.id}")
             return Response({
-                'message': 'Data successfully transferred to CV Writer',
+                'status': 'success',
+                'message': 'CV data transferred to CV Writer successfully',
                 'cv_id': cv_writer.id
-            }, status=status.HTTP_200_OK)
-        
+            })
+            
         except Exception as e:
-            logger.error(f"Error in transfer_to_writer: {e}")
+            logger.error(f"Error transferring CV data to writer: {str(e)}")
             logger.error(traceback.format_exc())
             return Response({
-                'error': f'Failed to transfer data: {str(e)}'
+                'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-    @action(detail=False, methods=['post'])
+
+    @action(detail=False, methods=['POST'])
     def analyze(self, request):
         """
         Analyze a CV to provide feedback on content quality and improvement suggestions.
