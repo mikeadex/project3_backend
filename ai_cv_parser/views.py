@@ -73,10 +73,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             logger.error(f"Error extracting text from {file_extension} file: {str(e)}")
             raise
     
-    @action(detail=False, methods=['POST'], url_path='parse')
+    @action(detail=False, methods=['POST'], url_path='parse-cv')
     def parse_cv(self, request):
         """
-        Parse a CV file and extract structured information.
+        Phase 1: Create a CV parsing job and return immediately.
+        This prevents worker timeouts in production.
         """
         try:
             logger.info(f"CV parsing request from user {request.user.username} (ID: {request.user.id})")
@@ -95,66 +96,132 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 user=request.user,
                 file_name=file.name,
                 file_size=file.size,
-                status='processing'
+                status='queued'  # Set initial status as queued
             )
-            logger.info(f"ParsedCV record {parsed_cv.id} created for user {request.user.username} - Status: processing")
+            logger.info(f"ParsedCV record {parsed_cv.id} created for user {request.user.username} - Status: queued")
 
             # Save uploaded file to temporary location
             temp_path = self.save_uploaded_file(file)
             logger.info(f"Saved uploaded file to temporary location: {temp_path}")
 
             try:
-                # Extract text from PDF
+                # Extract text from PDF - this is usually quick enough to do synchronously
                 text = self.extract_text_from_file(temp_path)
                 logger.info(f"Text extracted from document: {len(text)} characters")
 
                 # Update ParsedCV with extracted text
                 parsed_cv.extracted_text = text
+                parsed_cv.temp_file_path = temp_path
+                parsed_cv.status = 'processing'
                 parsed_cv.save()
-                logger.info(f"ParsedCV record {parsed_cv.id} updated for user {request.user.username} - Status: processing")
+                logger.info(f"ParsedCV record {parsed_cv.id} updated with extracted text - Status: processing")
 
-                # Parse CV with DeepSeek
-                parser = DeepSeekService()
+                # Launch async processing in background
+                # We don't wait for this to complete
+                import threading
+                thread = threading.Thread(
+                    target=self._process_parsed_cv_background,
+                    args=(parsed_cv.id,)
+                )
+                thread.daemon = True  # Allow the thread to be terminated when the main process exits
+                thread.start()
                 
-                # Create event loop for async operation
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    parsed_data = loop.run_until_complete(parser.parse_cv(text))
-                    logger.info("Successfully parsed CV with DeepSeek")
-                finally:
-                    loop.close()
+                logger.info(f"Background processing started for ParsedCV ID {parsed_cv.id}")
 
+                # Return immediately with the ID so the client can poll for status
+                return Response({
+                    'id': parsed_cv.id,
+                    'status': 'processing',
+                    'message': 'CV processing started'
+                }, status=status.HTTP_201_CREATED)
+
+            except Exception as e:
+                logger.error(f"Error during initial CV processing: {str(e)}")
+                logger.error(traceback.format_exc())
+                parsed_cv.status = 'failed'
+                parsed_cv.error_message = str(e)
+                parsed_cv.save()
+                
+                # Clean up temporary file if it exists
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                        logger.info(f"Removed temporary file after error: {temp_path}")
+                    except Exception as file_e:
+                        logger.error(f"Error removing temporary file: {str(file_e)}")
+                
+                raise
+
+        except Exception as e:
+            logger.error(f"Unexpected error in parse_cv: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {'error': 'Failed to process CV. Please try again later.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _process_parsed_cv_background(self, parsed_cv_id):
+        """
+        Background task to process a CV.
+        This runs in a separate thread to prevent worker timeouts.
+        """
+        # Set up a new database connection for this thread
+        close_old_connections()
+        
+        try:
+            # Get the ParsedCV object
+            parsed_cv = ParsedCV.objects.get(id=parsed_cv_id)
+            logger.info(f"Starting background processing for ParsedCV ID {parsed_cv_id}")
+            
+            text = parsed_cv.extracted_text
+            temp_path = parsed_cv.temp_file_path
+            
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # Parse CV with DeepSeek - this is the slow operation
+                parser = DeepSeekService()
+                parsed_data = loop.run_until_complete(parser.parse_cv(text))
+                logger.info(f"Successfully parsed CV with DeepSeek for ParsedCV ID {parsed_cv_id}")
+                
                 # Update ParsedCV with parsed data
                 parsed_cv.parsed_data = parsed_data
                 parsed_cv.status = 'completed'
                 parsed_cv.processed_at = timezone.now()
                 parsed_cv.save()
-                logger.info(f"ParsedCV record {parsed_cv.id} updated for user {request.user.username} - Status: completed")
-
-                # Clean up temporary file
-                os.remove(temp_path)
-                logger.info(f"Removed temporary file: {temp_path}")
-
-                return Response({
-                    'status': 'success',
-                    'message': 'CV parsed successfully',
-                    'data': parsed_data
-                })
-
+                logger.info(f"ParsedCV record {parsed_cv_id} updated - Status: completed")
+                
             except Exception as e:
                 logger.error(f"Error parsing CV with DeepSeek: {str(e)}")
+                logger.error(traceback.format_exc())
                 parsed_cv.status = 'failed'
                 parsed_cv.error_message = str(e)
                 parsed_cv.save()
-                raise
-
+            finally:
+                loop.close()
+                
+                # Clean up temporary file
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                        logger.info(f"Removed temporary file: {temp_path}")
+                    except Exception as file_e:
+                        logger.error(f"Error removing temporary file: {str(file_e)}")
+        
         except Exception as e:
-            logger.error(f"Unexpected error in parse_cv: {str(e)}")
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Critical error in background CV processing for ID {parsed_cv_id}: {str(e)}")
+            logger.error(traceback.format_exc())
+            
+            try:
+                # Try to update the record even in case of errors
+                parsed_cv = ParsedCV.objects.get(id=parsed_cv_id)
+                parsed_cv.status = 'failed'
+                parsed_cv.error_message = f"Critical processing error: {str(e)}"
+                parsed_cv.save()
+            except Exception as db_e:
+                logger.error(f"Could not update ParsedCV record after error: {str(db_e)}")
     
     @action(detail=False, methods=['POST'], url_path='transfer-to-writer')
     def transfer_to_writer(self, request):

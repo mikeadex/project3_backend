@@ -13,6 +13,12 @@ class ParsedCV(models.Model):
     # Raw text content
     raw_text = models.TextField(blank=True)
     
+    # Extracted text from document
+    extracted_text = models.TextField(blank=True)
+    
+    # Temporary file path for processing
+    temp_file_path = models.CharField(max_length=512, blank=True)
+    
     # Parsed data - using JSONField for flexibility
     parsed_data = models.JSONField(default=dict, blank=True)
     
@@ -25,6 +31,7 @@ class ParsedCV(models.Model):
     status = models.CharField(max_length=50, default='pending', 
                              choices=[
                                  ('pending', 'Pending'),
+                                 ('queued', 'Queued'),
                                  ('processing', 'Processing'),
                                  ('completed', 'Completed'),
                                  ('failed', 'Failed')
