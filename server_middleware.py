@@ -42,13 +42,42 @@ class EnterpriseMiddleware:
     def _parse_allowed_origins(self):
         """Parse the allowed origins from environment variables"""
         origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+        
+        # Hardcoded production domains for safety
+        hardcoded_origins = [
+            "https://www.ellacvwriter.com",
+            "https://ellacvwriter.com",
+            "https://www.ellacv.com",
+            "https://ellacv.com",
+            "https://ellacvwriter.vercel.app",
+            "https://www.ellacvwriter.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000",
+        ]
+        
+        # Parse origins from environment variable
+        env_origins = []
         if origins_str:
-            return [origin.strip() for origin in origins_str.split(',')]
-        return []
+            env_origins = [origin.strip() for origin in origins_str.split(',')]
+            
+        # Combine both lists, ensuring no duplicates
+        combined_origins = list(set(hardcoded_origins + env_origins))
+        
+        return combined_origins
     
     def _is_origin_allowed(self, origin):
         """Check if the origin is allowed"""
-        # In production with specific origins
+        # Always allow localhost and ellacv.com domains without needing to check the list
+        if origin and (
+            "localhost" in origin or 
+            "127.0.0.1" in origin or 
+            "ellacv.com" in origin or 
+            "ellacvwriter.com" in origin or
+            "ellacvwriter.vercel.app" in origin
+        ):
+            return True
+            
+        # For other origins, check against the allowed list
         if self.allowed_origins and origin:
             return origin in self.allowed_origins
             
@@ -59,6 +88,21 @@ class EnterpriseMiddleware:
         """Get CORS headers for the given environment"""
         origin = environ.get('HTTP_ORIGIN', '')
         
+        # For production domains, always return proper CORS headers
+        if origin and (
+            "ellacv.com" in origin or 
+            "ellacvwriter.com" in origin or
+            "ellacvwriter.vercel.app" in origin
+        ):
+            return [
+                ('Access-Control-Allow-Origin', origin),  # Must specify exact origin when credentials=true
+                ('Access-Control-Allow-Credentials', 'true'),
+                ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
+                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control'),
+                ('Access-Control-Max-Age', '86400'),  # 24 hours cache
+                ('Vary', 'Origin'),  # Important for caching with varied origins
+            ]
+        
         # Default CORS headers for all responses
         cors_headers = [
             ('Vary', 'Origin'),  # Important for caching
@@ -66,11 +110,17 @@ class EnterpriseMiddleware:
         
         # If origin is allowed or we're in permissive mode
         if self._is_origin_allowed(origin) or not self.allowed_origins:
+            # When credentials are allowed, you cannot use wildcard origin
+            cors_origin_value = origin if origin else '*'
+            
+            # If using credentials and origin is wildcard, don't set credentials=true
+            credentials_value = 'true' if origin else 'false'
+            
             cors_headers.extend([
-                ('Access-Control-Allow-Origin', origin or '*'),
-                ('Access-Control-Allow-Credentials', 'true'),
+                ('Access-Control-Allow-Origin', cors_origin_value),
+                ('Access-Control-Allow-Credentials', credentials_value),
                 ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
-                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept'),
+                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control'),
                 ('Access-Control-Max-Age', '86400'),  # 24 hours cache
             ])
         
@@ -122,7 +172,30 @@ class EnterpriseMiddleware:
         
         # Handle OPTIONS requests for preflight CORS immediately
         if request_method == 'OPTIONS':
-            logger.info(f"[{request_id}] Handling preflight request")
+            logger.info(f"[{request_id}] Handling preflight request to {path_info}")
+            
+            # Special handling for production domains to ensure CORS works
+            if origin and (
+                "ellacv.com" in origin or 
+                "ellacvwriter.com" in origin or
+                "ellacvwriter.vercel.app" in origin
+            ):
+                # For known production domains, always allow with specific origin
+                headers = [
+                    ('Content-Type', 'text/plain'),
+                    ('Access-Control-Allow-Origin', origin),
+                    ('Access-Control-Allow-Credentials', 'true'),
+                    ('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
+                    ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control'),
+                    ('Access-Control-Max-Age', '86400'),  # 24 hours
+                    ('Vary', 'Origin'),  # Important for caching
+                ]
+                
+                logger.info(f"[{request_id}] Production domain preflight response for {origin}")
+                start_response('200 OK', headers)
+                return [b'']
+            
+            # Standard preflight handling for other domains
             headers = [('Content-Type', 'text/plain')]
             
             # Get CORS headers
@@ -136,7 +209,7 @@ class EnterpriseMiddleware:
                     
             start_response('200 OK', headers)
             return [b'']
-            
+        
         # Start timing the request
         start_time = time.time()
         
