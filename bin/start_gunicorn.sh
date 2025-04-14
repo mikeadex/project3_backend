@@ -1,4 +1,4 @@
 #!/bin/bash
 
-# Start Gunicorn process
-exec gunicorn ella_writer.wsgi:application --bind 0.0.0.0:$PORT
+# Start Gunicorn process with config file
+exec gunicorn ella_writer.wsgi:application -c /app/gunicorn.conf.py

@@ -22,13 +22,13 @@ class DeepSeekService:
         self.api_url = os.environ.get('DEEPSEEK_API_URL', 'https://api.deepseek.com/v1')
         self.model = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
         
-        # Extended timeout settings for larger documents
-        self.connect_timeout = 20  # Increased from 10
-        self.read_timeout = 120    # Increased from 50
+        # Extended timeout settings for production
+        self.connect_timeout = 30  # Increased from 20
+        self.read_timeout = 180    # Increased from 120
         
         # Initialize session with retry functionality
         retry_strategy = Retry(
-            total=3,  # Maximum number of retries
+            total=5,  # Increased from 3
             backoff_factor=2,  # Exponential backoff
             status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
             allowed_methods=["POST"]
