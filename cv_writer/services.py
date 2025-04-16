@@ -871,7 +871,8 @@ class LlamaAPIService:
             "Maintain the original information while enhancing the language and presentation."
         )
         
-        user_prompt = f"""Please improve the following text to make it more effective for a CV or resume:
+        user_prompt = f"""
+        Please improve the following text to make it more effective for a CV or resume:
 
 {text}
 
@@ -1121,106 +1122,6 @@ Return only the improved version without any additional explanations."""
         logger.error("All LLM services failed to generate response")
         return ""
 
-    def improve_cv(self, cv_id):
-        """
-        Improve different sections of a CV using the ResilientLLMService.
-        
-        Args:
-            cv_id (int): ID of the CV to improve
-        """
-        try:
-            # Retrieve CV
-            cv = CvWriter.objects.get(id=cv_id)
-            
-            # Improvement tracking
-            improvement_record = CVImprovement.objects.create(cv=cv)
-            
-            # Pre-process sections
-            sections_to_improve = {
-                'professional_summary': cv.professional_summary,
-                'experience': cv.experience_description,
-                'skills': cv.skills
-            }
-            
-            # Pre-processing function to remove generic phrases
-            def preprocess_content(content, section_type):
-                if not content:
-                    return content
-                
-                # Remove "As a" and "As an" for professional summary
-                if section_type == 'professional_summary':
-                    content = content.replace('As a ', '', 1)
-                    content = content.replace('As an ', '', 1)
-                    content = content.strip()
-                
-                return content
-            
-            # Improve each section
-            for section_type, content in sections_to_improve.items():
-                if not content:
-                    continue
-                
-                # Pre-process content
-                preprocessed_content = preprocess_content(content, section_type)
-                
-                # Prepare prompt
-                prompt_template = self.improvement_prompts.get(section_type, {}).get('template')
-                if not prompt_template:
-                    logger.warning(f"No improvement template for section: {section_type}")
-                    continue
-                
-                # Format prompt with industry and content
-                prompt = prompt_template.format(
-                    industry='technology',  # Default to technology, can be dynamic
-                    content=preprocessed_content
-                )
-                
-                # Attempt improvement with primary service
-                try:
-                    improved_text = self.primary_service.improve_text(prompt)
-                    
-                    # Fallback to secondary service if primary fails
-                    if not improved_text and hasattr(self, 'fallback_service'):
-                        improved_text = self.fallback_service.improve_text(prompt)
-                    
-                    if not improved_text:
-                        logger.error(f"Failed to improve {section_type}")
-                        continue
-                    
-                    # Update CV section
-                    if section_type == 'professional_summary':
-                        cv.professional_summary = improved_text
-                    elif section_type == 'experience':
-                        cv.experience_description = improved_text
-                    elif section_type == 'skills':
-                        cv.skills = improved_text
-                    
-                    # Log improvement
-                    logger.info(f"Successfully improved {section_type}")
-                
-                except Exception as e:
-                    logger.error(f"Error improving {section_type}: {str(e)}")
-            
-            # Save updated CV
-            cv.save()
-            
-            # Update improvement record
-            improvement_record.status = 'success'
-            improvement_record.save()
-            
-            return {
-                'status': 'success',
-                'cv_id': cv_id,
-                'sections_improved': list(sections_to_improve.keys())
-            }
-        
-        except Exception as e:
-            logger.error(f"CV Improvement Error: {str(e)}")
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
-
     def _improve_section(self, section: str, content: Dict) -> Dict:
         """Improves a specific section using available LLM."""
         try:
@@ -1448,7 +1349,6 @@ Return only the improved version without any additional explanations."""
                         enhanced_cv[section_name] = improved_content if improved_content else section_content
                     except Exception as e:
                         logger.error(f"Error enhancing {section_name}: {str(e)}")
-                        enhanced_cv[section_name] = section_content
                         
                 elif isinstance(section_content, list):
                     # For list sections like experience, education, skills, etc.
@@ -1797,3 +1697,288 @@ CV TEXT:
             result.append("===========")
         
         return '\n'.join(result)
+
+def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=None):
+    """
+    Save rewritten CV data to appropriate database tables
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Saving rewritten CV data for user {user.id}")
+    
+    # Create CV Writer instance if not provided
+    if not cv_writer_instance:
+        logger.info("No CV Writer instance provided, creating new one")
+        # First, check if user already has CvWriter instances and how many
+        existing_cvs = CvWriter.objects.filter(user=user)
+        cv_count = existing_cvs.count()
+        
+        if cv_count > 0:
+            # Use the first CV instead of creating a new one if any exist
+            logger.info(f"User has {cv_count} existing CVs, using the first one")
+            cv_writer_instance = existing_cvs.first()
+            cv_writer_instance.status = 'completed'
+            cv_writer_instance.save()
+        else:
+            # Create a new one if none exist
+            logger.info("Creating brand new CV for user")
+            cv_writer_instance = CvWriter.objects.create(
+                user=user,
+                status='completed'
+            )
+    
+    # Check if rewritten_cv_data contains expected keys
+    if not rewritten_cv_data or not isinstance(rewritten_cv_data, dict):
+        logger.error("Invalid rewritten CV data format")
+        return None
+    
+    # Save professional summary (if present)
+    try:
+        if 'professional_summary' in rewritten_cv_data:
+            logger.info("Processing professional summary")
+            summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
+            
+            # First check if a summary already exists for this user and cv
+            existing_summary = ProfessionalSummary.objects.filter(
+                user=user,
+                cv=cv_writer_instance
+            ).first()
+            
+            if existing_summary:
+                logger.info(f"Updating existing professional summary for user {user.id}")
+                existing_summary.summary = summary_text
+                existing_summary.save()
+            else:
+                logger.info(f"Creating new professional summary for user {user.id}")
+                ProfessionalSummary.objects.create(
+                    user=user,
+                    cv=cv_writer_instance,
+                    summary=summary_text
+                )
+    except Exception as e:
+        logger.error(f"Error saving professional summary: {str(e)}")
+    
+    # Save experience data (if present)
+    try:
+        if 'experience' in rewritten_cv_data and isinstance(rewritten_cv_data['experience'], list):
+            logger.info(f"Processing {len(rewritten_cv_data['experience'])} experience items")
+            
+            # Use update_or_create approach instead of deleting existing records
+            for exp_data in rewritten_cv_data['experience']:
+                # Clean potential AI text in description
+                if 'description' in exp_data:
+                    exp_data['description'] = clean_ai_text(exp_data['description'])
+                
+                # Extract necessary fields with defaults
+                company_name = exp_data.get('company_name', '')
+                job_title = exp_data.get('job_title', '')
+                
+                # Skip this entry if company_name or job_title is empty
+                if not company_name or not job_title:
+                    logger.warning(f"Skipping experience entry with empty company or job title: {exp_data}")
+                    continue
+                
+                # Clean up date fields
+                start_date = exp_data.get('start_date', '')
+                end_date = exp_data.get('end_date', '')
+                description = exp_data.get('description', '')
+                
+                # Format for unique identification - prevents duplicate entries
+                # This uses the company and title (and optionally dates) as unique identifiers
+                defaults = {
+                    'description': description,
+                }
+                
+                # Add dates to defaults if they exist
+                if start_date:
+                    defaults['start_date'] = start_date
+                if end_date:
+                    defaults['end_date'] = end_date
+                
+                # Use update_or_create to update if exists, create if not
+                try:
+                    # Try to find an exact match first
+                    experience, created = Experience.objects.update_or_create(
+                        user=user,
+                        cv=cv_writer_instance,
+                        company_name=company_name,
+                        job_title=job_title,
+                        defaults=defaults
+                    )
+                    
+                    if created:
+                        logger.info(f"Created new experience record: {company_name}, {job_title}")
+                    else:
+                        logger.info(f"Updated existing experience record: {company_name}, {job_title}")
+                        
+                except Exception as inner_e:
+                    logger.error(f"Error processing experience entry: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing experience section: {str(e)}")
+    
+    # Save education data (if present)
+    try:
+        if 'education' in rewritten_cv_data and isinstance(rewritten_cv_data['education'], list):
+            logger.info(f"Processing {len(rewritten_cv_data['education'])} education items")
+            
+            for edu_data in rewritten_cv_data['education']:
+                # Clean potential AI text in description
+                if 'description' in edu_data:
+                    edu_data['description'] = clean_ai_text(edu_data['description'])
+                
+                # Extract necessary fields with defaults
+                school_name = edu_data.get('school_name', '')
+                degree = edu_data.get('degree', '')
+                
+                # Make sure field_of_study is not null
+                field_of_study = edu_data.get('field', '')
+                if not field_of_study and edu_data.get('field_of_study'):
+                    field_of_study = edu_data.get('field_of_study')
+                elif not field_of_study and degree:
+                    # Try to extract field from degree if possible
+                    field_of_study = degree
+                elif not field_of_study:
+                    # Default value if nothing else is available
+                    field_of_study = "General"
+                
+                # Skip this entry if school_name is empty
+                if not school_name:
+                    logger.warning(f"Skipping education entry with empty school name: {edu_data}")
+                    continue
+                    
+                # Make sure degree has at least some value
+                if not degree:
+                    degree = "Degree"
+                
+                # Clean up date fields
+                start_date = edu_data.get('start_date', '')
+                end_date = edu_data.get('end_date', '')
+                description = edu_data.get('description', '')
+                
+                # Format for unique identification
+                defaults = {
+                    'description': description,
+                    'field_of_study': field_of_study
+                }
+                
+                # Add dates to defaults if they exist
+                if start_date:
+                    defaults['start_date'] = start_date
+                if end_date:
+                    defaults['end_date'] = end_date
+                
+                # Use update_or_create to update if exists, create if not
+                try:
+                    education, created = Education.objects.update_or_create(
+                        user=user,
+                        cv=cv_writer_instance,
+                        school_name=school_name,
+                        degree=degree,
+                        defaults=defaults
+                    )
+                    
+                    if created:
+                        logger.info(f"Created new education record: {school_name}, {degree}")
+                    else:
+                        logger.info(f"Updated existing education record: {school_name}, {degree}")
+                        
+                except Exception as inner_e:
+                    logger.error(f"Error processing education entry: {str(inner_e)}, Data: {edu_data}")
+    except Exception as e:
+        logger.error(f"Error processing education section: {str(e)}")
+    
+    # Return the CV writer instance
+    return cv_writer_instance
+
+def clean_ai_text(text):
+    """Helper function to remove AI explanatory text from content"""
+    if not isinstance(text, str):
+        return text
+            
+    # Handle the specific patterns mentioned in the examples
+    specific_start_patterns = [
+        r"^Here is (?:an improved|a rewritten|the improved) (?:version of )?(?:the )?(?:professional summary|job description|summary|experience|education|certification|skills?|language):\s*",
+        r"^Below is (?:an improved|a rewritten|the improved) (?:version of )?(?:the )?(?:professional summary|job description|summary|experience|education|certification|skills?|language):\s*",
+        r"^I've (?:improved|rewritten|enhanced) (?:the )?(?:professional summary|job description|summary|experience|education|certification|skills?|language):\s*",
+    ]
+    
+    for pattern in specific_start_patterns:
+        if re.match(pattern, text, re.IGNORECASE):
+            # Remove the starting phrase
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+            
+    # Also look for this pattern in the middle of the text (e.g., "... content. Here is the improved job description:")
+    middle_patterns = [
+        r"\.\s*Here is (?:an improved|a rewritten|the improved) (?:version of )?(?:the )?(?:professional summary|job description|summary|experience|education|certification|skills?|language):\s*",
+        r"\.\s*Below is (?:an improved|a rewritten|the improved) (?:version of )?(?:the )?(?:professional summary|job description|summary|experience|education|certification|skills?|language):\s*",
+    ]
+    
+    for pattern in middle_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            # Split at the pattern and take only the content after it
+            # This handles the case where we have real content, then an explanation phrase, then more real content
+            parts = re.split(pattern, text, flags=re.IGNORECASE)
+            if len(parts) > 1:
+                text = parts[-1]  # Take the last part after all splits
+        
+    # Sometimes we just need to extract the first paragraph since that's the actual content
+    paragraphs = text.split('\n\n')
+    
+    # Common explanation markers to detect
+    explanation_markers = [
+        "keyword", "action verb", "industry-specific", 
+        "measurable result", "ats compat", "professional tone",
+        "clarity", "impact", "explanation", "breakdown", 
+        "analysis", "improvement", "enhance", "optimize"
+    ]
+    
+    # Check for the simplest case - if we have a line that says "Keyword-rich action verbs:" or similar
+    # just take everything before it
+    for marker in explanation_markers:
+        pattern = re.compile(f".*{marker}.*:", re.IGNORECASE)
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if pattern.match(line):
+                # Found a line that looks like an explanation header
+                # Take everything before this line
+                return '\n'.join(lines[:i]).strip()
+    
+    # Remove common AI explanation patterns at the beginning
+    start_patterns = [
+        r"^Sure,\s+here's\s+.*?:\s*",
+        r"^Here's\s+.*?:\s*",
+        r"^I've\s+.*?:\s*",
+        r"^Below\s+is\s+.*?:\s*",
+        r"^Here\s+is\s+.*?:\s*",
+        r"^As\s+requested,\s+.*?:\s*",
+    ]
+    
+    cleaned_text = text
+    for pattern in start_patterns:
+        cleaned_text = re.sub(pattern, "", cleaned_text, flags=re.IGNORECASE)
+    
+    # Check for bullet points - ANY bullet point could indicate we're in the explanation section
+    # Look for the first bullet point and take everything before it
+    bullet_pattern = r"\n[\*\-•]"
+    bullet_match = re.search(bullet_pattern, cleaned_text)
+    if bullet_match:
+        # We found a bullet point - take everything before it
+        cleaned_text = cleaned_text[:bullet_match.start()].strip()
+        return cleaned_text
+            
+    # If we get here, we don't have simple markers or bullets
+    # Just take the first paragraph, which is usually the main content
+    if len(paragraphs) > 1:
+        # Check if paragraphs after the first contain explanation markers
+        contains_explanation = False
+        for p in paragraphs[1:]:
+            if any(marker.lower() in p.lower() for marker in explanation_markers):
+                contains_explanation = True
+                break
+                    
+        if contains_explanation:
+            cleaned_text = paragraphs[0]
+                
+    # Remove quotes if they wrap the entire text
+    cleaned_text = cleaned_text.strip('"\'')
+    
+    return cleaned_text.strip()

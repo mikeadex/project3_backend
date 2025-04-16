@@ -563,9 +563,6 @@ def rewrite_cv(request):
                 # Allow some time for the frontend to show the first stage
                 time.sleep(1)
                 
-                # Initialize services
-                deepseek_service = DeepSeekService()
-                
                 # STAGE 1: Initial Analysis - DeepSeek
                 try:
                     # Update session for stage 1 completion
@@ -578,7 +575,7 @@ def rewrite_cv(request):
                     session.save()
                     
                     # Process initial rewrite with DeepSeek
-                    cv_rewrite_service = CVRewriteService(deepseek_service=deepseek_service)
+                    cv_rewrite_service = CVRewriteService(deepseek_service=DeepSeekService())
                     initial_result = cv_rewrite_service.rewrite_cv_sync(processed_cv_data, user)
                     
                     # Log the structure of the initial result for debugging
@@ -699,8 +696,23 @@ def rewrite_cv(request):
                     
                     # Store the new CV ID in the session
                     new_cv_id = enhanced_result.get('new_cv_id') or initial_result.get('new_cv_id')
+                    
+                    # Save the rewritten CV data to the database
+                    try:
+                        from .services import save_rewritten_cv_to_database
+                        rewritten_cv = save_rewritten_cv_to_database(final_result['rewritten_cv'], user)
+                        
+                        # Add the CV writer ID to the result
+                        final_result['cv_writer_id'] = str(rewritten_cv.id)
+                        session.result = final_result
+                        
+                        logger.info(f"Saved rewritten CV data to database tables with CV ID: {rewritten_cv.id}")
+                    except Exception as save_error:
+                        logger.error(f"Error saving rewritten CV to database tables: {str(save_error)}")
+                        # Continue with the process, don't fail the entire request
+                    
                     if new_cv_id:
-                        session.new_cv_id = new_cv_id
+                        final_result['new_cv_id'] = new_cv_id
                         
                     session.save()
                     
@@ -770,6 +782,10 @@ def save_rewritten_cv(request):
         session_id = request.data.get('session_id')
         personal_info = request.data.get('personal_info', {})
         
+        # Log the request data for debugging
+        logger = logging.getLogger('cv_writer')
+        logger.info(f"Save rewritten CV request: session_id={session_id}, personal_info={personal_info}")
+        
         if not session_id:
             return Response(
                 {'error': 'Session ID is required'}, 
@@ -785,6 +801,7 @@ def save_rewritten_cv(request):
                 id=session_id,
                 user=request.user
             )
+            logger.info(f"Found rewrite session: {rewrite_session.id}, status: {rewrite_session.status}, new_cv_id: {rewrite_session.new_cv_id}")
         except CVRewriteSession.DoesNotExist:
             return Response(
                 {'error': 'Rewrite session not found'}, 
@@ -800,19 +817,45 @@ def save_rewritten_cv(request):
             
         # Check if the session has a new CV ID already
         if not rewrite_session.new_cv_id:
-            return Response(
-                {'error': 'Rewrite session does not have a new CV ID'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            # If no new CV ID exists, try to create a new CV using session result
+            from .services import save_rewritten_cv_to_database
             
-        # Get the CV by ID
-        try:
-            new_cv = CvWriter.objects.get(id=rewrite_session.new_cv_id)
-        except CvWriter.DoesNotExist:
-            return Response(
-                {'error': 'Could not find the rewritten CV. It may have been deleted.'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+            # Check if the result contains rewritten CV data
+            session_result = rewrite_session.result
+            if isinstance(session_result, dict) and 'rewritten_cv' in session_result:
+                try:
+                    logger.info(f"Creating new CV from rewrite session result")
+                    cv_writer_instance = save_rewritten_cv_to_database(session_result['rewritten_cv'], request.user)
+                    
+                    # Update the rewrite session with the new CV ID
+                    rewrite_session.new_cv_id = cv_writer_instance.id
+                    rewrite_session.save()
+                    
+                    logger.info(f"Created new CV with ID: {cv_writer_instance.id}")
+                    
+                    # Continue with the existing CV now that we've created one
+                    new_cv = cv_writer_instance
+                except Exception as e:
+                    logger.error(f"Error creating new CV: {str(e)}", exc_info=True)
+                    return Response(
+                        {'error': f'Could not create a new CV from rewrite data: {str(e)}'}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            else:
+                logger.error(f"Rewrite session does not have rewritten_cv data in result: {session_result}")
+                return Response(
+                    {'error': 'Rewrite session does not have a new CV ID and no rewritten CV data available'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # Get the CV by ID
+            try:
+                new_cv = CvWriter.objects.get(id=rewrite_session.new_cv_id)
+            except CvWriter.DoesNotExist:
+                return Response(
+                    {'error': 'Could not find the rewritten CV. It may have been deleted.'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
         # Make sure the CV belongs to the requesting user
         if new_cv.user != request.user:
@@ -863,7 +906,8 @@ def save_rewritten_cv(request):
         }, status=status.HTTP_200_OK)
         
     except Exception as e:
-        logging.error(f"Error saving rewritten CV: {str(e)}", exc_info=True)
+        logger = logging.getLogger('cv_writer')
+        logger.error(f"Error saving rewritten CV: {str(e)}", exc_info=True)
         return Response(
             {'error': f'An unexpected error occurred: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
