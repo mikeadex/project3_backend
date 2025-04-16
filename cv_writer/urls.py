@@ -7,6 +7,19 @@ urlpatterns = [
     path('cv/improve_summary/', views.improve_summary, name='improve_summary'),
     path('cv/rewrite/', views.rewrite_cv, name='rewrite_cv'),
     path('cv/improvements/<int:cv_id>/', views.get_cv_improvements, name='cv-improvements'),
+    
+    # CV Rewrite Endpoints - direct paths with no 'cv/' prefix
+    path('rewrite-cv/', views.initiate_rewrite_cv, name='initiate-rewrite-cv'),
+    path('rewrite-cv/status/<str:session_id>/', views.rewrite_cv_status, name='rewrite-cv-status'),
+    
+    # Additional rewrite endpoints to match frontend requests
+    path('rewrite/status/<str:session_id>/', views.rewrite_cv_status, name='rewrite-status'),
+    
+    # CV comparison endpoint
+    path('rewrite/compare/<str:session_id>/', views.compare_rewritten_cv, name='compare-rewritten-cv'),
+    
+    # Save rewritten CV endpoint
+    path('rewritten-cv/save/', views.save_rewritten_cv, name='save-rewritten-cv'),
 
     # Base CV endpoints
     path('cv/', views.CvWriterListCreate.as_view(), name='cv-list-create'),

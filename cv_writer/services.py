@@ -377,7 +377,7 @@ class LocalLlamaAPIService:
                     extracted_parts = []
                     
                     # Always include the beginning (personal info, headers, etc.)
-                    beginning = cv_text[:min(3000, len(cv_text))]
+                    beginning = cv_text[:3000]
                     extracted_parts.append(beginning)
                     
                     # Find important sections using regex
@@ -786,6 +786,99 @@ CV TEXT:
         
         return '\n'.join(result)
 
+class LlamaAPIService:
+    """Service for interacting with the LLaMA API directly"""
+    
+    def __init__(self):
+        self.api_key = settings.LLAMA_API_KEY
+        if not self.api_key:
+            raise ValueError("LLaMA API key not found")
+            
+        self.api_url = os.environ.get('LLAMA_API_URL', "https://api.llama.cloud/v1/chat/completions")
+        self.model = os.environ.get('LLAMA_MODEL', "llama-3-70b-instruct")  # Can be configured
+        self.headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        logger.info("LLaMA API initialized successfully")
+    
+    def generate_with_system_prompt(self, system_prompt, user_prompt, timeout=30):
+        """
+        Generate text with a system prompt and user prompt
+        
+        Args:
+            system_prompt (str): System prompt for the LLM
+            user_prompt (str): User prompt for the LLM
+            timeout (int): Request timeout in seconds
+            
+        Returns:
+            str: Generated text
+        """
+        try:
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+            
+            start_time = time.time()
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                timeout=timeout
+            )
+            
+            elapsed_time = time.time() - start_time
+            logger.info(f"LLaMA API request took {elapsed_time:.2f} seconds")
+            
+            if response.status_code != 200:
+                logger.error(f"LLaMA API error: {response.status_code} - {response.text}")
+                return None
+                
+            data = response.json()
+            if 'choices' in data and len(data['choices']) > 0:
+                return data['choices'][0]['message']['content'].strip()
+            else:
+                logger.error(f"Unexpected LLaMA API response format: {data}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error calling LLaMA API: {str(e)}")
+            logger.debug(traceback.format_exc())
+            return None
+    
+    def improve_text(self, text, timeout=30):
+        """
+        Improve text using LLaMA API
+        
+        Args:
+            text (str): Text to improve
+            timeout (int): Request timeout in seconds
+            
+        Returns:
+            str: Improved text
+        """
+        system_prompt = (
+            "You are an expert CV and resume writer. Your task is to improve the provided text "
+            "to make it more professional, impactful, and effective for job applications. "
+            "Focus on using powerful action verbs, quantifiable achievements, and relevant keywords. "
+            "Maintain the original information while enhancing the language and presentation."
+        )
+        
+        user_prompt = f"""Please improve the following text to make it more effective for a CV or resume:
+
+{text}
+
+Return only the improved version without any additional explanations or formatting."""
+
+        return self.generate_with_system_prompt(system_prompt, user_prompt, timeout)
+
 class CVImprovementService:
     """
     Service for improving CV text using various LLM services
@@ -846,6 +939,15 @@ class CVImprovementService:
         else:
             self.groq_service = None
 
+        # Initialize LLaMA API if available
+        try:
+            self.llama_service = LlamaAPIService()
+            self.available_services.append(self.llama_service)
+            self._initialized_services.append("Llama")
+        except Exception as e:
+            logger.warning(f"Failed to initialize LLaMA API: {str(e)}")
+            self.llama_service = None
+
         # Initialize DeepSeek for segmentation if enabled
         if use_deepseek:
             try:
@@ -878,7 +980,7 @@ class CVImprovementService:
             self.fallback_service = self.primary_service
             
         logger.info(f"Initialized CV Improvement Service with services: {', '.join(self._initialized_services)}")
-        
+
     def generate_improved_text(self, text, system_prompt=None, timeout=60):
         """
         Generate an improved version of the provided text
@@ -1172,6 +1274,264 @@ Return only the improved version without any additional explanations."""
         
         # Return industry with most matches, default to technology
         return max(matches.items(), key=lambda x: x[1])[0] if any(matches.values()) else "technology"
+
+    def enhance_rewrite(self, initial_rewrite, user=None):
+        """
+        Enhance a CV rewrite from DeepSeek using LLaMA or other available LLM services.
+        
+        Args:
+            initial_rewrite (dict): The initial CV rewrite from DeepSeek
+            user (User): The user who owns the CV
+            
+        Returns:
+            dict: Enhanced CV rewrite with improvements
+        """
+        logger.info("Enhancing CV rewrite with LLaMA")
+        
+        if not initial_rewrite or not isinstance(initial_rewrite, dict):
+            logger.error("Invalid initial rewrite data")
+            return {
+                'status': 'error',
+                'message': 'Invalid initial rewrite data',
+                'rewritten_cv': {}
+            }
+            
+        try:
+            # Preserve the new CV ID from the initial rewrite
+            new_cv_id = initial_rewrite.get('new_cv_id')
+            
+            # Extract the rewritten CV data from the initial rewrite
+            # This could be in 'rewritten_cv' or 'improved_sections' based on structure
+            rewritten_cv = initial_rewrite.get('rewritten_cv', {})
+            if not rewritten_cv and 'improved_sections' in initial_rewrite:
+                rewritten_cv = initial_rewrite.get('improved_sections', {})
+                
+            if not rewritten_cv:
+                logger.error("No rewritten CV data found in initial rewrite")
+                
+                # Try to use the original input data if available
+                if 'input_data' in initial_rewrite:
+                    logger.info("Using input_data as fallback for enhancement")
+                    rewritten_cv = initial_rewrite.get('input_data', {})
+                else:
+                    # Return error but still pass through the CV ID
+                    return {
+                        'status': 'error',
+                        'message': 'No rewritten CV data found in initial rewrite',
+                        'rewritten_cv': {},
+                        'new_cv_id': new_cv_id  # Pass through the CV ID even if enhancement fails
+                    }
+            
+            # Create an enhanced version of the CV
+            enhanced_cv = {}
+            
+            # Check if we need to generate a professional summary
+            if ('professional_summary' not in rewritten_cv or 
+                not rewritten_cv.get('professional_summary') or 
+                (isinstance(rewritten_cv.get('professional_summary'), str) and not rewritten_cv['professional_summary'].strip())):
+                
+                logger.info("No professional summary found, generating one based on experience")
+                
+                # Extract experience information to use as context
+                experiences = rewritten_cv.get('experiences', [])
+                experience_text = ""
+                
+                if experiences and isinstance(experiences, list) and len(experiences) > 0:
+                    # Build a text representation of experiences to use as context
+                    for exp in experiences[:3]:  # Use up to 3 most recent experiences
+                        if isinstance(exp, dict):
+                            job_title = exp.get('job_title', '')
+                            company = exp.get('company', '')
+                            description = exp.get('description', '')
+                            
+                            if job_title and company:
+                                experience_text += f"- {job_title} at {company}\n"
+                                if description:
+                                    # Add a short excerpt from the description
+                                    excerpt = description[:150] + "..." if len(description) > 150 else description
+                                    experience_text += f"  {excerpt}\n\n"
+                
+                # Also include skills if available
+                skills = rewritten_cv.get('skills', [])
+                skills_text = ""
+                
+                if skills and isinstance(skills, list) and len(skills) > 0:
+                    skills_text = "Skills include: "
+                    skill_names = []
+                    
+                    for skill in skills[:10]:  # Use up to 10 skills
+                        if isinstance(skill, dict) and 'name' in skill:
+                            skill_names.append(skill['name'])
+                        elif isinstance(skill, str):
+                            skill_names.append(skill)
+                    
+                    skills_text += ", ".join(skill_names)
+                
+                # Get personal info for context
+                personal_info = rewritten_cv.get('personal_info', {})
+                job_title = personal_info.get('job_title', '')
+                industry = personal_info.get('industry', 'technology')
+                
+                # Generate a professional summary using LLM
+                system_prompt = """
+                You are an expert CV writer specializing in creating compelling professional summaries.
+                Based on the provided experience and skills information, craft a concise and impactful
+                professional summary (3-4 sentences) that highlights the candidate's strengths,
+                experience level, and value proposition.
+                
+                Guidelines:
+                1. Start with a strong professional identity statement
+                2. Highlight key expertise areas and experience level
+                3. Include relevant skills and accomplishments
+                4. End with a value proposition
+                5. Use active voice and powerful language
+                6. Keep it under 100 words
+                7. Make it ATS-friendly with industry keywords
+                
+                Only return the summary text, nothing else.
+                """
+                
+                user_prompt = f"""
+                Create a professional summary for a {job_title or 'professional'} in the {industry} industry.
+                
+                Experience:
+                {experience_text}
+                
+                {skills_text}
+                """
+                
+                try:
+                    generated_summary = self.generate_response(system_prompt, user_prompt)
+                    
+                    if generated_summary:
+                        logger.info(f"Successfully generated professional summary")
+                        # Add to the enhanced CV
+                        enhanced_cv['professional_summary'] = generated_summary.strip()
+                    else:
+                        logger.warning("Failed to generate professional summary")
+                except Exception as e:
+                    logger.error(f"Error generating professional summary: {str(e)}")
+            
+            # Process each section of the CV
+            for section_name, section_content in rewritten_cv.items():
+                if section_name == 'personal_info':
+                    # Don't modify personal info
+                    enhanced_cv[section_name] = section_content
+                    continue
+                    
+                # Skip empty sections
+                if not section_content:
+                    enhanced_cv[section_name] = section_content
+                    continue
+                
+                # Enhance this section
+                if isinstance(section_content, str):
+                    # For string sections like professional_summary
+                    system_prompt = f"""
+                    You are an expert CV writer specializing in enhancing professional {section_name.replace('_', ' ')}.
+                    Your task is to review and improve the following {section_name.replace('_', ' ')} section of a CV.
+                    Focus on:
+                    1. Using powerful action verbs and industry-specific keywords
+                    2. Highlighting accomplishments with measurable results
+                    3. Ensuring ATS compatibility and optimizing for keyword matching
+                    4. Maintaining a professional and concise tone
+                    5. Enhancing clarity and impact
+                    
+                    Only return the improved text, nothing else.
+                    """
+                    
+                    user_prompt = f"Here is the {section_name.replace('_', ' ')} to improve:\n\n{section_content}"
+                    
+                    try:
+                        improved_content = self.generate_response(system_prompt, user_prompt)
+                        # Fallback to original if enhancement failed
+                        enhanced_cv[section_name] = improved_content if improved_content else section_content
+                    except Exception as e:
+                        logger.error(f"Error enhancing {section_name}: {str(e)}")
+                        enhanced_cv[section_name] = section_content
+                        
+                elif isinstance(section_content, list):
+                    # For list sections like experience, education, skills, etc.
+                    enhanced_items = []
+                    
+                    for item in section_content:
+                        if not isinstance(item, dict):
+                            enhanced_items.append(item)
+                            continue
+                            
+                        # Enhance each item based on section type
+                        if section_name in ['experience', 'work_experience', 'jobs']:
+                            # Enhance job descriptions
+                            if 'description' in item and item['description']:
+                                system_prompt = """
+                                You are an expert CV writer specializing in enhancing professional job descriptions.
+                                Your task is to improve the following job description to be more impactful for a CV.
+                                Focus on:
+                                1. Using powerful action verbs and industry-specific keywords
+                                2. Highlighting accomplishments with measurable results
+                                3. Ensuring ATS compatibility
+                                4. Converting passive voice to active voice
+                                5. Quantifying achievements where possible
+                                
+                                Only return the improved text, nothing else.
+                                """
+                                
+                                user_prompt = f"Here is the job description to improve:\n\n{item['description']}"
+                                
+                                try:
+                                    improved_description = self.generate_response(system_prompt, user_prompt)
+                                    if improved_description:
+                                        item['description'] = improved_description
+                                except Exception as e:
+                                    logger.error(f"Error enhancing job description: {str(e)}")
+                        
+                        elif section_name in ['education', 'qualifications']:
+                            # Enhance education descriptions
+                            if 'description' in item and item['description']:
+                                system_prompt = """
+                                You are an expert CV writer specializing in enhancing education sections.
+                                Your task is to improve the following education description to be more impactful.
+                                Focus on:
+                                1. Highlighting relevant coursework and achievements
+                                2. Emphasizing skills gained during education
+                                3. Making the description more concise and impactful
+                                
+                                Only return the improved text, nothing else.
+                                """
+                                
+                                user_prompt = f"Here is the education description to improve:\n\n{item['description']}"
+                                
+                                try:
+                                    improved_description = self.generate_response(system_prompt, user_prompt)
+                                    if improved_description:
+                                        item['description'] = improved_description
+                                except Exception as e:
+                                    logger.error(f"Error enhancing education description: {str(e)}")
+                        
+                        enhanced_items.append(item)
+                    
+                    enhanced_cv[section_name] = enhanced_items
+                else:
+                    # For other types of content, keep as is
+                    enhanced_cv[section_name] = section_content
+            
+            # Return the enhanced CV with the new CV ID
+            return {
+                'status': 'success',
+                'message': 'CV enhanced successfully',
+                'original_rewrite': initial_rewrite,
+                'rewritten_cv': enhanced_cv,
+                'new_cv_id': new_cv_id  # Include the new CV ID in the response
+            }
+            
+        except Exception as e:
+            logger.error(f"Error enhancing CV rewrite: {str(e)}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f'Error enhancing CV rewrite: {str(e)}',
+                'rewritten_cv': initial_rewrite.get('rewritten_cv', initial_rewrite.get('improved_sections', {})),
+                'new_cv_id': initial_rewrite.get('new_cv_id')  # Pass through the CV ID even if enhancement fails
+            }
 
     def segment_cv(self, text, timeout=60):
         """

@@ -38,6 +38,10 @@ class ParsedCV(models.Model):
                              ])
     error_message = models.TextField(blank=True)
     
+    # Analysis data and metadata
+    analysis_data = models.JSONField(null=True, blank=True)  # Store CV analysis results
+    analysis_date = models.DateTimeField(null=True, blank=True)  # Track when analysis was performed
+    
     def __str__(self):
         return f"{self.file_name} - {self.user.username} ({self.status})"
     
@@ -52,11 +56,17 @@ class CVRewriteSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Reference to the source CV
+    cv_id = models.IntegerField(null=True, blank=True)
+    
     # Input data
     input_data = models.JSONField(default=dict)
     
     # Output data after AI processing
     output_data = models.JSONField(default=dict, blank=True)
+    
+    # Result data (complete rewrite results)
+    result = models.JSONField(default=dict, blank=True)
     
     # Processing status
     status = models.CharField(max_length=50, default='pending', 
@@ -64,6 +74,7 @@ class CVRewriteSession(models.Model):
                                  ('pending', 'Pending'),
                                  ('processing', 'Processing'),
                                  ('completed', 'Completed'),
+                                 ('error', 'Error'),
                                  ('failed', 'Failed')
                              ])
     error_message = models.TextField(blank=True)

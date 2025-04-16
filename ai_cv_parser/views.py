@@ -76,89 +76,183 @@ class AICVParserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['POST'], url_path='parse-cv')
     def parse_cv(self, request):
         """
-        Phase 1: Create a CV parsing job and return immediately.
-        This prevents worker timeouts in production.
+        Parse a CV document and replace any existing parsed CV for this user.
         """
         try:
             logger.info(f"CV parsing request from user {request.user.username} (ID: {request.user.id})")
             
+            # Validate request data
             if 'file' not in request.FILES:
                 return Response(
-                    {'error': 'No file provided'},
+                    {'error': 'No file uploaded'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+                
             file = request.FILES['file']
             logger.info(f"Received file: {file.name} (size: {file.size} bytes)")
 
-            # Create ParsedCV record
+            # Check if user has confirmed overwrite if they have an existing CV
+            force_overwrite = request.data.get('force_overwrite', 'false').lower() == 'true'
+            
+            # Check if user already has a parsed CV
+            existing_cv = ParsedCV.objects.filter(user=request.user).first()
+            if existing_cv and not force_overwrite:
+                # User has an existing CV but hasn't confirmed overwrite
+                return Response({
+                    'error': 'Existing CV found',
+                    'requires_confirmation': True,
+                    'message': 'You already have a parsed CV. Parsing a new CV will replace your existing one. Do you want to continue?',
+                    'existing_cv_id': existing_cv.id,
+                    'existing_cv_name': existing_cv.file_name,
+                    'existing_cv_date': existing_cv.uploaded_at
+                }, status=status.HTTP_409_CONFLICT)
+            
+            # If we're here, either:
+            # 1. User doesn't have an existing CV
+            # 2. User has confirmed they want to overwrite their existing CV
+            
+            # Delete any existing parsed CVs for this user
+            if existing_cv:
+                # Clean up temporary file if it exists
+                if existing_cv.temp_file_path and os.path.exists(existing_cv.temp_file_path):
+                    try:
+                        os.remove(existing_cv.temp_file_path)
+                        logger.info(f"Removed temporary file of existing CV: {existing_cv.temp_file_path}")
+                    except Exception as file_e:
+                        logger.error(f"Error removing temporary file: {str(file_e)}")
+                
+                # Delete the existing CV
+                existing_cv.delete()
+                logger.info(f"Deleted existing ParsedCV record for user {request.user.username}")
+            
+            # Create a new ParsedCV record
             parsed_cv = ParsedCV.objects.create(
                 user=request.user,
                 file_name=file.name,
                 file_size=file.size,
-                status='queued'  # Set initial status as queued
+                mime_type=file.content_type,
+                status='queued'
             )
-            logger.info(f"ParsedCV record {parsed_cv.id} created for user {request.user.username} - Status: queued")
-
+            logger.info(f"Created new ParsedCV record with ID: {parsed_cv.id}")
+            
             # Save uploaded file to temporary location
             temp_path = self.save_uploaded_file(file)
             logger.info(f"Saved uploaded file to temporary location: {temp_path}")
-
-            try:
-                # Extract text from PDF - this is usually quick enough to do synchronously
-                text = self.extract_text_from_file(temp_path)
-                logger.info(f"Text extracted from document: {len(text)} characters")
-
-                # Update ParsedCV with extracted text
-                parsed_cv.extracted_text = text
-                parsed_cv.temp_file_path = temp_path
-                parsed_cv.status = 'processing'
-                parsed_cv.save()
-                logger.info(f"ParsedCV record {parsed_cv.id} updated with extracted text - Status: processing")
-
-                # Launch async processing in background
-                # We don't wait for this to complete
-                import threading
-                thread = threading.Thread(
-                    target=self._process_parsed_cv_background,
-                    args=(parsed_cv.id,)
-                )
-                thread.daemon = True  # Allow the thread to be terminated when the main process exits
-                thread.start()
-                
-                logger.info(f"Background processing started for ParsedCV ID {parsed_cv.id}")
-
-                # Return immediately with the ID so the client can poll for status
-                return Response({
-                    'id': parsed_cv.id,
-                    'status': 'processing',
-                    'message': 'CV processing started'
-                }, status=status.HTTP_201_CREATED)
-
-            except Exception as e:
-                logger.error(f"Error during initial CV processing: {str(e)}")
-                logger.error(traceback.format_exc())
-                parsed_cv.status = 'failed'
-                parsed_cv.error_message = str(e)
-                parsed_cv.save()
-                
-                # Clean up temporary file if it exists
-                if os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                        logger.info(f"Removed temporary file after error: {temp_path}")
-                    except Exception as file_e:
-                        logger.error(f"Error removing temporary file: {str(file_e)}")
-                
-                raise
-
+            
+            # Update the ParsedCV record with the temporary file path
+            parsed_cv.temp_file_path = temp_path
+            parsed_cv.save(update_fields=['temp_file_path'])
+            
+            # Start processing the file asynchronously
+            # This will need to be adjusted based on your actual processing logic
+            # Here we're using a placeholder for the async processing
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor() as executor:
+                executor.submit(self._process_cv_file, parsed_cv.id, temp_path)
+            
+            return Response({
+                'id': parsed_cv.id,
+                'message': 'CV upload successful. Processing has begun.',
+                'status': 'queued'
+            }, status=status.HTTP_202_ACCEPTED)
+            
         except Exception as e:
-            logger.error(f"Unexpected error in parse_cv: {str(e)}")
+            logger.error(f"Error in CV parsing: {str(e)}")
             logger.error(traceback.format_exc())
             return Response(
-                {'error': 'Failed to process CV. Please try again later.'},
+                {'error': f'An unexpected error occurred: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    def _process_cv_file(self, cv_id, file_path):
+        """
+        Process a CV file asynchronously
+        
+        Args:
+            cv_id (int): The ID of the ParsedCV record
+            file_path (str): Path to the temporary file
+        """
+        try:
+            # Get the ParsedCV record
+            parsed_cv = ParsedCV.objects.get(id=cv_id)
+            
+            # Update status to processing
+            parsed_cv.status = 'processing'
+            parsed_cv.save(update_fields=['status'])
+            logger.info(f"Processing ParsedCV {cv_id} - Status updated to processing")
+            
+            start_time = time.time()
+            
+            # Extract text from the file
+            try:
+                extracted_text = self.extract_text_from_file(file_path)
+                parsed_cv.extracted_text = extracted_text
+                parsed_cv.save(update_fields=['extracted_text'])
+                logger.info(f"Extracted text from CV file for ParsedCV {cv_id}")
+            except Exception as text_error:
+                logger.error(f"Error extracting text from file: {str(text_error)}")
+                parsed_cv.status = 'failed'
+                parsed_cv.error_message = f"Error extracting text: {str(text_error)}"
+                parsed_cv.save(update_fields=['status', 'error_message'])
+                return
+            
+            # Parse the CV using DeepSeek API or other parsing method
+            try:
+                service = DeepSeekService()
+                parsed_data = service.parse_document(file_path)
+                
+                # Check if we got an error response with fallback data
+                if 'error' in parsed_data:
+                    logger.warning(f"CV parsing returned an error: {parsed_data.get('error')}")
+                    
+                    # If we have fallback data, use it instead of failing
+                    if 'parsed_data_fallback' in parsed_data:
+                        logger.info("Using fallback parsed data")
+                        parsed_cv.status = 'completed_with_errors'
+                        parsed_cv.error_message = parsed_data.get('error', '') + ': ' + parsed_data.get('message', '')
+                        parsed_cv.parsed_data = parsed_data.get('parsed_data_fallback', {})
+                        parsed_cv.processed_at = timezone.now()
+                        parsed_cv.processing_time = time.time() - start_time
+                        parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time', 'error_message'])
+                        logger.info(f"ParsedCV {cv_id} processing completed with errors in {parsed_cv.processing_time:.2f} seconds")
+                        return
+                    else:
+                        # No fallback data, mark as failed
+                        raise ValueError(parsed_data.get('error', 'Unknown error'))
+                
+                # Save the parsed data
+                parsed_cv.parsed_data = parsed_data
+                parsed_cv.status = 'completed'
+                parsed_cv.processed_at = timezone.now()
+                parsed_cv.processing_time = time.time() - start_time
+                parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time'])
+                logger.info(f"ParsedCV {cv_id} processing completed successfully in {parsed_cv.processing_time:.2f} seconds")
+            except Exception as parse_error:
+                logger.error(f"Error parsing CV: {str(parse_error)}")
+                parsed_cv.status = 'failed'
+                parsed_cv.error_message = f"Error parsing CV: {str(parse_error)}"
+                parsed_cv.save(update_fields=['status', 'error_message'])
+        
+        except ParsedCV.DoesNotExist:
+            logger.error(f"ParsedCV with ID {cv_id} not found")
+        except Exception as e:
+            logger.error(f"Error in CV processing: {str(e)}")
+            logger.error(traceback.format_exc())
+            try:
+                parsed_cv = ParsedCV.objects.get(id=cv_id)
+                parsed_cv.status = 'failed'
+                parsed_cv.error_message = f"Unexpected error: {str(e)}"
+                parsed_cv.save(update_fields=['status', 'error_message'])
+            except:
+                pass
+        finally:
+            # Clean up temporary file
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Removed temporary file: {file_path}")
+                except Exception as file_e:
+                    logger.error(f"Error removing temporary file: {str(file_e)}")
     
     def _process_parsed_cv_background(self, parsed_cv_id):
         """
@@ -366,6 +460,50 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['POST'])
+    def job_status(self, request):
+        """Get status of multiple jobs"""
+        job_ids = request.data.get('job_ids', [])
+        if not job_ids:
+            return Response({"error": "No job IDs provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        results = {}
+        for job_id in job_ids:
+            try:
+                cv = ParsedCV.objects.get(id=job_id, user=request.user)
+                results[job_id] = {
+                    "status": cv.status,
+                    "error_message": cv.error_message,
+                    "processed_at": cv.processed_at
+                }
+            except ParsedCV.DoesNotExist:
+                results[job_id] = {"status": "not_found", "error_message": "CV not found"}
+        
+        return Response(results)
+
+    @action(detail=True, methods=['GET'], url_path='status')
+    def get_status(self, request, pk=None):
+        """
+        Get the status of a CV parsing job
+        """
+        try:
+            cv = self.get_object()
+            data = {
+                "id": cv.id,
+                "status": cv.status,
+                "uploaded_at": cv.uploaded_at,
+                "processed_at": cv.processed_at,
+                "processing_time": cv.processing_time,
+                "error_message": cv.error_message
+            }
+            return Response(data)
+        except Exception as e:
+            logger.error(f"Error getting CV status: {str(e)}")
+            return Response(
+                {"error": f"Failed to retrieve CV status: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['POST'])
     def analyze(self, request):
         """
         Analyze a CV to provide feedback on content quality and improvement suggestions.
@@ -388,12 +526,23 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             
             # Get the CV data based on the parser type
             cv_data = None
+            parsed_cv = None
             if parser_type == 'parsed_cv':
                 # Get from the cv_parser module
-                from cv_parser.models import ParsedCV
                 try:
                     parsed_cv = ParsedCV.objects.get(id=cv_id, user=request.user)
                     cv_data = parsed_cv.parsed_data
+                    
+                    # Check if we already have analysis data and it's not too old (e.g., less than 7 days)
+                    if parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
+                        # Return cached analysis
+                        logger.info(f"Returning cached analysis for ParsedCV ID {cv_id}")
+                        return Response({
+                            'analysis': parsed_cv.analysis_data,
+                            'cached': True,
+                            'analysis_date': parsed_cv.analysis_date
+                        })
+                        
                 except ParsedCV.DoesNotExist:
                     return Response({
                         'error': 'CV not found or you do not have permission to access it'
@@ -411,254 +560,100 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     }, status=status.HTTP_404_NOT_FOUND)
             else:
                 return Response({
-                    'error': 'Invalid parser type'
+                    'error': f'Invalid parser_type: {parser_type}'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # If we don't have CV data, return an error
+
             if not cv_data:
                 return Response({
-                    'error': 'Failed to retrieve CV data'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    'error': 'No CV data found'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            # Prepare the prompt for analysis
+            service = DeepSeekService()
             
-            # Initialize response data with default structure
-            analysis_data = {
-                "overall_score": 5,
-                "strengths": [],
-                "weaknesses": [],
-                "improvement_suggestions": [],
-                "section_scores": {
-                    "content_completeness": 5,
-                    "format_structure": 5,
-                    "skills_relevance": 5,
-                    "job_history": 5,
-                    "education": 5,
-                    "overall_impact": 5
-                },
-                "ats_readiness": {
-                    "score": 5,
-                    "issues": [],
-                    "suggestions": []
-                },
-                "experience_level": {
-                    "classification": "unknown",
-                    "years_experience": 0,
-                    "career_stage": "Unable to determine due to AI service error"
-                },
-                "skills_assessment": {
-                    "technical_skills": [],
-                    "soft_skills": [],
-                    "skills_gaps": []
-                },
-                "potential_roles": {
-                    "best_matches": [],
-                    "match_reasons": [],
-                    "suggested_industries": []
-                },
-                "ai_service_error": False
-            }
+            # Continue with existing prompt preparation
+            prompt = f"""
+            Please analyze this CV data and provide structured feedback on its strengths, weaknesses, and specific improvement suggestions.
             
-            # Analyze employment gaps separately using our dedicated analyzer
-            # This will work even if the DeepSeek API fails
-            from .employment_gaps import analyze_employment_gaps
-            try:
-                employment_gaps_analysis = analyze_employment_gaps(cv_data)
-                logger.info(f"Employment gaps analysis completed: {len(employment_gaps_analysis.get('gaps', []))} gaps found")
-                
-                # Add employment gaps analysis to the response data
-                analysis_data['employment_gaps'] = employment_gaps_analysis
-            except Exception as e:
-                logger.error(f"Error analyzing employment gaps: {str(e)}")
-                analysis_data['employment_gaps'] = {
-                    "summary": "Employment gaps analysis failed due to an error.",
-                    "gaps": [],
-                    "has_significant_gaps": False,
-                    "error": str(e)
-                }
+            Evaluation criteria:
+            - Content completeness
+            - Format and structure
+            - Skills relevance
+            - Job history description quality
+            - Education presentation
+            - Overall impact
+            - ATS readiness (will it pass Applicant Tracking Systems)
+            - Experience level classification (entry-level, mid-career, senior professional)
+            - Potential matching job roles
             
-            # Try to get AI analysis from DeepSeek, but continue even if it fails
-            ai_analysis_successful = False
-            try:
-                # Use DeepSeek service to analyze CV
-                from .deepseek_service import DeepSeekService
-                service = DeepSeekService()
-                
-                # Prepare the prompt for analysis
-                prompt = f"""
-                Please analyze this CV data and provide structured feedback on its strengths, weaknesses, and specific improvement suggestions.
-                
-                Evaluation criteria:
-                - Content completeness
-                - Format and structure
-                - Skills relevance
-                - Job history description quality
-                - Education presentation
-                - Overall impact
-                - ATS readiness (will it pass Applicant Tracking Systems)
-                - Experience level classification (entry-level, mid-career, senior professional)
-                - Potential matching job roles
-                
-                CV Data:
-                {json.dumps(cv_data, indent=2)}
-                
-                Please provide your analysis in JSON format with the following structure:
-                {{
-                    "overall_score": (number between 1-10),
-                    "strengths": [list of strengths],
-                    "weaknesses": [list of weaknesses],
-                    "improvement_suggestions": [specific actionable suggestions],
-                    "section_scores": {{
-                        "content_completeness": (score 1-10),
-                        "format_structure": (score 1-10),
-                        "skills_relevance": (score 1-10),
-                        "job_history": (score 1-10),
-                        "education": (score 1-10),
-                        "overall_impact": (score 1-10)
-                    }},
-                    "ats_readiness": {{
-                        "score": (score 1-10),
-                        "issues": [list of ATS issues],
-                        "suggestions": [list of ATS optimization suggestions]
-                    }},
-                    "experience_level": {{
-                        "classification": (entry-level, junior, mid-level, senior, executive),
-                        "years_experience": (estimated years),
-                        "career_stage": (brief description of career stage)
-                    }},
-                    "skills_assessment": {{
-                        "technical_skills": [list of technical skills with ratings],
-                        "soft_skills": [list of soft skills with ratings],
-                        "skills_gaps": [potential skills gaps based on career goals or industry standards]
-                    }},
-                    "potential_roles": {{
-                        "best_matches": [list of top 5 job roles that best match this CV],
-                        "match_reasons": [brief explanations for why these roles are good matches],
-                        "suggested_industries": [list of industries where this CV would be most competitive]
-                    }}
+            CV Data:
+            {json.dumps(cv_data, indent=2)}
+            
+            Please provide your analysis in JSON format with the following structure:
+            {{
+                "overall_score": (number between 1-10),
+                "strengths": [list of strengths],
+                "weaknesses": [list of weaknesses],
+                "improvement_suggestions": [specific actionable suggestions],
+                "section_scores": {{
+                    "content_completeness": (score 1-10),
+                    "format_structure": (score 1-10),
+                    "skills_relevance": (score 1-10),
+                    "job_history": (score 1-10),
+                    "education": (score 1-10),
+                    "overall_impact": (score 1-10)
+                }},
+                "ats_readiness": {{
+                    "score": (score 1-10),
+                    "issues": [list of ATS issues],
+                    "suggestions": [list of ATS optimization suggestions]
+                }},
+                "experience_level": {{
+                    "classification": (entry-level, junior, mid-level, senior, executive),
+                    "years_experience": (estimated years),
+                    "career_stage": (brief description of career stage)
+                }},
+                "skills_assessment": {{
+                    "technical_skills": [list of technical skills with ratings],
+                    "soft_skills": [list of soft skills with ratings],
+                    "skills_gaps": [potential skills gaps based on career goals or industry standards]
+                }},
+                "potential_roles": {{
+                    "best_matches": [list of top 5 job roles that best match this CV],
+                    "match_reasons": [brief explanations for why these roles are good matches],
+                    "suggested_industries": [list of industries where this CV would be most competitive]
                 }}
-                
-                Be specific, accurate, and actionable in your analysis.
-                """
-                
-                # Since DeepSeekService uses async methods, we need to run it in an event loop
-                import asyncio
-                
-                # Call the async generate method and wait for the result
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(service.generate(prompt, temperature=0.7, max_tokens=2000))
-                    
-                    # Try to extract JSON from the response
-                    try:
-                        # First try direct JSON parsing
-                        ai_data = json.loads(result)
-                        
-                        # Update the main analysis data with AI results
-                        for key, value in ai_data.items():
-                            # Don't overwrite employment gaps data
-                            if key != 'employment_gaps':
-                                analysis_data[key] = value
-                        
-                        ai_analysis_successful = True
-                    except json.JSONDecodeError:
-                        # If that fails, try to extract JSON from markdown code blocks
-                        try:
-                            # Look for content between ```json and ``` markers
-                            if "```json" in result:
-                                json_start = result.find("```json") + 7
-                                json_end = result.find("```", json_start)
-                                if json_end > json_start:
-                                    json_content = result[json_start:json_end].strip()
-                                    ai_data = json.loads(json_content)
-                                    
-                                    # Update the main analysis data with AI results
-                                    for key, value in ai_data.items():
-                                        # Don't overwrite employment gaps data
-                                        if key != 'employment_gaps':
-                                            analysis_data[key] = value
-                                    
-                                    ai_analysis_successful = True
-                                else:
-                                    raise ValueError("Could not find closing JSON code block")
-                            # Try to find any JSON-like structure with braces
-                            elif "{" in result and "}" in result:
-                                json_start = result.find("{")
-                                json_end = result.rfind("}") + 1
-                                if json_end > json_start:
-                                    json_content = result[json_start:json_end].strip()
-                                    ai_data = json.loads(json_content)
-                                    
-                                    # Update the main analysis data with AI results
-                                    for key, value in ai_data.items():
-                                        # Don't overwrite employment gaps data
-                                        if key != 'employment_gaps':
-                                            analysis_data[key] = value
-                                    
-                                    ai_analysis_successful = True
-                                else:
-                                    raise ValueError("Could not extract valid JSON from content")
-                            else:
-                                raise ValueError("Response does not contain any JSON structure")
-                        except (ValueError, json.JSONDecodeError) as e:
-                            logger.error(f"Failed to extract JSON from DeepSeek response: {str(e)}")
-                            # Try fallback service instead
-                            raise Exception("Falling back to alternative AI service")
-                finally:
-                    loop.close()
-            except Exception as e:
-                logger.warning(f"DeepSeek API unavailable, using fallback service: {str(e)}")
-                analysis_data['ai_service_error'] = True
-                analysis_data['ai_error_message'] = str(e)
-                
-                # Try fallback service as a backup
-                try:
-                    from .fallback_service import FallbackService
-                    fallback = FallbackService()
-                    
-                    # Use the same prompt for consistency
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        logger.info("Attempting to use fallback AI service")
-                        fallback_result = loop.run_until_complete(fallback.generate(prompt, temperature=0.7, max_tokens=2000))
-                        
-                        # Try to parse the fallback response
-                        try:
-                            fallback_data = json.loads(fallback_result)
-                            
-                            # Update the analysis data with fallback results
-                            for key, value in fallback_data.items():
-                                # Don't overwrite employment gaps data
-                                if key != 'employment_gaps':
-                                    analysis_data[key] = value
-                            
-                            # Mark as successful with fallback service note
-                            ai_analysis_successful = True
-                            analysis_data['ai_service_note'] = "Using fallback AI service due to DeepSeek API issues"
-                            analysis_data['ai_service_error'] = False  # Clear the error since fallback worked
-                            
-                            logger.info("Successfully used fallback AI service")
-                        except json.JSONDecodeError as je:
-                            logger.error(f"Failed to parse fallback service response: {str(je)}")
-                            # Keep original error state
-                    finally:
-                        loop.close()
-                except Exception as fallback_error:
-                    logger.error(f"Fallback service also failed: {str(fallback_error)}")
-                    # Keep original error state
+            }}
             
-            # If AI analysis failed, add a notice in the response
-            if not ai_analysis_successful:
-                analysis_data['notification'] = "The AI-powered analysis is currently unavailable. Employment gaps analysis is still provided."
+            Be specific, accurate, and actionable in your analysis.
+            """
             
-            return Response(analysis_data)
+            # Make API request for analysis
+            response = service.make_custom_request(prompt)
+            
+            if 'error' in response:
+                return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # If we have a parsed_cv, store the analysis results
+            if parser_type == 'parsed_cv' and parsed_cv:
+                parsed_cv.analysis_data = response
+                parsed_cv.analysis_date = timezone.now()
+                parsed_cv.save(update_fields=['analysis_data', 'analysis_date'])
+                logger.info(f"Stored analysis results for ParsedCV ID {cv_id}")
+            
+            return Response({
+                'analysis': response,
+                'cached': False,
+                'analysis_date': timezone.now() if parser_type == 'parsed_cv' else None
+            })
             
         except Exception as e:
             logger.error(f"Error analyzing CV: {str(e)}")
             logger.error(traceback.format_exc())
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': f'An unexpected error occurred: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['GET'])
     def download_parsed_data(self, request, pk=None):
@@ -686,9 +681,6 @@ def rewrite_cv(request):
     Endpoint to rewrite and improve CV content using DeepSeek.
     """
     try:
-        # Close any stale connections before starting
-        close_old_connections()
-        
         # Get the CV data from the request
         cv_data = request.data
         if not cv_data:
@@ -697,35 +689,34 @@ def rewrite_cv(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Initialize the service
-        cv_rewrite_service = CVRewriteService()
+        # Create a rewrite session and immediately return the session ID
+        # This avoids thread-related database issues by using the two-phase approach
+        cv_id = cv_data.get('cv_id')
+        if not cv_id:
+            return Response(
+                {'status': 'error', 'error': 'No CV ID provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Create a new event loop for async operations
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Create a rewrite session
+        rewrite_session = CVRewriteSession.objects.create(
+            user=request.user,
+            cv_id=cv_id,
+            status='initiated',
+            input_data=json.dumps(cv_data)
+        )
         
-        try:
-            # Close old connections before async operation
-            close_old_connections()
+        # Start the processing in a separate thread
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor() as executor:
+            executor.submit(_process_rewrite_session_background, rewrite_session.id)
             
-            # Run the async operation
-            result = loop.run_until_complete(cv_rewrite_service.rewrite_cv(cv_data, request.user))
-            
-            # Log the response structure
-            logger.info(f"CV rewrite response structure: {result}")
-            
-            # Check result status to determine the appropriate HTTP status code
-            if result.get('status') == 'success':
-                return Response(result, status=status.HTTP_200_OK)
-            elif result.get('status') == 'partial_success':
-                # For partial success, return 200 but with the partial_success structure
-                return Response(result, status=status.HTTP_200_OK)
-            else:
-                # Any other status is treated as an error
-                return Response(result, status=status.HTTP_400_BAD_REQUEST)
-        finally:
-            loop.close()
-            close_old_connections()
+        return Response({
+            'status': 'success', 
+            'message': 'CV rewrite initiated successfully',
+            'session_id': rewrite_session.id,
+            'status_url': f"/api/ai_cv_parser/rewrite-status/{rewrite_session.id}/"
+        }, status=status.HTTP_202_ACCEPTED)
             
     except Exception as e:
         logger.error(f"Error in rewrite_cv view: {str(e)}", exc_info=True)
@@ -734,41 +725,86 @@ def rewrite_cv(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_rewrite_session(request):
+def _process_rewrite_session_background(session_id):
     """
-    Phase 1: Create a temporary session for CV rewriting.
-    This endpoint quickly creates a database record and returns a session ID
-    before any AI processing begins.
+    Process a rewrite session in the background
     """
     try:
-        # Get CV data from request
-        data = request.data.get('data', {})
+        # Get a fresh database connection for this thread
+        close_old_connections()
         
-        if not data:
-            return Response(
-                {'status': 'error', 'error': 'No CV data provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Get the session
+        rewrite_session = CVRewriteSession.objects.get(id=session_id)
         
-        # Create a new session record
-        session = CVRewriteSession.objects.create(
-            user=request.user,
-            input_data=data,
-            status='pending'
+        # Update status to processing
+        rewrite_session.status = 'processing'
+        rewrite_session.save(update_fields=['status'])
+        
+        try:
+            # Parse the input data
+            cv_data = json.loads(rewrite_session.input_data)
+            
+            # Initialize the service
+            cv_rewrite_service = CVRewriteService()
+            
+            # Run synchronously in this thread
+            result = cv_rewrite_service.rewrite_cv_sync(cv_data, rewrite_session.user)
+            
+            # Extract the new CV ID from the result if available
+            new_cv_id = result.get('new_cv_id')
+            
+            # Update the session with the result and new CV ID
+            rewrite_session.output_data = result
+            rewrite_session.status = 'completed'
+            
+            # Only update new_cv_id if it's available
+            if new_cv_id:
+                rewrite_session.new_cv_id = new_cv_id
+                rewrite_session.save(update_fields=['output_data', 'status', 'new_cv_id'])
+                logger.info(f"Rewrite session {session_id} completed with new CV ID: {new_cv_id}")
+            else:
+                rewrite_session.save(update_fields=['output_data', 'status'])
+                logger.warning(f"Rewrite session {session_id} completed but no new CV ID was provided")
+            
+        except Exception as process_error:
+            logger.error(f"Error processing rewrite session {session_id}: {str(process_error)}", exc_info=True)
+            rewrite_session.status = 'failed'
+            rewrite_session.error_message = str(process_error)
+            rewrite_session.save(update_fields=['status', 'error_message'])
+    except Exception as outer_error:
+        logger.error(f"Outer error in rewrite session background processing: {str(outer_error)}", exc_info=True)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_rewrite_status(request, session_id):
+    """
+    Get the status of a CV rewrite session
+    """
+    try:
+        rewrite_session = CVRewriteSession.objects.get(id=session_id, user=request.user)
+        
+        response_data = {
+            'status': rewrite_session.status,
+            'session_id': rewrite_session.id,
+            'created_at': rewrite_session.created_at,
+            'updated_at': rewrite_session.updated_at,
+        }
+        
+        if rewrite_session.status == 'completed' and rewrite_session.output_data:
+            response_data['result'] = rewrite_session.output_data
+        
+        if rewrite_session.status == 'failed' and rewrite_session.error_message:
+            response_data['error'] = rewrite_session.error_message
+            
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except CVRewriteSession.DoesNotExist:
+        return Response(
+            {'status': 'error', 'error': 'Rewrite session not found'},
+            status=status.HTTP_404_NOT_FOUND
         )
-        
-        logger.info(f"Created CV rewrite session {session.id} for user {request.user.username}")
-        
-        return Response({
-            'status': 'success',
-            'message': 'CV rewrite session created',
-            'session_id': session.id
-        }, status=status.HTTP_201_CREATED)
-        
     except Exception as e:
-        logger.error(f"Error creating CV rewrite session: {str(e)}", exc_info=True)
+        logger.error(f"Error fetching rewrite session status: {str(e)}", exc_info=True)
         return Response(
             {'status': 'error', 'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -833,3 +869,236 @@ async def _process_rewrite_session_async(request, session_id):
             'status': 'error',
             'error': str(e)
         }
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def analyze_cv(request, pk=None):
+    """
+    Analyze a CV to provide feedback on content quality and improvement suggestions.
+    
+    This endpoint accepts CV ID either in the URL (pk parameter) or in the request data.
+    """
+    logger.info(f"analyze_cv endpoint was called by user {request.user.username}")
+    
+    try:
+        # Get the CV ID either from URL parameter or request data
+        cv_id = pk  # From URL
+        if not cv_id:
+            cv_id = request.data.get('cv_id')  # From request body
+            
+        parser_type = request.data.get('parser_type', 'parsed_cv')
+        
+        logger.info(f"Analyzing CV with ID: {cv_id}, parser_type: {parser_type}")
+        
+        if not cv_id:
+            logger.warning("No CV ID provided in analyze_cv request")
+            return Response({
+                'error': 'CV ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the CV data based on the parser type
+        cv_data = None
+        parsed_cv = None
+        if parser_type == 'parsed_cv':
+            # Get from the ai_cv_parser module
+            try:
+                from .models import ParsedCV
+                parsed_cv = ParsedCV.objects.get(id=cv_id, user=request.user)
+                cv_data = parsed_cv.parsed_data
+                
+                # Check if we already have analysis data and it's not too old (e.g., less than 7 days)
+                if parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
+                    # Return cached analysis
+                    logger.info(f"Returning cached analysis for ParsedCV ID {cv_id}")
+                    return Response({
+                        'analysis': parsed_cv.analysis_data,
+                        'cached': True,
+                        'analysis_date': parsed_cv.analysis_date
+                    })
+                    
+            except ParsedCV.DoesNotExist:
+                # Try fallback to the legacy cv_parser module
+                try:
+                    from cv_parser.models import ParsedCV as LegacyParsedCV
+                    legacy_cv = LegacyParsedCV.objects.get(id=cv_id, user=request.user)
+                    cv_data = legacy_cv.parsed_data
+                    logger.info(f"Found CV in legacy parser with ID {cv_id}")
+                except Exception as legacy_error:
+                    logger.error(f"CV not found in legacy parser either: {str(legacy_error)}")
+                    return Response({
+                        'error': 'CV not found or you do not have permission to access it'
+                    }, status=status.HTTP_404_NOT_FOUND)
+        elif parser_type == 'linkedin':
+            # Get from the linkedin_parser module (if available)
+            try:
+                from linkedin_parser.models import LinkedInProfile
+                linkedin_profile = LinkedInProfile.objects.get(id=cv_id, user=request.user)
+                cv_data = linkedin_profile.profile_data
+            except (ImportError, ModuleNotFoundError):
+                logger.error("LinkedIn parser module not available")
+                return Response({
+                    'error': 'LinkedIn parser is not available'
+                }, status=status.HTTP_501_NOT_IMPLEMENTED)
+            except Exception as linkedin_error:
+                logger.error(f"Error retrieving LinkedIn profile: {str(linkedin_error)}")
+                return Response({
+                    'error': 'LinkedIn profile not found or you do not have permission to access it'
+                }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({
+                'error': f'Invalid parser_type: {parser_type}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not cv_data:
+            return Response({
+                'error': 'No CV data found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        # Prepare the prompt for analysis
+        from .deepseek_service import DeepSeekService
+        service = DeepSeekService()
+        
+        # Continue with existing prompt preparation
+        prompt = f"""
+        Please analyze this CV data and provide structured feedback on its strengths, weaknesses, and specific improvement suggestions.
+        
+        Evaluation criteria:
+        - Content completeness
+        - Format and structure
+        - Skills relevance
+        - Job history description quality
+        - Education presentation
+        - Overall impact
+        - ATS readiness (will it pass Applicant Tracking Systems)
+        - Experience level classification (entry-level, mid-career, senior professional)
+        - Potential matching job roles
+        
+        CV Data:
+        {json.dumps(cv_data, indent=2)}
+        
+        Please provide your analysis in JSON format with the following structure:
+        {{
+            "overall_score": (number between 1-10),
+            "strengths": [list of strengths],
+            "weaknesses": [list of weaknesses],
+            "improvement_suggestions": [specific actionable suggestions],
+            "section_scores": {{
+                "content_completeness": (score 1-10),
+                "format_structure": (score 1-10),
+                "skills_relevance": (score 1-10),
+                "job_history": (score 1-10),
+                "education": (score 1-10),
+                "overall_impact": (score 1-10)
+            }},
+            "ats_readiness": {{
+                "score": (score 1-10),
+                "issues": [list of ATS issues],
+                "suggestions": [list of ATS optimization suggestions]
+            }},
+            "experience_level": {{
+                "classification": (entry-level, junior, mid-level, senior, executive),
+                "years_experience": (estimated years),
+                "career_stage": (brief description of career stage)
+            }},
+            "skills_assessment": {{
+                "technical_skills": [list of technical skills with ratings],
+                "soft_skills": [list of soft skills with ratings],
+                "skills_gaps": [potential skills gaps based on career goals or industry standards]
+            }},
+            "potential_roles": {{
+                "best_matches": [list of top 5 job roles that best match this CV],
+                "match_reasons": [brief explanations for why these roles are good matches],
+                "suggested_industries": [list of industries where this CV would be most competitive]
+            }}
+        }}
+        
+        Be specific, accurate, and actionable in your analysis.
+        """
+        
+        # Make API request for analysis
+        response = service.make_custom_request(prompt)
+        
+        if 'error' in response:
+            return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # If we have a parsed_cv, store the analysis results
+        if parser_type == 'parsed_cv' and parsed_cv:
+            parsed_cv.analysis_data = response
+            parsed_cv.analysis_date = timezone.now()
+            parsed_cv.save(update_fields=['analysis_data', 'analysis_date'])
+            logger.info(f"Stored analysis results for ParsedCV ID {cv_id}")
+        
+        return Response({
+            'analysis': response,
+            'cached': False,
+            'analysis_date': timezone.now() if parser_type == 'parsed_cv' else None
+        })
+        
+    except Exception as e:
+        logger.error(f"Error analyzing CV: {str(e)}")
+        logger.error(traceback.format_exc())
+        return Response(
+            {'error': f'An unexpected error occurred: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_rewrite_session(request):
+    """
+    Create a new CV rewrite session.
+    
+    This endpoint initializes a rewrite session and returns the session ID,
+    which can then be used to track progress and retrieve results.
+    
+    Request data should include:
+    - cv_id: ID of the CV to rewrite
+    
+    Returns:
+    - session_id: ID of the created session
+    - status: Current status of the session (initially 'pending')
+    """
+    try:
+        # Get CV ID from request data
+        cv_id = request.data.get('cv_id')
+        
+        if not cv_id:
+            return Response(
+                {'error': 'CV ID is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get the parsed CV
+        try:
+            parsed_cv = ParsedCV.objects.get(id=cv_id, user=request.user)
+        except ParsedCV.DoesNotExist:
+            return Response(
+                {'error': 'Parsed CV not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Create a rewrite session
+        rewrite_session = CVRewriteSession.objects.create(
+            user=request.user,
+            cv_id=cv_id,
+            status='pending',
+            input_data={
+                'cv_id': cv_id,
+                'parsed_cv': ParsedCVSerializer(parsed_cv).data
+            }
+        )
+        
+        # Return the session ID
+        return Response({
+            'session_id': str(rewrite_session.id),
+            'status': rewrite_session.status,
+            'message': 'CV rewrite session created successfully',
+            'created_at': rewrite_session.created_at
+        }, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        logger.error(f"Error creating rewrite session: {str(e)}", exc_info=True)
+        return Response(
+            {'error': f'Failed to create rewrite session: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

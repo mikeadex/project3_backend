@@ -80,6 +80,15 @@ Ella is an innovative AI-driven platform designed to revolutionize professional 
      * Compliance with job application guidelines
      * Multi-platform support (LinkedIn, Indeed, etc.)
 
+## 📚 Module Documentation
+
+Detailed documentation for key modules is available:
+
+- [AI CV Parser](/ai_cv_parser/README.md): Comprehensive documentation on CV parsing, analysis algorithms, caching strategies, and integration points
+- [CV Writer](/cv_writer/README.md): CV creation and management documentation
+- [Authentication](/authentication/README.md): Authentication flow and security implementation details
+- [Job Applications](/job_applications/README.md): Job application tracking and management
+
 ## 🔗 Full-Stack Implementation
 
 ### Frontend Integration

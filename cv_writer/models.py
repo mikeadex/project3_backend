@@ -1,11 +1,11 @@
-from django.db import models
+from django.db import models, transaction, connection, close_old_connections
 from django.contrib.auth import get_user_model
 from django.utils.text import slugify
-from django.db.utils import OperationalError
-from django.db import connection, transaction, close_old_connections
+from django.db.utils import OperationalError, InterfaceError
 from datetime import datetime
 import logging
 import time
+import django
 
 User = get_user_model()
 
@@ -83,8 +83,66 @@ class CvWriter(models.Model):
                 if not self.title or self.title == "Untitled":
                     self.title = f"My CV ({int(time.time())})"
         
-        # Call the original save method
-        super().save(*args, **kwargs)
+        try:
+            if not self.version_name:
+                # If no version name is set, try to set a default one
+                try:
+                    # Make sure title is set to something valid
+                    if not self.title or len(self.title.strip()) == 0:
+                        self.title = f"My CV ({int(time.time())})"
+                    
+                    # Use timestamp to ensure uniqueness
+                    timestamp = int(time.time())
+                    self.version_name = f"{self.title} ({timestamp})"
+                except Exception as e:
+                    # Log error but don't stop saving
+                    logger.error(f"Error setting CV title: {str(e)}")
+                    
+                    if not self.title or self.title == "Untitled":
+                        self.title = f"My CV ({int(time.time())})"
+        except Exception as e:
+            # Log but continue with save
+            logger.warning(f"Error in pre-save processing: {str(e)}")
+        
+        # Call the original save method with retry logic
+        max_retries = 3
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < max_retries:
+            try:
+                # Make sure we have a fresh connection before saving
+                # Import at the module level to avoid scope issues
+                from django.db import close_old_connections
+                close_old_connections()
+                
+                # Attempt the save
+                super().save(*args, **kwargs)
+                return  # Success, exit the retry loop
+            except InterfaceError as e:
+                # Handle "connection already closed" errors
+                retry_count += 1
+                last_error = e
+                
+                if retry_count < max_retries:
+                    logger.warning(f"Database connection error in CV save, retrying ({retry_count}/{max_retries}): {str(e)}")
+                    time.sleep(0.5 * retry_count)  # Small delay before retry
+                    
+                    # Try to reconnect explicitly
+                    from django.db import connection
+                    connection.close()
+                    try:
+                        connection.connect()
+                    except Exception as conn_err:
+                        logger.warning(f"Error reconnecting to database: {str(conn_err)}")
+                else:
+                    # Final retry failed
+                    logger.error(f"Failed to save CV after {max_retries} attempts: {str(e)}")
+                    raise
+            except Exception as e:
+                # For other exceptions, don't retry
+                logger.error(f"Error saving CV: {str(e)}")
+                raise
 
     def clone(self):
         # Create a new version based on this CV

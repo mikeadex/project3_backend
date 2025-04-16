@@ -199,6 +199,7 @@ pyproject_hooks==1.2.0
 PySocks==1.7.1
 pytest==7.3.1
 python-dateutil==2.8.2
+python-decouple>=3.5,<4.0
 python-docx==0.8.11
 python-dotenv==1.0.0
 python-http-client==3.3.7
@@ -260,6 +261,7 @@ traitlets==5.14.1
 transformers==4.31.0
 trio==0.28.0
 trio-websocket==0.11.1
+textract==1.6.4
 typer==0.7.0
 typing-inspect==0.9.0
 typing_extensions==4.12.2
@@ -284,3 +286,8 @@ zipp==3.21.0
 
 # Analytics
 user-agents==2.2.0
+
+# Document parsing requirements
+PyPDF2>=2.10.0
+python-docx>=0.8.11
+textract>=1.6.4

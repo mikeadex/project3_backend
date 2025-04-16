@@ -10,5 +10,7 @@ urlpatterns = [
     path('rewrite/', views.rewrite_cv, name='rewrite-cv'),
     path('rewrite/create_session/', views.create_rewrite_session, name='create-rewrite-session'),
     path('rewrite/process/<int:session_id>/', views.process_rewrite_session, name='process-rewrite-session'),
+    path('parser/analyze/', AICVParserViewSet.as_view({'post': 'analyze'}), name='analyze-cv'),
+    path('analyze/', views.analyze_cv, name='analyze-cv-standalone'),
     path('', include(router.urls)),
 ]
