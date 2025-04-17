@@ -289,5 +289,4 @@ user-agents==2.2.0
 # Document parsing requirements
 PyPDF2>=2.10.0
 python-docx>=0.8.11
-# textract and its dependencies will be installed in the build process
-# by render.yaml's buildCommand
+# Note: textract was removed as it's not used in the codebase and causes deployment issues
