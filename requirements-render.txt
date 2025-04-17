@@ -34,6 +34,10 @@ pdfminer.six>=20221105
 # Image storage and processing
 cloudinary>=1.37.0
 
+# HTTP clients
+httpx>=0.24.0
+requests>=2.26.0
+
 # LLM dependencies
 llama-recipes==0.0.1
 llama_cpp_python==0.2.23
@@ -41,9 +45,6 @@ loralib==0.1.2
 accelerate==0.27.2
 transformers==4.31.0
 torch==2.0.1
-
-# Additional dependencies from settings.py
-requests>=2.26.0
 
 # PyPDF2 and python-docx are needed for document parsing
 # textract is intentionally excluded due to invalid metadata causing deployment issues
