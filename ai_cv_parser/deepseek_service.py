@@ -19,17 +19,23 @@ class DeepSeekService:
         self.model = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
         self.max_tokens = 4000
         self.temperature = 0.2
+        self.is_available = bool(self.api_key)
         
         # Don't raise an error here, just log a warning so the application can still function
         if not self.api_key:
-            logger.warning("DEEPSEEK_API_KEY environment variable is not set. Some features may not work properly.")
+            logger.warning("DEEPSEEK_API_KEY environment variable is not set. Using fallback mechanisms.")
             
-        logger.info(f"Initialized DeepSeekService with model: {self.model}")
+        logger.info(f"Initialized DeepSeekService with model: {self.model}, available: {self.is_available}")
     
     async def _call_api(self, prompt, max_tokens=None, temperature=None):
         """
         Make an async call to the DeepSeek API with the provided prompt
         """
+        # If API key is not available, use fallback immediately
+        if not self.is_available:
+            logger.warning("DeepSeek API key not available. Using fallback approach.")
+            return self._generate_fallback_response(prompt)
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -108,6 +114,30 @@ class DeepSeekService:
             except Exception as e:
                 logger.error(f"Unexpected error in _call_api: {str(e)}")
                 raise
+    
+    def _generate_fallback_response(self, prompt):
+        """
+        Generate a fallback response when the API key is missing
+        """
+        logger.info("Generating fallback response")
+        return {
+            "error": "DeepSeek API key is not configured",
+            "message": "Please contact the administrator to set up the API key.",
+            "parsed_data_fallback": {
+                "personal_info": {
+                    "name": "Could not parse - API not configured",
+                    "email": "",
+                    "phone": "",
+                    "location": ""
+                },
+                "professional_summary": "CV parsing requires API configuration. Please contact the administrator.",
+                "skills": [],
+                "experience": [],
+                "education": [],
+                "certifications": [],
+                "languages": []
+            }
+        }
     
     async def generate(self, prompt, max_tokens=1000, temperature=0.7, top_p=0.9):
         """Generate text using DeepSeek API"""
@@ -266,11 +296,22 @@ class DeepSeekService:
                 "message": "Failed to process the request due to an internal error"
             }
     
-    async def parse_cv(self, text, max_retries=2):
+    async def parse_cv(self, cv_text, extract_sections=True):
         """
-        Parse CV text to extract structured information
+        Parse a CV text into structured data
+        
+        Args:
+            cv_text: The raw CV text to parse
+            extract_sections: Whether to extract sections as well
+            
+        Returns:
+            Structured CV data in JSON format
         """
-        logger.info(f"Parsing CV text ({len(text)} chars) with DeepSeek")
+        if not self.is_available:
+            logger.warning("DeepSeek API key not available. Using fallback approach for CV parsing.")
+            return self._generate_fallback_cv_parse(cv_text)
+            
+        logger.info(f"Parsing CV text ({len(cv_text)} chars) with DeepSeek")
         start_time = time.time()
         
         cv_parsing_prompt = f"""
@@ -290,13 +331,13 @@ class DeepSeekService:
         Focus on accuracy and completeness while maintaining the JSON structure.
         
         CV TEXT:
-        {text}
+        {cv_text}
         """
         
         attempts = 0
         last_error = None
         
-        while attempts < max_retries:
+        while attempts < 3:
             try:
                 attempts += 1
                 logger.info(f"Attempt {attempts} to parse CV")
@@ -329,8 +370,105 @@ class DeepSeekService:
                 await asyncio.sleep(2)  # Short delay before retry
         
         # If we get here, all attempts failed
-        logger.error(f"Failed to parse CV after {max_retries} attempts. Last error: {last_error}")
+        logger.error(f"Failed to parse CV after {3} attempts. Last error: {last_error}")
         raise ValueError(f"Failed to parse CV data. Last error: {last_error}")
+    
+    def _generate_fallback_cv_parse(self, cv_text):
+        """
+        Generate a fallback parsed CV when the API key is missing
+        """
+        logger.info("Generating fallback parsed CV")
+        # Extract some basic information from the CV text to provide minimal functionality
+        lines = cv_text.split("\n")
+        name = next((line for line in lines[:10] if len(line) > 0 and len(line) < 40), "Name Not Found")
+        
+        return {
+            "personal_info": {
+                "name": name,
+                "email": "email@example.com",
+                "phone": "",
+                "location": ""
+            },
+            "sections": {
+                "summary": "",
+                "experience": [],
+                "education": [],
+                "skills": [],
+                "certifications": [],
+                "languages": []
+            },
+            "raw_text": cv_text[:100] + "..." if len(cv_text) > 100 else cv_text,
+            "note": "This is a fallback parse as the DeepSeek API is not configured. Please contact the administrator."
+        }
+    
+    async def rewrite_cv_section(self, section_name, content, industry="technology"):
+        """
+        Rewrite a specific CV section with improvements
+        
+        Args:
+            section_name: Name of the section (summary, experience, etc.)
+            content: Original content to improve
+            industry: Target industry for optimization
+            
+        Returns:
+            Improved section content
+        """
+        if not self.is_available:
+            logger.warning("DeepSeek API key not available. Using fallback approach for section rewrite.")
+            return self._generate_fallback_section_rewrite(section_name, content)
+            
+        logger.info(f"Rewriting CV section: {section_name}")
+        start_time = time.time()
+        
+        section_rewrite_prompt = f"""
+        Improve the following CV section to make it more effective and engaging for the {industry} industry.
+        
+        Section: {section_name}
+        Content:
+        {content}
+        
+        Focus on clarity, impact, and relevance to the industry. Use specific examples and metrics where possible.
+        """
+        
+        attempts = 0
+        last_error = None
+        
+        while attempts < 3:
+            try:
+                attempts += 1
+                logger.info(f"Attempt {attempts} to rewrite CV section")
+                response = await self._call_api(section_rewrite_prompt)
+                
+                try:
+                    # First try to parse directly
+                    rewritten_section = response.strip()
+                    logger.info(f"Successfully rewrote CV section in {time.time() - start_time:.2f} seconds")
+                    return rewritten_section
+                except Exception as e:
+                    last_error = str(e)
+                    logger.warning(f"Attempt {attempts} failed: {last_error}. Retrying...")
+                    await asyncio.sleep(2)  # Short delay before retry
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Attempt {attempts} failed: {last_error}. Retrying...")
+                await asyncio.sleep(2)  # Short delay before retry
+        
+        # If we get here, all attempts failed
+        logger.error(f"Failed to rewrite CV section after {3} attempts. Last error: {last_error}")
+        raise ValueError(f"Failed to rewrite CV section. Last error: {last_error}")
+    
+    def _generate_fallback_section_rewrite(self, section_name, content):
+        """
+        Generate a fallback improved section when the API key is missing
+        """
+        logger.info(f"Generating fallback improved section for {section_name}")
+        sample_improvements = {
+            "summary": "As a dedicated professional with experience in this field, I bring a strong combination of technical skills and business knowledge. I have consistently delivered results while working collaboratively with cross-functional teams.",
+            "experience": "• Led development of key projects, improving efficiency by 20%\n• Collaborated with cross-functional teams to deliver strategic initiatives\n• Implemented innovative solutions to complex business problems",
+            "skills": "• Technical: Programming, Data Analysis, Project Management\n• Soft Skills: Communication, Leadership, Problem-solving\n• Industry Knowledge: Business Analysis, Market Research"
+        }
+        
+        return sample_improvements.get(section_name.lower(), content) + "\n\n(Note: Using sample content as the CV improvement API is not configured)"
     
     async def extract_sections(self, text):
         """
