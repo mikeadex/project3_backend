@@ -31,6 +31,8 @@ pdfplumber==0.11.5
 pdfminer.six==20231228
 
 # NLP dependencies
+numpy==1.24.4  # Pin to a specific version to avoid binary incompatibility
+thinc==8.1.12  # Must be compatible with the numpy version
 spacy==3.5.2
 spacy-legacy==3.0.12
 spacy-loggers==1.0.5
