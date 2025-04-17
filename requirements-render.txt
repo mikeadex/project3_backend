@@ -11,7 +11,7 @@ pillow==10.3.0
 PyPDF2>=2.10.0
 python-docx>=0.8.11
 django-filter==24.3
-django-rest-auth==0.9.5
+dj-rest-auth==6.0.0
 djangorestframework-simplejwt==5.3.1
 PyJWT==2.7.0
 python-dotenv==1.0.1
@@ -29,6 +29,9 @@ nltk==3.8.1
 # PDF processing
 pdfplumber==0.10.3
 pdfminer.six>=20221105
+
+# Image storage and processing
+cloudinary>=1.37.0
 
 # Additional dependencies from settings.py
 requests>=2.26.0
