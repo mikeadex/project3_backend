@@ -26,6 +26,10 @@ django-tinymce==3.7.1
 spacy==3.7.4
 nltk==3.8.1
 
+# PDF processing
+pdfplumber==0.10.3
+pdfminer.six>=20221105
+
 # Additional dependencies from settings.py
 requests>=2.26.0
 
