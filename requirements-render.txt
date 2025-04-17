@@ -64,5 +64,9 @@ django-hitcount==1.3.5
 # Payment processing
 stripe==5.4.0
 
+# Blog and analytics
+ua-parser==0.16.1
+user-agents==2.2.0
+
 # Note: spacy models are installed in custom_build.sh
 # textract is intentionally excluded due to invalid metadata causing deployment issues
