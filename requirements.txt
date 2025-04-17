@@ -261,7 +261,6 @@ traitlets==5.14.1
 transformers==4.31.0
 trio==0.28.0
 trio-websocket==0.11.1
-textract==1.6.4
 typer==0.7.0
 typing-inspect==0.9.0
 typing_extensions==4.12.2
@@ -290,4 +289,12 @@ user-agents==2.2.0
 # Document parsing requirements
 PyPDF2>=2.10.0
 python-docx>=0.8.11
-textract>=1.6.4
+beautifulsoup4>=4.8.0
+chardet>=3.0.4
+docx2txt>=0.8
+extract-msg==0.28.0
+pdfminer.six>=20181108
+python-pptx>=0.6.5
+six>=1.12.0
+SpeechRecognition>=3.8.1
+textract==1.6.4
