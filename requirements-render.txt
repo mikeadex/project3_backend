@@ -16,5 +16,14 @@ djangorestframework-simplejwt==5.3.1
 PyJWT==2.7.0
 python-dotenv==1.0.1
 
+# Authentication
+django-allauth==64.0.0
+
+# Rich text editor
+django-tinymce==3.7.1
+
+# Additional dependencies from settings.py
+requests>=2.26.0
+
 # PyPDF2 and python-docx are needed for document parsing
 # textract is intentionally excluded due to invalid metadata causing deployment issues
