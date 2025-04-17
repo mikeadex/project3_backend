@@ -4,13 +4,7 @@ services:
     env: python
     plan: free
     branch: main
-    buildCommand: |
-      python -m pip install --upgrade pip
-      # Install all requirements
-      pip install -r requirements.txt
-      # Run Django commands
-      python manage.py collectstatic --noinput
-      python manage.py migrate
+    buildCommand: "./bin/custom_build.sh"
     startCommand: "./bin/start_gunicorn.sh"
     healthCheckPath: /api/health/
     envVars:
