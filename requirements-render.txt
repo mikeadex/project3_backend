@@ -12,6 +12,7 @@ PyPDF2>=2.10.0
 python-docx>=0.8.11
 django-filter==24.3
 dj-rest-auth==6.0.0
+django-rest-auth==0.9.5
 djangorestframework-simplejwt==5.3.1
 PyJWT==2.7.0
 python-dotenv==1.0.1
