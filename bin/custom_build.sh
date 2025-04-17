@@ -3,20 +3,13 @@ set -e
 
 echo "Starting custom build process..."
 
-# Upgrade pip to latest
-echo "Upgrading pip..."
-python -m pip install --upgrade pip
+# Downgrade pip to a version that can handle the invalid dependency specification
+echo "Downgrading pip to a version that can handle invalid metadata..."
+python -m pip install pip==23.0.1
 
-# Filter requirements to remove any textract-related lines
-echo "Filtering requirements..."
-grep -v "textract" requirements.txt > requirements_filtered.txt
-
-# Add pip constraints to block textract from being installed as a dependency
-echo "textract<0 # This blocks textract from being installed at all" > constraints.txt
-
-# Install with constraints
-echo "Installing requirements..."
-pip install -r requirements_filtered.txt -c constraints.txt
+# Install from minimal requirements file
+echo "Installing from minimal requirements file..."
+pip install -r requirements-render.txt
 
 # Django setup
 echo "Collecting static files..."
