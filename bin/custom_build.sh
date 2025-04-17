@@ -4,23 +4,22 @@ set -e
 echo "Starting custom build process..."
 
 # Downgrade pip to a version that can handle the invalid dependency specification
-echo "Downgrading pip to a version that can handle invalid metadata..."
+echo "Setting up pip and build dependencies..."
 python -m pip install pip==23.0.1
-
-# Install build dependencies first
-echo "Installing build dependencies..."
 pip install wheel setuptools
 
-# Install from minimal requirements file, but skip the heavy ML libraries first
-echo "Installing base requirements..."
-grep -v -E 'llama|torch|transformers|spacy|accelerate|loralib' requirements-render.txt > requirements-base.txt
+# Install dependencies in stages to better manage any issues
+echo "Installing base Django and utility packages..."
+grep -v -E 'spacy|nltk|llama|torch|transformers|accelerate|loralib' requirements-render.txt > requirements-base.txt
 pip install -r requirements-base.txt
 
-# Now install the ML dependencies with special flags
-echo "Installing ML dependencies..."
+echo "Installing NLP dependencies..."
+pip install spacy==3.5.2 spacy-legacy==3.0.12 spacy-loggers==1.0.5
+pip install nltk==3.8.1
+
+echo "Installing LLM dependencies..."
 pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
 pip install transformers==4.31.0
-pip install spacy==3.7.4
 pip install accelerate==0.27.2 loralib==0.1.2
 pip install llama-recipes==0.0.1
 pip install llama_cpp_python==0.2.23
