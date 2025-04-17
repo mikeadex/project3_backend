@@ -7,9 +7,23 @@ echo "Starting custom build process..."
 echo "Downgrading pip to a version that can handle invalid metadata..."
 python -m pip install pip==23.0.1
 
-# Install from minimal requirements file
-echo "Installing from minimal requirements file..."
-pip install -r requirements-render.txt
+# Install build dependencies first
+echo "Installing build dependencies..."
+pip install wheel setuptools
+
+# Install from minimal requirements file, but skip the heavy ML libraries first
+echo "Installing base requirements..."
+grep -v -E 'llama|torch|transformers|spacy|accelerate|loralib' requirements-render.txt > requirements-base.txt
+pip install -r requirements-base.txt
+
+# Now install the ML dependencies with special flags
+echo "Installing ML dependencies..."
+pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
+pip install transformers==4.31.0
+pip install spacy==3.7.4
+pip install accelerate==0.27.2 loralib==0.1.2
+pip install llama-recipes==0.0.1
+pip install llama_cpp_python==0.2.23
 
 # Download spaCy models
 echo "Downloading spaCy models..."
