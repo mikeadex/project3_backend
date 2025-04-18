@@ -105,6 +105,47 @@ class DeepSeekAPIService:
             logger.error(f"Error generating text with DeepSeek: {str(e)}")
             return None
 
+    async def improve_text(self, text, context=None, improvement_type="professional"):
+        """
+        Improve the provided text using DeepSeek API.
+        
+        Args:
+            text: The text to improve
+            context: Additional context for the improvement
+            improvement_type: Type of improvement to perform (professional, concise, etc.)
+            
+        Returns:
+            Improved text or None if improvement failed
+        """
+        if not text or not text.strip():
+            logger.warning("Empty text provided for improvement")
+            return text
+            
+        try:
+            instruction = f"""Improve the following text to make it more {improvement_type}, 
+            professional, clear, and impactful. Focus on enhancing the language while 
+            preserving all key information and keeping the same overall structure.
+            
+            Original text:
+            {text}
+            
+            Instructions:
+            - Enhance professional language and clarity
+            - Improve structure and readability
+            - Highlight achievements and skills
+            - Maintain all key information
+            - Make action verbs and metrics more impactful
+            """
+            
+            if context:
+                instruction += f"\n\nAdditional context: {context}"
+                
+            return await self.generate(instruction, max_tokens=2000, temperature=0.4)
+            
+        except Exception as e:
+            logger.error(f"Error improving text with DeepSeek: {str(e)}")
+            return text  # Return original text if improvement fails
+
 class MistralAPIService:
     """Service for interacting with the Mistral API"""
     
