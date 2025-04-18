@@ -2,6 +2,7 @@ from tokenize import Pointfloat
 from django.shortcuts import render
 from django.views.generic.edit import model_forms
 from django.core.mail import send_mail
+from django.http import Http404
 
 from rest_framework import (
     generics, 
@@ -32,6 +33,8 @@ from .models import (
     Reference,
     SocialMedia,
     CVImprovement,
+    CVTemplate,
+    CVTemplateSelection,
 )
 from .serializers import (
     CvWriterSerializer,
@@ -45,7 +48,9 @@ from .serializers import (
     ReferenceSerializer,
     SocialMediaSerializer,
     CVImprovementSerializer,
-    CVVersionSerializer
+    CVVersionSerializer,
+    CVTemplateSerializer,
+    CVTemplateSelectionSerializer
 )
 from .services import CVImprovementService
 from .local_llm import ResilientLLMService  # Updated import
@@ -1564,3 +1569,122 @@ def compare_rewritten_cv(request, session_id):
             {'error': f'Failed to compare CV versions: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# Template-related views
+class CVTemplateListView(generics.ListAPIView):
+    """
+    List all available CV templates.
+    """
+    serializer_class = CVTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Only show active templates
+        return CVTemplate.objects.filter(is_active=True).order_by('order', 'name')
+    
+    def list(self, request, *args, **kwargs):
+        """Add category filtering and organization"""
+        queryset = self.get_queryset()
+        
+        # Filter by category if specified
+        category = request.query_params.get('category', None)
+        if category:
+            queryset = queryset.filter(category=category)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Organize by category if requested
+        organize_by_category = request.query_params.get('organize_by_category', 'false').lower() == 'true'
+        if organize_by_category:
+            categories = {}
+            for template in serializer.data:
+                category = template.get('category', 'other')
+                if category not in categories:
+                    categories[category] = []
+                categories[category].append(template)
+            return Response(categories)
+            
+        return Response(serializer.data)
+
+class CVTemplateDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve a specific CV template.
+    """
+    serializer_class = CVTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = CVTemplate.objects.all()
+    lookup_field = 'slug'  # Use slug for retrieval
+
+class SetCVTemplateView(generics.UpdateAPIView):
+    """
+    Set or update the template for a CV.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def update(self, request, *args, **kwargs):
+        cv_id = kwargs.get('pk')
+        template_id = request.data.get('template_id')
+        
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=request.user)
+        except CvWriter.DoesNotExist:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        try:
+            template = CVTemplate.objects.get(id=template_id, is_active=True)
+        except CVTemplate.DoesNotExist:
+            return Response({"error": "Template not found or inactive"}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Update CV with new template
+        cv.template = template
+        cv.save()
+        
+        # Create or update template selection with customization options
+        selection, created = CVTemplateSelection.objects.get_or_create(
+            user=request.user,
+            cv=cv,
+            defaults={'template': template}
+        )
+        
+        if not created:
+            selection.template = template
+            selection.save()
+            
+        # Update customization options if provided
+        if 'color_scheme' in request.data:
+            selection.color_scheme = request.data['color_scheme']
+        if 'font_choice' in request.data:
+            selection.font_choice = request.data['font_choice']
+        if 'layout_option' in request.data:
+            selection.layout_option = request.data['layout_option']
+        if 'custom_css' in request.data:
+            selection.custom_css = request.data['custom_css']
+        if 'custom_settings' in request.data:
+            selection.custom_settings = request.data['custom_settings']
+            
+        selection.save()
+        
+        # Return updated CV with template info
+        serializer = CvWriterSerializer(cv)
+        return Response(serializer.data)
+
+class CVTemplateSelectionDetailView(generics.RetrieveUpdateAPIView):
+    """
+    Get or update template customization options for a CV.
+    """
+    serializer_class = CVTemplateSelectionSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_object(self):
+        cv_id = self.kwargs.get('cv_id')
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=self.request.user)
+            selection, created = CVTemplateSelection.objects.get_or_create(
+                user=self.request.user,
+                cv=cv,
+                defaults={'template': cv.template} if cv.template else {}
+            )
+            return selection
+        except CvWriter.DoesNotExist:
+            raise Http404("CV not found")

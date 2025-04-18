@@ -44,6 +44,9 @@ class CvWriter(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', null=True, blank=True)
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private', null=True, blank=True)
     
+    # Template selection
+    template = models.ForeignKey('CVTemplate', null=True, blank=True, on_delete=models.SET_NULL, related_name='cvs')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     parent_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='variants')
@@ -177,6 +180,70 @@ class CvWriter(models.Model):
         ordering = ['-created_at']
         # Remove unique constraint on user
         # unique_together = ['user']  # Commented out to allow multiple versions
+
+
+class CVTemplate(models.Model):
+    """Model for CV templates available in the system"""
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    preview_image = models.URLField(blank=True)
+    
+    # Template configuration - could be extended with specific options
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    
+    # Template category/classification
+    category = models.CharField(max_length=50, blank=True, choices=[
+        ('modern', 'Modern'),
+        ('classic', 'Classic'),
+        ('creative', 'Creative'),
+        ('professional', 'Professional'),
+        ('technical', 'Technical')
+    ])
+    
+    # Template customization options
+    has_color_options = models.BooleanField(default=False)
+    has_font_options = models.BooleanField(default=False)
+    has_layout_options = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        ordering = ['order', 'name']
+        verbose_name = "CV Template"
+        verbose_name_plural = "CV Templates"
+
+
+class CVTemplateSelection(models.Model):
+    """Model to store user's template selections and preferences"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='template_selections')
+    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name='template_selections')
+    template = models.ForeignKey(CVTemplate, on_delete=models.CASCADE)
+    
+    # Template customization preferences
+    color_scheme = models.CharField(max_length=50, blank=True)
+    font_choice = models.CharField(max_length=50, blank=True)
+    layout_option = models.CharField(max_length=50, blank=True)
+    
+    # Additional customizations
+    custom_css = models.TextField(blank=True)
+    custom_settings = models.JSONField(default=dict, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.username}'s template selection for CV #{self.cv.id}"
+    
+    class Meta:
+        unique_together = ['user', 'cv']
+        verbose_name = "Template Selection"
+        verbose_name_plural = "Template Selections"
 
 
 class CVImprovement(models.Model):

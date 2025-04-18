@@ -50,14 +50,20 @@ urlpatterns = [
 
     path('reference/', views.ReferenceListCreate.as_view(), name='reference-list-create'),
     path('reference/<int:id>/', views.ReferenceDetailView.as_view(), name='reference-detail'),
-
+    
     path('social-media/', views.SocialMediaListCreate.as_view(), name='social-media-list-create'),
     path('social-media/<int:id>/', views.SocialMediaDetailView.as_view(), name='social-media-detail'),
-
-    # CV Versioning Endpoints
-    path('cv/versions/', views.CVVersionListCreateView.as_view(), name='cv-version-list-create'),
-    path('cv/versions/<int:pk>/', views.CVVersionDetailView.as_view(), name='cv-version-detail'),
-    path('cv/versions/<int:pk>/set-primary/', views.SetPrimaryVersionView.as_view(), name='set-primary-version'),
-    path('cv/versions/<int:pk>/clone/', views.CloneCVVersionView.as_view(), name='clone-cv-version'),
-    path('cv/versions/<int:pk>/edit/', views.EditCVVersionView.as_view(), name='edit-cv-version'),
+    
+    # CV Version management endpoints
+    path('versions/', views.CVVersionListCreateView.as_view(), name='cv-versions'),
+    path('versions/<int:pk>/', views.CVVersionDetailView.as_view(), name='cv-version-detail'),
+    path('versions/<int:pk>/set-primary/', views.SetPrimaryVersionView.as_view(), name='set-primary-version'),
+    path('versions/<int:pk>/clone/', views.CloneCVVersionView.as_view(), name='clone-cv-version'),
+    path('versions/<int:pk>/edit/', views.EditCVVersionView.as_view(), name='edit-cv-version'),
+    
+    # Template selection endpoints
+    path('templates/', views.CVTemplateListView.as_view(), name='cv-templates'),
+    path('templates/<slug:slug>/', views.CVTemplateDetailView.as_view(), name='cv-template-detail'),
+    path('cv/<int:pk>/set-template/', views.SetCVTemplateView.as_view(), name='set-cv-template'),
+    path('cv/<int:cv_id>/template-selection/', views.CVTemplateSelectionDetailView.as_view(), name='cv-template-selection'),
 ]

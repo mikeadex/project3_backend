@@ -11,17 +11,30 @@ from .models import (
     Reference,
     SocialMedia,
     CVImprovement,
+    CVTemplate,
+    CVTemplateSelection,
 )
 from django.utils import timezone
 
+class CVTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CVTemplate
+        fields = [
+            'id', 'name', 'slug', 'description', 'preview_image',
+            'is_active', 'order', 'category', 
+            'has_color_options', 'has_font_options', 'has_layout_options'
+        ]
+
 class CvWriterSerializer(serializers.ModelSerializer):
+    template_info = CVTemplateSerializer(source='template', read_only=True)
+    
     class Meta:
         model = CvWriter
         fields = [
             'id', 'first_name', 'last_name', 'address', 'city', 'country',
             'contact_number', 'additional_information', 'title', 'description',
             'status', 'visibility', 'created_at', 'updated_at', 
-            'version_name', 'version_purpose', 'is_primary'
+            'version_name', 'version_purpose', 'is_primary', 'template', 'template_info'
         ]
 
     def to_representation(self, instance):
@@ -111,6 +124,17 @@ class CVImprovementSerializer(serializers.ModelSerializer):
             'id', 'section', 'original_content', 'improved_content',
             'improvement_type', 'tokens_used', 'status', 'error_message',
             'created_at'
+        ]
+
+class CVTemplateSelectionSerializer(serializers.ModelSerializer):
+    template_details = CVTemplateSerializer(source='template', read_only=True)
+    
+    class Meta:
+        model = CVTemplateSelection
+        fields = [
+            'id', 'template', 'template_details', 
+            'color_scheme', 'font_choice', 'layout_option',
+            'custom_css', 'custom_settings'
         ]
 
 class CVVersionSerializer(serializers.ModelSerializer):
