@@ -17,25 +17,32 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from asgiref.sync import sync_to_async
 
+# Import models
 import logging
 logger = logging.getLogger(__name__)
 
 from .models import (
     CvWriter,
     Education,
-    Experience,
+    Experience, 
     ProfessionalSummary,
-    Interest,
     Skill,
     Language,
     Certification,
+    Interest,
     Reference,
     SocialMedia,
     CVImprovement,
     CVTemplate,
     CVTemplateSelection,
 )
+
+# Import from ai_cv_parser for rewrite session
+from ai_cv_parser.models import CVRewriteSession
+
 from .serializers import (
     CvWriterSerializer,
     EducationSerializer,
@@ -789,19 +796,19 @@ def save_rewritten_cv(request):
     """
     Save a rewritten CV from an AI rewrite session to the CV writer database.
     
-    Expects:
-    - session_id: ID of the rewrite session to save
-    - personal_info: Optional dict with personal information to update the CV with
+    This view handles the final step after CV rewriting where the user chooses
+    to save the rewritten CV to their account for further editing and use.
     
-    Returns:
-    - cv_id: ID of the newly created CV
+    The request should include the session_id of the CV rewrite session and
+    optionally updated personal info.
     """
+    logger = logging.getLogger('cv_writer')
     try:
+        # Extract the session ID from the request data
         session_id = request.data.get('session_id')
         personal_info = request.data.get('personal_info', {})
         
-        # Log the request data for debugging
-        logger = logging.getLogger('cv_writer')
+        # Log the request
         logger.info(f"Save rewritten CV request: session_id={session_id}, personal_info={personal_info}")
         
         if not session_id:
@@ -809,30 +816,31 @@ def save_rewritten_cv(request):
                 {'error': 'Session ID is required'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-            
-        # Import here to avoid circular imports
-        from ai_cv_parser.models import CVRewriteSession
         
-        # Get the rewrite session
+        # Get the rewrite session by ID
         try:
-            rewrite_session = CVRewriteSession.objects.get(
-                id=session_id,
-                user=request.user
-            )
-            logger.info(f"Found rewrite session: {rewrite_session.id}, status: {rewrite_session.status}, new_cv_id: {rewrite_session.new_cv_id}")
+            rewrite_session = CVRewriteSession.objects.get(id=session_id)
+            logger.info(f"Found rewrite session: {session_id}, status: {rewrite_session.status}, new_cv_id: {rewrite_session.new_cv_id}")
         except CVRewriteSession.DoesNotExist:
             return Response(
                 {'error': 'Rewrite session not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
-            
-        # Check if the rewrite was completed successfully
+        
+        # Check if the session belongs to the requesting user
+        if rewrite_session.user != request.user:
+            return Response(
+                {'error': 'You do not have permission to access this session'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if the session is completed
         if rewrite_session.status != 'completed':
             return Response(
-                {'error': f'Rewrite session is not completed. Current status: {rewrite_session.status}'}, 
+                {'error': f'Rewrite session is not completed, current status: {rewrite_session.status}'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-            
+        
         # Check if the session has a new CV ID already
         if not rewrite_session.new_cv_id:
             # If no new CV ID exists, try to create a new CV using session result
@@ -1286,8 +1294,8 @@ def _process_rewrite_in_background(session_id, cv_id, user_id):
         # Import inside function to avoid circular imports
         from ai_cv_parser.models import CVRewriteSession, ParsedCV
         from ai_cv_parser.services import CVRewriteService
-        from django.contrib.auth import get_user_model
-        from django.db import connection
+        from ai_cv_parser.deepseek_service import DeepSeekService
+        from cv_writer.services import CVImprovementService
         
         # Ensure we have a fresh DB connection in this thread
         connection.close()

@@ -23,6 +23,8 @@ import traceback
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import httpx
+import inspect
+import asyncio
 
 # For local Llama model
 try:
@@ -346,7 +348,7 @@ class LocalLlamaAPIService:
             logger.debug(traceback.format_exc())
             raise
             
-    def generate_with_system_prompt(self, system_prompt, user_prompt, timeout=60):
+    async def generate_with_system_prompt(self, system_prompt, user_prompt, timeout=60):
         """
         Generate a response with a system prompt using the local Llama model
         
@@ -542,7 +544,7 @@ CERTIFICATIONS
 [Certifications would appear here]
 ==========="""
 
-    def improve_text(self, text, timeout=60):
+    async def improve_text(self, text, timeout=60):
         """
         Generate an improved version of the provided text
         
@@ -560,9 +562,9 @@ CERTIFICATIONS
 
 Return only the improved version without any additional explanations."""
         
-        return self.generate_with_system_prompt(system_prompt, user_prompt, timeout)
+        return await self.generate_with_system_prompt(system_prompt, user_prompt, timeout)
 
-    def segment_cv(self, text, timeout=60):
+    async def segment_cv(self, text, timeout=60):
         """
         Segment a CV text into sections using DeepSeek (preferred) or local Llama model
         
@@ -703,7 +705,7 @@ CV TEXT:
 {optimized_text}"""
                 
                 # Generate segmented text
-                segmented_text = self.local_llama_service.generate_with_system_prompt(
+                segmented_text = await self.generate_with_system_prompt(
                     system_prompt, user_prompt, timeout=timeout
                 )
                 
@@ -844,7 +846,7 @@ class LlamaAPIService:
         }
         logger.info("LLaMA API initialized successfully")
     
-    def generate_with_system_prompt(self, system_prompt, user_prompt, timeout=30):
+    async def generate_with_system_prompt(self, system_prompt, user_prompt, timeout=30):
         """
         Generate text with a system prompt and user prompt
         
@@ -894,7 +896,7 @@ class LlamaAPIService:
             logger.debug(traceback.format_exc())
             return None
     
-    def improve_text(self, text, timeout=30):
+    async def improve_text(self, text, timeout=30):
         """
         Improve text using LLaMA API
         
@@ -919,7 +921,7 @@ class LlamaAPIService:
 
 Return only the improved version without any additional explanations or formatting."""
 
-        return self.generate_with_system_prompt(system_prompt, user_prompt, timeout)
+        return await self.generate_with_system_prompt(system_prompt, user_prompt, timeout)
 
 class CVImprovementService:
     """
@@ -1023,201 +1025,7 @@ class CVImprovementService:
             
         logger.info(f"Initialized CV Improvement Service with services: {', '.join(self._initialized_services)}")
 
-    def generate_improved_text(self, text, system_prompt=None, timeout=60):
-        """
-        Generate an improved version of the provided text
-        
-        Args:
-            text (str): Text to improve
-            system_prompt (str, optional): System instructions
-            timeout (int): Maximum time to wait for response
-            
-        Returns:
-            str: Improved text
-        """
-        # Default system prompt if not provided
-        if not system_prompt:
-            system_prompt = (
-                "You are a helpful assistant that improves text. "
-                "Make text clearer, more professional, and more effective, "
-                "while keeping the same information and tone."
-            )
-        
-        # Try primary service first
-        try:
-            logger.info(f"Attempting to improve text using primary service ({self.primary_service.__class__.__name__})")
-            
-            # For local Llama service, use its method
-            if isinstance(self.primary_service, LocalLlamaAPIService):
-                improved_text = self.primary_service.improve_text(text, timeout=timeout)
-            else:
-                # For API services, use the standard method
-                user_prompt = f"""Please improve the following text:
-
-{text}
-
-Return only the improved version without any additional explanations."""
-                improved_text = self.primary_service.generate_with_system_prompt(
-                    system_prompt, user_prompt, timeout=timeout
-                )
-                
-            # Check if we got a valid response
-            if improved_text and len(improved_text) > 0:
-                return improved_text
-                
-        except Exception as e:
-            logger.warning(f"Failed to improve text with primary service: {str(e)}")
-            logger.debug(traceback.format_exc())
-        
-        # If primary service failed and we have a different fallback, try that
-        if self.fallback_service and self.fallback_service is not self.primary_service:
-            try:
-                logger.info(f"Attempting to improve text using fallback service ({self.fallback_service.__class__.__name__})")
-                
-                # For local Llama service, use its method
-                if isinstance(self.fallback_service, LocalLlamaAPIService):
-                    improved_text = self.fallback_service.improve_text(text, timeout=timeout)
-                else:
-                    # For API services, use the standard method
-                    user_prompt = f"""Please improve the following text:
-
-{text}
-
-Return only the improved version without any additional explanations."""
-                    improved_text = self.fallback_service.generate_with_system_prompt(
-                        system_prompt, user_prompt, timeout=timeout
-                    )
-                
-                # Check if we got a valid response
-                if improved_text and len(improved_text) > 0:
-                    return improved_text
-                    
-            except Exception as e:
-                logger.warning(f"Failed to improve text with fallback service: {str(e)}")
-                logger.debug(traceback.format_exc())
-        
-        # If all services failed, return original text
-        logger.warning("All services failed to improve text, returning original")
-        return text
-        
-    def improve_text(self, text):
-        """
-        Improves CV text using available LLM service
-        
-        Args:
-            text (str): Text to improve
-            
-        Returns:
-            str: Improved text or empty string if all services fail
-        """
-        # Try each service in order until one works
-        for service in self.available_services:
-            try:
-                result = service.improve_text(text)
-                if result:
-                    return result
-            except Exception as e:
-                logger.error(f"{service.__class__.__name__} failed: {str(e)}")
-                continue
-                
-        # All services failed
-        logger.error("All LLM services failed")
-        return ""
-        
-    def generate_response(self, system_prompt, user_prompt, max_retries=2):
-        """
-        Generate a response using available LLM services with a system prompt
-        and user prompt, which is the prefered format for LLM services.
-        
-        Args:
-            system_prompt (str): System prompt for the LLM
-            user_prompt (str): User prompt for the LLM
-            max_retries (int): Maximum number of retries
-            
-        Returns:
-            str: Response from LLM service or empty string if all services fail
-        """
-        # Try each service in order until one works
-        for service in self.available_services:
-            for attempt in range(max_retries):
-                try:
-                    # Check if service has a dedicated method for system/user prompts
-                    if hasattr(service, 'generate_with_system_prompt'):
-                        result = service.generate_with_system_prompt(system_prompt, user_prompt)
-                    else:
-                        # Fall back to basic format
-                        formatted_prompt = f"System: {system_prompt}\n\nUser: {user_prompt}"
-                        result = service.improve_text(formatted_prompt)
-                        
-                    if result:
-                        return result
-                except Exception as e:
-                    logger.error(f"{service.__class__.__name__} attempt {attempt+1} failed: {str(e)}")
-                    if attempt == max_retries - 1:
-                        # Last attempt failed, try next service
-                        break
-                    # Small delay before retry
-                    time.sleep(1) 
-        
-        # All services failed
-        logger.error("All LLM services failed to generate response")
-        return ""
-
-    def _improve_section(self, section: str, content: Dict) -> Dict:
-        """Improves a specific section using available LLM."""
-        try:
-            prompt_data = self.improvement_prompts.get(section)
-            if not prompt_data:
-                return {'original': content, 'improved': str(content)}
-
-            formatted_prompt = prompt_data['template'].format(
-                content=str(content),
-                industry=self._detect_industry(content)
-            )
-
-            # Fallback logic
-            if hasattr(self, 'use_mistral') and self.use_mistral:
-                mistral_result = self.primary_service.improve_text(formatted_prompt)
-                if mistral_result:
-                    return {'original': content, 'improved': mistral_result}
-            
-            if hasattr(self, 'use_groq') and self.use_groq:
-                groq_result = self.fallback_service.improve_text(formatted_prompt)
-                if groq_result:
-                    return {'original': content, 'improved': groq_result}
-            
-            if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'llm_service'):
-                return {'original': content, 'improved': self.llm_service.improve_section(section, content)}
-            
-            logger.warning("No AI service available for improvement")
-            return {'original': content, 'improved': str(content)}
-
-        except Exception as e:
-            logger.error(f"Error improving section: {str(e)}")
-            return {'original': content, 'improved': str(content)}
-
-    def _detect_industry(self, content: Dict) -> str:
-        """Detects industry from CV content."""
-        industries = {
-            'technology': ['software', 'developer', 'engineering', 'IT', 'tech'],
-            'finance': ['banking', 'financial', 'accounting', 'investment'],
-            'healthcare': ['medical', 'healthcare', 'clinical', 'patient'],
-            'marketing': ['marketing', 'advertising', 'brand', 'digital'],
-            'education': ['teaching', 'education', 'academic', 'instructor']
-        }
-
-        content_str = str(content).lower()
-        
-        # Count industry keyword matches
-        matches = {
-            industry: sum(1 for keyword in keywords if keyword in content_str)
-            for industry, keywords in industries.items()
-        }
-        
-        # Return industry with most matches, default to technology
-        return max(matches.items(), key=lambda x: x[1])[0] if any(matches.values()) else "technology"
-
-    def enhance_rewrite(self, initial_rewrite, user=None):
+    async def enhance_rewrite(self, initial_rewrite, user=None):
         """
         Enhance a CV rewrite from DeepSeek using LLaMA or other available LLM services.
         
@@ -1343,7 +1151,23 @@ Return only the improved version without any additional explanations."""
                 """
                 
                 try:
-                    generated_summary = self.generate_response(system_prompt, user_prompt)
+                    # Check if generate_response is a coroutine function and handle it appropriately
+                    import inspect
+                    import asyncio
+                    
+                    if inspect.iscoroutinefunction(self.generate_response):
+                        # If it's async, we need to run it in an event loop
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            generated_summary = loop.run_until_complete(
+                                self.generate_response(system_prompt, user_prompt)
+                            )
+                        finally:
+                            loop.close()
+                    else:
+                        # If it's a regular function, just call it normally
+                        generated_summary = self.generate_response(system_prompt, user_prompt)
                     
                     if generated_summary:
                         logger.info(f"Successfully generated professional summary")
@@ -1385,7 +1209,24 @@ Return only the improved version without any additional explanations."""
                     user_prompt = f"Here is the {section_name.replace('_', ' ')} to improve:\n\n{section_content}"
                     
                     try:
-                        improved_content = self.generate_response(system_prompt, user_prompt)
+                        # Check if generate_response is a coroutine function and handle it appropriately
+                        import inspect
+                        import asyncio
+                        
+                        if inspect.iscoroutinefunction(self.generate_response):
+                            # If it's async, we need to run it in an event loop
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                improved_content = loop.run_until_complete(
+                                    self.generate_response(system_prompt, user_prompt)
+                                )
+                            finally:
+                                loop.close()
+                        else:
+                            # If it's a regular function, just call it normally
+                            improved_content = self.generate_response(system_prompt, user_prompt)
+                        
                         # Fallback to original if enhancement failed
                         enhanced_cv[section_name] = improved_content if improved_content else section_content
                     except Exception as e:
@@ -1420,7 +1261,24 @@ Return only the improved version without any additional explanations."""
                                 user_prompt = f"Here is the job description to improve:\n\n{item['description']}"
                                 
                                 try:
-                                    improved_description = self.generate_response(system_prompt, user_prompt)
+                                    # Check if generate_response is a coroutine function and handle it appropriately
+                                    import inspect
+                                    import asyncio
+                                    
+                                    if inspect.iscoroutinefunction(self.generate_response):
+                                        # If it's async, we need to run it in an event loop
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        try:
+                                            improved_description = loop.run_until_complete(
+                                                self.generate_response(system_prompt, user_prompt)
+                                            )
+                                        finally:
+                                            loop.close()
+                                    else:
+                                        # If it's a regular function, just call it normally
+                                        improved_description = self.generate_response(system_prompt, user_prompt)
+                                    
                                     if improved_description:
                                         item['description'] = improved_description
                                 except Exception as e:
@@ -1443,7 +1301,24 @@ Return only the improved version without any additional explanations."""
                                 user_prompt = f"Here is the education description to improve:\n\n{item['description']}"
                                 
                                 try:
-                                    improved_description = self.generate_response(system_prompt, user_prompt)
+                                    # Check if generate_response is a coroutine function and handle it appropriately
+                                    import inspect
+                                    import asyncio
+                                    
+                                    if inspect.iscoroutinefunction(self.generate_response):
+                                        # If it's async, we need to run it in an event loop
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        try:
+                                            improved_description = loop.run_until_complete(
+                                                self.generate_response(system_prompt, user_prompt)
+                                            )
+                                        finally:
+                                            loop.close()
+                                    else:
+                                        # If it's a regular function, just call it normally
+                                        improved_description = self.generate_response(system_prompt, user_prompt)
+                                    
                                     if improved_description:
                                         item['description'] = improved_description
                                 except Exception as e:
@@ -1474,7 +1349,7 @@ Return only the improved version without any additional explanations."""
                 'new_cv_id': initial_rewrite.get('new_cv_id')  # Pass through the CV ID even if enhancement fails
             }
 
-    def segment_cv(self, text, timeout=60):
+    async def segment_cv(self, text, timeout=60):
         """
         Segment a CV text into sections using DeepSeek (preferred) or local Llama model
         
@@ -1615,7 +1490,7 @@ CV TEXT:
 {optimized_text}"""
                 
                 # Generate segmented text
-                segmented_text = self.local_llama_service.generate_with_system_prompt(
+                segmented_text = await self.local_llama_service.generate_with_system_prompt(
                     system_prompt, user_prompt, timeout=timeout
                 )
                 
@@ -1738,6 +1613,99 @@ CV TEXT:
             result.append("===========")
         
         return '\n'.join(result)
+
+    async def generate_response(self, system_prompt, user_prompt, max_retries=2):
+        """
+        Generate a response using available LLM services with a system prompt
+        and user prompt, which is the prefered format for LLM services.
+        
+        Args:
+            system_prompt (str): System prompt for the LLM
+            user_prompt (str): User prompt for the LLM
+            max_retries (int): Maximum number of retries
+            
+        Returns:
+            str: Response from LLM service or empty string if all services fail
+        """
+        # Try each service in order until one works
+        for service in self.available_services:
+            for attempt in range(max_retries):
+                try:
+                    # Check if service has a dedicated method for system/user prompts
+                    if hasattr(service, 'generate_with_system_prompt'):
+                        result = await service.generate_with_system_prompt(system_prompt, user_prompt)
+                    else:
+                        # Fall back to basic format
+                        formatted_prompt = f"System: {system_prompt}\n\nUser: {user_prompt}"
+                        result = await service.improve_text(formatted_prompt)
+                        
+                    if result:
+                        return result
+                except Exception as e:
+                    logger.error(f"{service.__class__.__name__} attempt {attempt+1} failed: {str(e)}")
+                    if attempt == max_retries - 1:
+                        # Last attempt failed, try next service
+                        break
+                    # Small delay before retry
+                    await asyncio.sleep(1) 
+        
+        # All services failed
+        logger.error("All LLM services failed to generate response")
+        return ""
+
+    def _improve_section(self, section: str, content: Dict) -> Dict:
+        """Improves a specific section using available LLM."""
+        try:
+            prompt_data = self.improvement_prompts.get(section)
+            if not prompt_data:
+                return {'original': content, 'improved': str(content)}
+
+            formatted_prompt = prompt_data['template'].format(
+                content=str(content),
+                industry=self._detect_industry(content)
+            )
+
+            # Fallback logic
+            if hasattr(self, 'use_mistral') and self.use_mistral:
+                mistral_result = self.primary_service.improve_text(formatted_prompt)
+                if mistral_result:
+                    return {'original': content, 'improved': mistral_result}
+            
+            if hasattr(self, 'use_groq') and self.use_groq:
+                groq_result = self.fallback_service.improve_text(formatted_prompt)
+                if groq_result:
+                    return {'original': content, 'improved': groq_result}
+            
+            if not os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') and hasattr(self, 'llm_service'):
+                return {'original': content, 'improved': self.llm_service.improve_section(section, content)}
+            
+            logger.warning("No AI service available for improvement")
+            return {'original': content, 'improved': str(content)}
+
+        except Exception as e:
+            logger.error(f"Error improving section: {str(e)}")
+            return {'original': content, 'improved': str(content)}
+
+    def _detect_industry(self, content: Dict) -> str:
+        """Detects industry from CV content."""
+        industries = {
+            'technology': ['software', 'developer', 'engineering', 'IT', 'tech'],
+            'finance': ['banking', 'financial', 'accounting', 'investment'],
+            'healthcare': ['medical', 'healthcare', 'clinical', 'patient'],
+            'marketing': ['marketing', 'advertising', 'brand', 'digital'],
+            'education': ['teaching', 'education', 'academic', 'instructor']
+        }
+
+        content_str = str(content).lower()
+        
+        # Count industry keyword matches
+        matches = {
+            industry: sum(1 for keyword in keywords if keyword in content_str)
+            for industry, keywords in industries.items()
+        }
+        
+        # Return industry with most matches, default to technology
+        return max(matches.items(), key=lambda x: x[1])[0] if any(matches.values()) else "technology"
 
 def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=None):
     """
@@ -1929,6 +1897,12 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
     
     # Return the CV writer instance
     return cv_writer_instance
+
+# Create an async version of the function using sync_to_async
+from asgiref.sync import sync_to_async
+
+# This creates an async version of the synchronous function
+save_rewritten_cv_to_database_async = sync_to_async(save_rewritten_cv_to_database)
 
 def clean_ai_text(text):
     """Helper function to remove AI explanatory text from content"""
