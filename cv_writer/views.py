@@ -633,7 +633,20 @@ def rewrite_cv(request):
                     cv_improvement_service = CVImprovementService()
                     
                     # Enhance the initial result using LLaMA
-                    enhanced_result = cv_improvement_service.enhance_rewrite(initial_result, user)
+                    import asyncio
+                    import inspect
+                    
+                    if inspect.iscoroutinefunction(cv_improvement_service.enhance_rewrite):
+                        # If it's async, we need to run it in an event loop
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            enhanced_result = loop.run_until_complete(cv_improvement_service.enhance_rewrite(initial_result, user))
+                        finally:
+                            loop.close()
+                    else:
+                        # If it's a regular function, just call it normally
+                        enhanced_result = cv_improvement_service.enhance_rewrite(initial_result, user)
                     
                     # STAGE 4: ATS Compatibility - Final touches
                     session.result = {
@@ -1359,7 +1372,20 @@ def _process_rewrite_in_background(session_id, cv_id, user_id):
             rewrite_service = CVRewriteService()
             
             # Rewrite the CV
-            rewrite_result = rewrite_service.rewrite_cv(cv_data)
+            import asyncio
+            import inspect
+            
+            if inspect.iscoroutinefunction(rewrite_service.rewrite_cv):
+                # If it's async, we need to run it in an event loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    rewrite_result = loop.run_until_complete(rewrite_service.rewrite_cv(cv_data))
+                finally:
+                    loop.close()
+            else:
+                # If it's a regular function, just call it normally
+                rewrite_result = rewrite_service.rewrite_cv(cv_data)
             
             # Update the session with the result
             session.status = 'completed'
