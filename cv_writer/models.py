@@ -281,6 +281,7 @@ class CVImprovement(models.Model):
 
 class Education(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="education")
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="education", null=True, blank=True)
     school_name = models.CharField(max_length=100)
     degree = models.CharField(max_length=100)
     field_of_study = models.CharField(max_length=100)
@@ -307,6 +308,7 @@ class ProfessionalSummary(models.Model):
 
 class Interest(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="interest")
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="interests", null=True, blank=True)
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -324,6 +326,7 @@ class Experience(models.Model):
         ("Freelance", "Freelance"),
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="experience")
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="experience", null=True, blank=True)
     company_name = models.CharField(max_length=100)
     job_title = models.CharField(max_length=100)
     job_description = models.TextField()
@@ -341,6 +344,7 @@ class Experience(models.Model):
 
 class Skill(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill")
+    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="skills", null=True, blank=True)
     skill_name = models.CharField(max_length=100)
     skill_level = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -352,20 +356,21 @@ class Skill(models.Model):
 
 class Language(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="language")
-    language_name = models.CharField(max_length=100)
-    language_level = models.CharField(max_length=100)
-    is_custom = models.BooleanField(default=False)
+    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="languages", null=True, blank=True)
+    language = models.CharField(max_length=100)
+    proficiency = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.language_name
+        return self.language
 
 
 class Certification(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="certification"
     )
+    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="certifications", null=True, blank=True)
     certificate_name = models.CharField(max_length=100)
     certificate_date = models.DateField(null=True, blank=True)
     certificate_link = models.URLField(null=True, blank=True)
@@ -385,6 +390,7 @@ class Reference(models.Model):
     )
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reference")
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="references", null=True, blank=True)
     name = models.CharField(max_length=100)
     title = models.CharField(max_length=100)
     company = models.CharField(max_length=100)
@@ -409,6 +415,7 @@ class SocialMedia(models.Model):
     )
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="social_media")
+    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="social_media", null=True, blank=True)
     platform = models.CharField(max_length=50, choices=PLATFORM_CHOICES)
     url = models.URLField()
     created_at = models.DateTimeField(auto_now_add=True)

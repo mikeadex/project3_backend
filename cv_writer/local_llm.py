@@ -902,12 +902,66 @@ class ResilientLLMService:
         :param max_tokens: Maximum tokens to generate
         :return: Improved text dictionary
         """
-        # Prompt templates for different sections
+        # Enhanced prompt templates for ATS-ready, compelling content
         prompt_templates = {
-            'professional_summary': f"Improve this professional summary: {content}",
-            'experience': f"Transform this job description: {content}",
-            'skills': f"Categorize and enhance these skills: {content}",
-            'default': content
+            'professional_summary': f"""Transform this professional summary into an ATS-optimized, compelling statement that will grab recruiters' attention.
+
+REQUIREMENTS:
+- Use powerful action verbs and industry keywords
+- Quantify achievements where possible
+- Show clear value proposition to employers
+- Keep it concise (3-4 sentences)
+- Make it sound confident and professional
+- Include relevant skills and experience level
+
+Original summary: {content}
+
+Return ONLY the improved professional summary:""",
+
+            'experience': f"""Transform this job experience into compelling, ATS-optimized bullet points that showcase achievements and impact.
+
+REQUIREMENTS:
+- Start each bullet point with strong action verbs (Managed, Developed, Implemented, etc.)
+- Quantify results where possible (percentages, numbers, timeframes)
+- Focus on achievements, not just job duties
+- Use industry-relevant keywords
+- Show progression and growth
+- Make it compelling to recruiters
+- Format as clean bullet points
+
+Original experience: {content}
+
+Return ONLY the improved experience bullet points:""",
+
+            'skills': f"""Organize and enhance these skills into professional categories with proper skill levels.
+
+REQUIREMENTS:
+- Group related skills into logical categories (Technical, Software, Communication, etc.)
+- Use industry-standard skill names
+- Assign realistic proficiency levels (Beginner, Intermediate, Advanced, Expert)
+- Remove duplicate or redundant skills
+- Add relevant skills that are commonly expected
+- Make it ATS-friendly with proper keywords
+
+Original skills: {content}
+
+Return ONLY the organized skills in this format:
+Category: Skill Name (Proficiency Level)""",
+
+            'education': f"""Enhance this education section with proper professional formatting and relevant details.
+
+REQUIREMENTS:
+- Use proper degree titles and formatting
+- Include relevant coursework, honors, or achievements if applicable
+- Add GPA if it's 3.5 or higher
+- Include relevant certifications or training
+- Make it concise and professional
+
+Original education: {content}
+
+Return ONLY the improved education section:""",
+
+            'default': f"Improve and professionalize this content: {content}"
         }
         
         # Select appropriate prompt template

@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
-from asgiref.sync import sync_to_async
+from asgiref.sync import sync_to_async, async_to_sync
 
 # Import models
 import logging
@@ -388,6 +388,414 @@ def improve_section(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def improve_entire_cv(request):
+    """
+    Comprehensive CV improvement for all sections to make it ATS-ready and compelling.
+    """
+    try:
+        cv_id = request.data.get('cv_id')
+        if not cv_id:
+            return Response({
+                'error': 'CV ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the CV and check ownership
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=request.user)
+        except CvWriter.DoesNotExist:
+            return Response({
+                'error': 'CV not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        improvements = {}
+        
+        # Use external API services directly - bypass local model entirely
+        try:
+            import httpx
+            import os
+            
+            # Get API keys directly from environment
+            deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+            mistral_key = os.getenv('MISTRAL_API_KEY') 
+            groq_key = os.getenv('GROQ_API_KEY')
+            
+            if not any([deepseek_key, mistral_key, groq_key]):
+                return Response({
+                    'error': 'No AI API keys found. Please configure DEEPSEEK_API_KEY, MISTRAL_API_KEY, or GROQ_API_KEY.',
+                    'details': 'Environment variables not loaded properly'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                
+            # Create a simple function to call AI APIs
+            async def call_ai_api(prompt_text):
+                try:
+                    # Try DeepSeek first
+                    if deepseek_key:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.post(
+                                "https://api.deepseek.com/v1/chat/completions",
+                                headers={
+                                    "Authorization": f"Bearer {deepseek_key}",
+                                    "Content-Type": "application/json"
+                                },
+                                json={
+                                    "model": "deepseek-chat",
+                                    "messages": [{"role": "user", "content": prompt_text}],
+                                    "max_tokens": 1000,
+                                    "temperature": 0.7
+                                },
+                                timeout=30.0
+                            )
+                            if response.status_code == 200:
+                                data = response.json()
+                                return data["choices"][0]["message"]["content"]
+                    
+                    # Fallback to Groq
+                    if groq_key:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.post(
+                                "https://api.groq.com/openai/v1/chat/completions",
+                                headers={
+                                    "Authorization": f"Bearer {groq_key}",
+                                    "Content-Type": "application/json"
+                                },
+                                json={
+                                    "model": "llama3-8b-8192",
+                                    "messages": [{"role": "user", "content": prompt_text}],
+                                    "max_tokens": 1000,
+                                    "temperature": 0.7
+                                },
+                                timeout=30.0
+                            )
+                            if response.status_code == 200:
+                                data = response.json()
+                                return data["choices"][0]["message"]["content"]
+                    
+                    return None
+                except Exception as e:
+                    logger.error(f"Error calling AI API: {str(e)}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Error setting up AI service: {str(e)}")
+            return Response({
+                'error': 'Failed to initialize AI service',
+                'details': str(e)
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        
+        # Improve Professional Summary
+        try:
+            professional_summary = ProfessionalSummary.objects.filter(user=request.user, cv=cv).first()
+            if professional_summary and professional_summary.summary:
+                
+                # Create improvement prompt for professional summary
+                prompt = f"""Transform this professional summary into an ATS-optimized, compelling statement.
+
+REQUIREMENTS:
+- Use powerful action verbs and industry keywords
+- Quantify achievements where possible
+- Show clear value proposition to employers
+- Keep it concise (3-4 sentences)
+- Make it sound confident and professional
+
+Original summary: {professional_summary.summary}
+
+Return ONLY the improved professional summary:"""
+                
+                result = async_to_sync(call_ai_api)(prompt)
+                if result:
+                    improvements['professional_summary'] = {
+                        'original': professional_summary.summary,
+                        'improved': result
+                    }
+        except Exception as e:
+            logger.error(f"Error improving professional summary: {str(e)}")
+        
+        # Improve Work Experience
+        try:
+            experiences = Experience.objects.filter(user=request.user).order_by('-start_date')
+            improved_experiences = []
+            for exp in experiences:
+                if exp.job_description:
+                    
+                    prompt = f"""Transform this job experience into compelling, ATS-optimized bullet points.
+
+REQUIREMENTS:
+- Start each bullet point with strong action verbs (Managed, Developed, Implemented, etc.)
+- Quantify results where possible (percentages, numbers, timeframes)
+- Focus on achievements, not just job duties
+- Use industry-relevant keywords
+- Make it compelling to recruiters
+- Format as clean bullet points
+
+Original experience: {exp.job_description}
+
+Return ONLY the improved experience bullet points:"""
+                    
+                    result = async_to_sync(call_ai_api)(prompt)
+                    if result:
+                        improved_experiences.append({
+                            'id': exp.id,
+                            'job_title': exp.job_title,
+                            'company_name': exp.company_name,
+                            'original': exp.job_description,
+                            'improved': result
+                        })
+            if improved_experiences:
+                improvements['experiences'] = improved_experiences
+        except Exception as e:
+            logger.error(f"Error improving experiences: {str(e)}")
+        
+        # Improve Skills
+        try:
+            skills = Skill.objects.filter(user=request.user)
+            if skills.exists():
+                skills_text = ", ".join([f"{skill.skill_name} ({skill.skill_level})" for skill in skills])
+                
+                prompt = f"""Improve and organize these skills professionally for an accounting role.
+
+REQUIREMENTS:
+- Use industry-standard skill names for accounting
+- Assign realistic proficiency levels: Beginner, Intermediate, Advanced, Expert
+- Remove basic skills like "Number" and "Maths" 
+- Add relevant accounting software and tools
+- Focus on professional accounting skills
+- NO asterisks, bullets, or special formatting
+
+Original skills: {skills_text}
+
+Return ONLY a comma-separated list like this:
+Advanced Excel, Intermediate QuickBooks, Expert Financial Analysis, Advanced Tax Preparation, Intermediate SAP, Expert Bookkeeping, Advanced Financial Reporting, Intermediate Auditing"""
+                
+                result = async_to_sync(call_ai_api)(prompt)
+                if result:
+                    improvements['skills'] = {
+                        'original': skills_text,
+                        'improved': result
+                    }
+        except Exception as e:
+            logger.error(f"Error improving skills: {str(e)}")
+        
+        # Improve Education
+        try:
+            education = Education.objects.filter(user=request.user).order_by('-start_date').first()
+            if education:
+                education_text = f"{education.degree} in {education.field_of_study} from {education.school_name}"
+                if education.description:
+                    education_text += f". {education.description}"
+                    
+                prompt = f"""Enhance this education section with proper professional formatting.
+
+REQUIREMENTS:
+- Use proper degree titles and formatting
+- Include relevant coursework, honors, or achievements if applicable
+- Add GPA if it's 3.5 or higher (make a reasonable assumption)
+- Make it concise and professional
+
+Original education: {education_text}
+
+Return ONLY the improved education section:"""
+                
+                result = async_to_sync(call_ai_api)(prompt)
+                if result:
+                    improvements['education'] = {
+                        'original': education_text,
+                        'improved': result
+                    }
+        except Exception as e:
+            logger.error(f"Error improving education: {str(e)}")
+        
+        if not improvements:
+            return Response({
+                'error': 'No content found to improve or all improvements failed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'status': 'success',
+            'improvements': improvements,
+            'message': f'Successfully improved {len(improvements)} sections'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error in improve_entire_cv: {str(e)}")
+        return Response({
+            'error': 'An unexpected error occurred during CV improvement',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_sample_contact_info(request):
+    """
+    Add sample contact information including LinkedIn and GitHub to the CV.
+    This is a helper endpoint for testing.
+    """
+    try:
+        cv_id = request.data.get('cv_id')
+        if not cv_id:
+            return Response({
+                'error': 'CV ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the CV and check ownership
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=request.user)
+        except CvWriter.DoesNotExist:
+            return Response({
+                'error': 'CV not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Update CV with full address if missing
+        if not cv.address:
+            cv.address = "123 Professional Street, Business District"
+            cv.save()
+        
+        # Add sample social media links if they don't exist
+        sample_social_media = [
+            {'platform': 'LinkedIn', 'url': 'https://linkedin.com/in/mike-adex'},
+            {'platform': 'GitHub', 'url': 'https://github.com/mike-adex'},
+            {'platform': 'Portfolio', 'url': 'https://mikeadex.com'}
+        ]
+        
+        for social in sample_social_media:
+            SocialMedia.objects.get_or_create(
+                user=request.user,
+                platform=social['platform'],
+                defaults={'url': social['url'], 'cv': cv}
+            )
+        
+        return Response({
+            'status': 'success',
+            'message': 'Sample contact information added successfully'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding sample contact info: {str(e)}")
+        return Response({
+            'error': 'An unexpected error occurred',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_improvement(request):
+    """
+    Apply an AI improvement to a specific CV section.
+    """
+    try:
+        cv_id = request.data.get('cv_id')
+        section = request.data.get('section')
+        improved_content = request.data.get('improved_content')
+        
+        if not all([cv_id, section, improved_content]):
+            return Response({
+                'error': 'Missing required fields: cv_id, section, improved_content'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the CV and check ownership
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=request.user)
+        except CvWriter.DoesNotExist:
+            return Response({
+                'error': 'CV not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Apply improvement based on section type
+        if section == 'professional_summary':
+            # Update or create professional summary
+            professional_summary, created = ProfessionalSummary.objects.get_or_create(
+                user=request.user, 
+                cv=cv,
+                defaults={'summary': improved_content}
+            )
+            if not created:
+                professional_summary.summary = improved_content
+                professional_summary.save()
+                
+        elif section.startswith('experiences_'):
+            # Extract experience ID from section name (e.g., 'experiences_0')
+            try:
+                exp_index = int(section.split('_')[1])
+                experiences = Experience.objects.filter(user=request.user).order_by('-start_date')
+                if exp_index < len(experiences):
+                    experience = experiences[exp_index]
+                    # COMPLETELY REPLACE - clear old content and set only improved content
+                    experience.job_description = ""  # Clear old description
+                    experience.achievements = improved_content  # Set improved content as achievements
+                    experience.save()
+            except (ValueError, IndexError):
+                return Response({
+                    'error': 'Invalid experience section format'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        elif section == 'skills':
+            # Parse improved skills and replace all existing skills
+            try:
+                # Delete all existing skills for the user
+                Skill.objects.filter(user=request.user).delete()
+                
+                # Parse the improved content (format: "Advanced Excel, Intermediate QuickBooks, ...")
+                skills_list = [skill.strip() for skill in improved_content.split(',')]
+                
+                # Create new skills
+                for skill_text in skills_list:
+                    skill_text = skill_text.strip()
+                    if skill_text:
+                        # Extract proficiency level and skill name
+                        # Expected format: "Advanced Excel" or "Intermediate QuickBooks"
+                        words = skill_text.split()
+                        if len(words) >= 2:
+                            proficiency = words[0]  # First word is proficiency
+                            skill_name = ' '.join(words[1:])  # Rest is skill name
+                            
+                            # Validate proficiency level
+                            valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
+                            if proficiency not in valid_levels:
+                                proficiency = 'Intermediate'  # Default fallback
+                            
+                            # Create new skill
+                            Skill.objects.create(
+                                user=request.user,
+                                skill_name=skill_name,
+                                skill_level=proficiency
+                            )
+                        else:
+                            # If format doesn't match, create with default proficiency
+                            Skill.objects.create(
+                                user=request.user,
+                                skill_name=skill_text,
+                                skill_level='Intermediate'
+                            )
+            except Exception as e:
+                logger.error(f"Error updating skills: {str(e)}")
+                return Response({
+                    'error': 'Failed to update skills',
+                    'details': str(e)
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+        elif section == 'education':
+            # Update the first education record's description
+            education = Education.objects.filter(user=request.user).order_by('-start_date').first()
+            if education:
+                education.description = improved_content
+                education.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully applied improvement to {section}'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error applying improvement: {str(e)}")
+        return Response({
+            'error': 'An unexpected error occurred while applying improvement',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def improve_summary(request):
     """
     Real-time improvement of professional summary using AI.
@@ -441,30 +849,70 @@ def improve_summary(request):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Prepare improvement prompt
-        improvement_prompt = f"""Professional Summary Optimization Protocol
+        improvement_prompt = f"""Improve this professional summary to make it more professional, impactful, and engaging. 
 
-OBJECTIVE: Refine and elevate a professional summary to highlight key strengths, achievements, and career trajectory.
+Requirements:
+- Keep it concise (3-4 sentences maximum)
+- Use strong action verbs and professional language
+- Maintain all original information
+- Make it sound more polished and confident
+- Focus on value proposition to employers
 
-OPTIMIZATION GUIDELINES:
-- Maintain original professional essence
-- Enhance clarity and impact
-- Use powerful, action-oriented language
-- Highlight unique professional value proposition
-- Ensure conciseness (3-4 sentences maximum)
-
-ORIGINAL SUMMARY:
+Original summary:
 {summary}
 
-IMPROVEMENT INSTRUCTIONS:
-- Preserve core professional identity
-- Emphasize quantifiable achievements
-- Use strong, descriptive verbs
-- Create a compelling narrative of professional growth
-"""
+Return ONLY the improved summary text, nothing else:"""
         
         # Improve summary using AI service
         improvement_service = CVImprovementService()
-        improved_summary = improvement_service.primary_service.improve_text(improvement_prompt)
+        improved_summary = async_to_sync(improvement_service.primary_service.improve_text)(improvement_prompt)
+        
+        # Clean up the response to extract only the improved summary
+        if improved_summary:
+            # Remove common AI prefixes/suffixes and extract just the summary
+            improved_summary = improved_summary.strip()
+            
+            # Remove common AI response patterns
+            patterns_to_remove = [
+                "Here is the improved summary:",
+                "Here's the improved version:",
+                "Improved summary:",
+                "Enhanced summary:",
+                "Professional summary:",
+                "Of course. Here is the professionally enhanced text",
+                "***",
+                "**PROFESSIONALLY OPTIMIZED SUMMARY:**",
+                "**Key Improvements:**",
+                "IMPROVEMENT INSTRUCTIONS:",
+                "OPTIMIZATION GUIDELINES:",
+                "OBJECTIVE:",
+                "Professional Summary Optimization Protocol"
+            ]
+            
+            for pattern in patterns_to_remove:
+                improved_summary = improved_summary.replace(pattern, "").strip()
+            
+            # If there are multiple paragraphs, take the first substantial one
+            paragraphs = [p.strip() for p in improved_summary.split('\n\n') if p.strip()]
+            if paragraphs:
+                # Look for the actual improved summary (usually the first substantial paragraph)
+                for paragraph in paragraphs:
+                    # Skip meta text and find the actual summary
+                    if (len(paragraph) > 50 and 
+                        not paragraph.startswith(('*', '-', '>', 'Requirements:', 'Original summary:', 'ORIGINAL SUMMARY:')) and
+                        not paragraph.upper().startswith(('OBJECTIVE', 'GUIDELINES', 'INSTRUCTIONS'))):
+                        improved_summary = paragraph
+                        break
+                else:
+                    # If no good paragraph found, use the first one
+                    improved_summary = paragraphs[0]
+            
+            # Remove any remaining markdown or formatting
+            improved_summary = improved_summary.replace('>', '').replace('*', '').strip()
+            
+            # Ensure it's not empty and not just the original
+            if len(improved_summary) < 20 or improved_summary.lower() == summary.lower():
+                improved_summary = None
         
         # If improvement fails, return original
         if not improved_summary:
@@ -1722,3 +2170,106 @@ class CVTemplateSelectionDetailView(generics.RetrieveUpdateAPIView):
             return selection
         except CvWriter.DoesNotExist:
             raise Http404("CV not found")
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def clear_all_cv_data(request):
+    """
+    Clear all CV data for the authenticated user.
+    This endpoint removes all CV-related data including:
+    - CvWriter records
+    - Education, Experience, Skills, etc.
+    - Professional summaries
+    - Social media links
+    - Certifications, Languages, Interests
+    - References
+    - CV improvements and template selections
+    """
+    try:
+        user = request.user
+        confirmation = request.data.get('confirmation', '')
+        
+        # Require explicit confirmation
+        if confirmation != 'CONFIRMED':
+            return Response({
+                'error': 'Missing confirmation token',
+                'message': 'You must provide confirmation token to clear all CV data'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"User {user.username} requested to clear all CV data")
+        
+        # Count existing data before deletion
+        cv_count = CvWriter.objects.filter(user=user).count()
+        education_count = Education.objects.filter(user=user).count()
+        experience_count = Experience.objects.filter(user=user).count()
+        skill_count = Skill.objects.filter(user=user).count()
+        
+        # Delete all CV-related data for the user
+        deleted_counts = {}
+        
+        # Delete main CV records (this will cascade to related data due to foreign keys)
+        cv_deleted = CvWriter.objects.filter(user=user).delete()
+        deleted_counts['cvs'] = cv_deleted[0] if cv_deleted[0] else 0
+        
+        # Delete individual sections (in case they exist without CV)
+        education_deleted = Education.objects.filter(user=user).delete()
+        deleted_counts['education'] = education_deleted[0] if education_deleted[0] else 0
+        
+        experience_deleted = Experience.objects.filter(user=user).delete()
+        deleted_counts['experience'] = experience_deleted[0] if experience_deleted[0] else 0
+        
+        skill_deleted = Skill.objects.filter(user=user).delete()
+        deleted_counts['skills'] = skill_deleted[0] if skill_deleted[0] else 0
+        
+        language_deleted = Language.objects.filter(user=user).delete()
+        deleted_counts['languages'] = language_deleted[0] if language_deleted[0] else 0
+        
+        certification_deleted = Certification.objects.filter(user=user).delete()
+        deleted_counts['certifications'] = certification_deleted[0] if certification_deleted[0] else 0
+        
+        interest_deleted = Interest.objects.filter(user=user).delete()
+        deleted_counts['interests'] = interest_deleted[0] if interest_deleted[0] else 0
+        
+        reference_deleted = Reference.objects.filter(user=user).delete()
+        deleted_counts['references'] = reference_deleted[0] if reference_deleted[0] else 0
+        
+        social_media_deleted = SocialMedia.objects.filter(user=user).delete()
+        deleted_counts['social_media'] = social_media_deleted[0] if social_media_deleted[0] else 0
+        
+        # Delete professional summaries
+        professional_summary_deleted = ProfessionalSummary.objects.filter(user=user).delete()
+        deleted_counts['professional_summaries'] = professional_summary_deleted[0] if professional_summary_deleted[0] else 0
+        
+        # Delete CV improvements
+        cv_improvement_deleted = CVImprovement.objects.filter(user=user).delete()
+        deleted_counts['cv_improvements'] = cv_improvement_deleted[0] if cv_improvement_deleted[0] else 0
+        
+        # Delete template selections
+        template_selection_deleted = CVTemplateSelection.objects.filter(user=user).delete()
+        deleted_counts['template_selections'] = template_selection_deleted[0] if template_selection_deleted[0] else 0
+        
+        total_deleted = sum(deleted_counts.values())
+        
+        logger.info(f"Successfully cleared CV data for user {user.username}. Deleted counts: {deleted_counts}")
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully cleared all CV data for user {user.username}',
+            'deleted_counts': deleted_counts,
+            'total_deleted': total_deleted,
+            'summary': {
+                'cvs_before': cv_count,
+                'education_before': education_count,
+                'experience_before': experience_count,
+                'skills_before': skill_count,
+                'total_items_deleted': total_deleted
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error clearing CV data for user {request.user.username}: {str(e)}")
+        return Response({
+            'error': 'Failed to clear CV data',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

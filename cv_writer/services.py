@@ -705,7 +705,7 @@ CV TEXT:
 {optimized_text}"""
                 
                 # Generate segmented text
-                segmented_text = await self.generate_with_system_prompt(
+                segmented_text = await self.local_llama_service.generate_with_system_prompt(
                     system_prompt, user_prompt, timeout=timeout
                 )
                 
@@ -1653,7 +1653,7 @@ CV TEXT:
         logger.error("All LLM services failed to generate response")
         return ""
 
-    def _improve_section(self, section: str, content: Dict) -> Dict:
+    async def _improve_section(self, section: str, content: Dict) -> Dict:
         """Improves a specific section using available LLM."""
         try:
             prompt_data = self.improvement_prompts.get(section)
@@ -1667,12 +1667,12 @@ CV TEXT:
 
             # Fallback logic
             if hasattr(self, 'use_mistral') and self.use_mistral:
-                mistral_result = self.primary_service.improve_text(formatted_prompt)
+                mistral_result = await self.primary_service.improve_text(formatted_prompt)
                 if mistral_result:
                     return {'original': content, 'improved': mistral_result}
             
             if hasattr(self, 'use_groq') and self.use_groq:
-                groq_result = self.fallback_service.improve_text(formatted_prompt)
+                groq_result = await self.fallback_service.improve_text(formatted_prompt)
                 if groq_result:
                     return {'original': content, 'improved': groq_result}
             
@@ -1714,6 +1714,32 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
     logger = logging.getLogger(__name__)
     logger.info(f"Saving rewritten CV data for user {user.id}")
     
+    # Log the structure of the rewritten CV data
+    try:
+        import json
+        logger.info(f"Rewritten CV data keys: {list(rewritten_cv_data.keys())}")
+        
+        # Log a summary of the data structure
+        data_summary = {}
+        for key, value in rewritten_cv_data.items():
+            if isinstance(value, list):
+                data_summary[key] = f"List with {len(value)} items"
+                if len(value) > 0:
+                    sample_item = value[0]
+                    if isinstance(sample_item, dict):
+                        data_summary[f"{key}_sample_keys"] = list(sample_item.keys())
+            elif isinstance(value, dict):
+                data_summary[key] = f"Dict with {len(value)} keys"
+                data_summary[f"{key}_keys"] = list(value.keys())
+            elif isinstance(value, str):
+                data_summary[key] = f"String with {len(value)} chars"
+            else:
+                data_summary[key] = f"Other type: {type(value)}"
+        
+        logger.info(f"Rewritten CV data structure: {json.dumps(data_summary, indent=2)}")
+    except Exception as e:
+        logger.error(f"Error logging data structure: {str(e)}")
+    
     # Create CV Writer instance if not provided
     if not cv_writer_instance:
         logger.info("No CV Writer instance provided, creating new one")
@@ -1742,9 +1768,22 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
     
     # Save professional summary (if present)
     try:
+        professional_summary_text = None
+        
+        # Check for direct professional_summary field (string)
         if 'professional_summary' in rewritten_cv_data:
+            if isinstance(rewritten_cv_data['professional_summary'], str):
+                professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
+            elif isinstance(rewritten_cv_data['professional_summary'], dict) and 'summary' in rewritten_cv_data['professional_summary']:
+                professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary']['summary'])
+        
+        # Check for nested professional_summary in summary field
+        elif 'summary' in rewritten_cv_data and isinstance(rewritten_cv_data['summary'], str):
+            professional_summary_text = clean_ai_text(rewritten_cv_data['summary'])
+            
+        # If we found a professional summary, save it
+        if professional_summary_text:
             logger.info("Processing professional summary")
-            summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
             
             # First check if a summary already exists for this user and cv
             existing_summary = ProfessionalSummary.objects.filter(
@@ -1754,14 +1793,14 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
             
             if existing_summary:
                 logger.info(f"Updating existing professional summary for user {user.id}")
-                existing_summary.summary = summary_text
+                existing_summary.summary = professional_summary_text
                 existing_summary.save()
             else:
                 logger.info(f"Creating new professional summary for user {user.id}")
                 ProfessionalSummary.objects.create(
                     user=user,
                     cv=cv_writer_instance,
-                    summary=summary_text
+                    summary=professional_summary_text
                 )
     except Exception as e:
         logger.error(f"Error saving professional summary: {str(e)}")
@@ -1778,8 +1817,8 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                     exp_data['description'] = clean_ai_text(exp_data['description'])
                 
                 # Extract necessary fields with defaults
-                company_name = exp_data.get('company_name', '')
-                job_title = exp_data.get('job_title', '')
+                company_name = exp_data.get('company_name', '') or exp_data.get('company', '')
+                job_title = exp_data.get('job_title', '') or exp_data.get('title', '')
                 
                 # Skip this entry if company_name or job_title is empty
                 if not company_name or not job_title:
@@ -1791,38 +1830,167 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                 end_date = exp_data.get('end_date', '')
                 description = exp_data.get('description', '')
                 
-                # Format for unique identification - prevents duplicate entries
-                # This uses the company and title (and optionally dates) as unique identifiers
-                defaults = {
-                    'description': description,
-                }
+                # Set default employment type if not provided
+                employment_type = exp_data.get('employment_type', 'Full-time')
                 
-                # Add dates to defaults if they exist
-                if start_date:
-                    defaults['start_date'] = start_date
-                if end_date:
-                    defaults['end_date'] = end_date
+                # Set current flag based on end_date
+                is_current = not end_date or (isinstance(end_date, str) and end_date.lower() == 'present')
                 
                 # Use update_or_create to update if exists, create if not
                 try:
-                    # Try to find an exact match first
-                    experience, created = Experience.objects.update_or_create(
+                    # Check for existing experience
+                    existing_exp = Experience.objects.filter(
                         user=user,
-                        cv=cv_writer_instance,
                         company_name=company_name,
-                        job_title=job_title,
-                        defaults=defaults
-                    )
+                        job_title=job_title
+                    ).first()
                     
-                    if created:
-                        logger.info(f"Created new experience record: {company_name}, {job_title}")
-                    else:
-                        logger.info(f"Updated existing experience record: {company_name}, {job_title}")
+                    if existing_exp:
+                        # Update existing experience
+                        try:
+                            # Try to set cv field if available
+                            existing_exp.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on experience: {str(field_error)}")
                         
+                        if description:
+                            existing_exp.job_description = description
+                        if start_date:
+                            existing_exp.start_date = format_date_string(start_date)
+                        if end_date and end_date.lower() != 'present':
+                            existing_exp.end_date = format_date_string(end_date)
+                        existing_exp.current = is_current
+                        existing_exp.save()
+                        logger.info(f"Updated existing experience: {company_name}, {job_title}")
+                    else:
+                        # Create new experience
+                        try:
+                            # Try with cv field first
+                            Experience.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                company_name=company_name,
+                                job_title=job_title,
+                                start_date=format_date_string(start_date) if start_date else None,
+                                end_date=format_date_string(end_date) if end_date and end_date.lower() != 'present' else None,
+                                current=is_current,
+                                job_description=description
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Experience model, trying without it")
+                                Experience.objects.create(
+                                    user=user,
+                                    company_name=company_name,
+                                    job_title=job_title,
+                                    start_date=format_date_string(start_date) if start_date else None,
+                                    end_date=format_date_string(end_date) if end_date and end_date.lower() != 'present' else None,
+                                    current=is_current,
+                                    job_description=description
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new experience: {company_name}, {job_title}")
                 except Exception as inner_e:
                     logger.error(f"Error processing experience entry: {str(inner_e)}")
     except Exception as e:
         logger.error(f"Error processing experience section: {str(e)}")
+    
+    # Also check for experiences in workExperience field (alternative field name)
+    try:
+        if 'workExperience' in rewritten_cv_data and isinstance(rewritten_cv_data['workExperience'], list):
+            logger.info(f"Processing {len(rewritten_cv_data['workExperience'])} workExperience items")
+            
+            for exp_data in rewritten_cv_data['workExperience']:
+                # Extract necessary fields with defaults
+                company_name = exp_data.get('company_name', '') or exp_data.get('company', '')
+                job_title = exp_data.get('job_title', '') or exp_data.get('title', '')
+                
+                # Skip this entry if company_name or job_title is empty
+                if not company_name or not job_title:
+                    logger.warning(f"Skipping workExperience entry with empty company or job title: {exp_data}")
+                    continue
+                
+                # Clean description if present
+                description = ''
+                if 'description' in exp_data:
+                    description = clean_ai_text(exp_data['description'])
+                elif 'job_description' in exp_data:
+                    description = clean_ai_text(exp_data['job_description'])
+                
+                # Format dates
+                start_date = exp_data.get('start_date', '') or exp_data.get('startDate', '')
+                end_date = exp_data.get('end_date', '') or exp_data.get('endDate', '')
+                
+                # Set current flag based on end_date
+                is_current = not end_date or (isinstance(end_date, str) and end_date.lower() == 'present') or exp_data.get('current', False)
+                
+                try:
+                    # Check for existing experience
+                    existing_exp = Experience.objects.filter(
+                        user=user,
+                        company_name=company_name,
+                        job_title=job_title
+                    ).first()
+                    
+                    if existing_exp:
+                        # Update existing experience
+                        try:
+                            # Try to set cv field if available
+                            existing_exp.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on experience: {str(field_error)}")
+                        
+                        if description:
+                            existing_exp.job_description = description
+                        if start_date:
+                            existing_exp.start_date = format_date_string(start_date)
+                        if end_date and end_date.lower() != 'present':
+                            existing_exp.end_date = format_date_string(end_date)
+                        existing_exp.current = is_current
+                        existing_exp.save()
+                        logger.info(f"Updated existing experience from workExperience: {company_name}, {job_title}")
+                    else:
+                        # Create new experience
+                        try:
+                            # Try with cv field first
+                            Experience.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                company_name=company_name,
+                                job_title=job_title,
+                                start_date=format_date_string(start_date) if start_date else None,
+                                end_date=format_date_string(end_date) if end_date and end_date.lower() != 'present' else None,
+                                current=is_current,
+                                job_description=description
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Experience model, trying without it")
+                                Experience.objects.create(
+                                    user=user,
+                                    company_name=company_name,
+                                    job_title=job_title,
+                                    start_date=format_date_string(start_date) if start_date else None,
+                                    end_date=format_date_string(end_date) if end_date and end_date.lower() != 'present' else None,
+                                    current=is_current,
+                                    job_description=description
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new experience from workExperience: {company_name}, {job_title}")
+                except Exception as inner_e:
+                    logger.error(f"Error processing workExperience entry: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing workExperience section: {str(e)}")
     
     # Save education data (if present)
     try:
@@ -1830,12 +1998,26 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
             logger.info(f"Processing {len(rewritten_cv_data['education'])} education items")
             
             for edu_data in rewritten_cv_data['education']:
-                # Clean potential AI text in description
-                if 'description' in edu_data:
-                    edu_data['description'] = clean_ai_text(edu_data['description'])
+                # Log the education data for debugging
+                logger.info(f"Processing education data: {edu_data}")
                 
                 # Extract necessary fields with defaults
                 school_name = edu_data.get('school_name', '')
+                
+                # Check for alternative field names for school
+                if not school_name and 'school' in edu_data:
+                    school_name = edu_data.get('school', '')
+                    logger.info(f"Using 'school' field instead of 'school_name': {school_name}")
+                
+                if not school_name and 'institution' in edu_data:
+                    school_name = edu_data.get('institution', '')
+                    logger.info(f"Using 'institution' field instead of 'school_name': {school_name}")
+                
+                # If still empty, provide a default school name
+                if not school_name:
+                    school_name = "Educational Institution"
+                    logger.warning(f"Using default school name: {school_name}")
+                
                 degree = edu_data.get('degree', '')
                 
                 # Make sure field_of_study is not null
@@ -1849,11 +2031,6 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                     # Default value if nothing else is available
                     field_of_study = "General"
                 
-                # Skip this entry if school_name is empty
-                if not school_name:
-                    logger.warning(f"Skipping education entry with empty school name: {edu_data}")
-                    continue
-                    
                 # Make sure degree has at least some value
                 if not degree:
                     degree = "Degree"
@@ -1861,29 +2038,42 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                 # Clean up date fields
                 start_date = edu_data.get('start_date', '')
                 end_date = edu_data.get('end_date', '')
-                description = edu_data.get('description', '')
                 
                 # Format for unique identification
                 defaults = {
-                    'description': description,
                     'field_of_study': field_of_study
                 }
                 
                 # Add dates to defaults if they exist
                 if start_date:
-                    defaults['start_date'] = start_date
+                    defaults['start_date'] = format_date_string(start_date)
                 if end_date:
-                    defaults['end_date'] = end_date
+                    defaults['end_date'] = format_date_string(end_date)
                 
                 # Use update_or_create to update if exists, create if not
                 try:
-                    education, created = Education.objects.update_or_create(
-                        user=user,
-                        cv=cv_writer_instance,
-                        school_name=school_name,
-                        degree=degree,
-                        defaults=defaults
-                    )
+                    # Try to save with cv field first
+                    try:
+                        education, created = Education.objects.update_or_create(
+                            user=user,
+                            cv=cv_writer_instance,
+                            school_name=school_name,
+                            degree=degree,
+                            defaults=defaults
+                        )
+                    except Exception as field_error:
+                        # If cv field isn't available, try without it
+                        if "Cannot resolve keyword 'cv'" in str(field_error):
+                            logger.warning("CV field not found in Education model, trying without it")
+                            education, created = Education.objects.update_or_create(
+                                user=user,
+                                school_name=school_name,
+                                degree=degree,
+                                defaults=defaults
+                            )
+                        else:
+                            # Re-raise other errors
+                            raise
                     
                     if created:
                         logger.info(f"Created new education record: {school_name}, {degree}")
@@ -1894,6 +2084,408 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                     logger.error(f"Error processing education entry: {str(inner_e)}, Data: {edu_data}")
     except Exception as e:
         logger.error(f"Error processing education section: {str(e)}")
+    
+    # Save skills data (if present)
+    try:
+        if 'skills' in rewritten_cv_data:
+            skills_data = rewritten_cv_data['skills']
+            logger.info(f"Processing skills data: {type(skills_data)}")
+            
+            # Handle different formats - might be list of objects, list of strings, or single string
+            if isinstance(skills_data, list):
+                for skill_item in skills_data:
+                    # Extract skill name and level based on format
+                    if isinstance(skill_item, dict):
+                        skill_name = skill_item.get('name', '') or skill_item.get('skill_name', '')
+                        skill_level = skill_item.get('level', '') or skill_item.get('skill_level', '')
+                    elif isinstance(skill_item, str):
+                        skill_name = skill_item
+                        skill_level = 'Intermediate'  # Default level
+                    else:
+                        continue  # Skip invalid items
+                        
+                    if not skill_name:
+                        continue  # Skip empty skill names
+                    
+                    # Use default level if empty
+                    if not skill_level:
+                        skill_level = 'Intermediate'
+                    
+                    try:
+                        # Look for existing skill first
+                        existing_skill = Skill.objects.filter(
+                            user=user,
+                            skill_name=skill_name
+                        ).first()
+                        
+                        if existing_skill:
+                            # Update existing skill level
+                            existing_skill.skill_level = skill_level
+                            existing_skill.cv = cv_writer_instance  # Associate with this CV
+                            existing_skill.save()
+                            logger.info(f"Updated existing skill: {skill_name}, {skill_level}")
+                        else:
+                            # Create new skill
+                            Skill.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,  # Associate with CV
+                                skill_name=skill_name,
+                                skill_level=skill_level
+                            )
+                            logger.info(f"Created new skill: {skill_name}, {skill_level}")
+                    except Exception as inner_e:
+                        logger.error(f"Error processing skill: {str(inner_e)}")
+            
+            # Handle string format (comma or newline separated list)
+            elif isinstance(skills_data, str):
+                # Try to parse skills from text
+                if '\n' in skills_data:
+                    skill_items = skills_data.split('\n')
+                else:
+                    skill_items = skills_data.split(',')
+                
+                for skill_text in skill_items:
+                    skill_text = skill_text.strip()
+                    if not skill_text or len(skill_text) < 2:
+                        continue  # Skip empty or very short items
+                    
+                    # Default level
+                    skill_level = 'Intermediate'
+                    
+                    # Try to extract level if formatted as "Name - Level" or "Name (Level)"
+                    if ' - ' in skill_text:
+                        parts = skill_text.split(' - ')
+                        skill_name = parts[0].strip()
+                        if len(parts) > 1:
+                            skill_level = parts[1].strip()
+                    elif '(' in skill_text and ')' in skill_text:
+                        open_paren = skill_text.find('(')
+                        close_paren = skill_text.find(')')
+                        if 0 < open_paren < close_paren:
+                            skill_name = skill_text[:open_paren].strip()
+                            skill_level = skill_text[open_paren+1:close_paren].strip()
+                    else:
+                        skill_name = skill_text
+                    
+                    try:
+                        # Look for existing skill first
+                        existing_skill = Skill.objects.filter(
+                            user=user,
+                            skill_name=skill_name
+                        ).first()
+                        
+                        if existing_skill:
+                            # Update existing skill level
+                            existing_skill.skill_level = skill_level
+                            existing_skill.cv = cv_writer_instance  # Associate with this CV
+                            existing_skill.save()
+                            logger.info(f"Updated existing skill from text: {skill_name}, {skill_level}")
+                        else:
+                            # Create new skill
+                            Skill.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,  # Associate with CV
+                                skill_name=skill_name,
+                                skill_level=skill_level
+                            )
+                            logger.info(f"Created new skill from text: {skill_name}, {skill_level}")
+                    except Exception as inner_e:
+                        logger.error(f"Error processing skill from text: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing skills section: {str(e)}")
+    
+    # Save languages data (if present)
+    try:
+        if 'languages' in rewritten_cv_data and isinstance(rewritten_cv_data['languages'], list):
+            logger.info(f"Processing languages data")
+            
+            for lang_data in rewritten_cv_data['languages']:
+                # Extract language name and proficiency
+                if isinstance(lang_data, dict):
+                    language_name = lang_data.get('language', '') or lang_data.get('name', '')
+                    proficiency = lang_data.get('proficiency', '') or lang_data.get('level', '')
+                elif isinstance(lang_data, str):
+                    language_name = lang_data
+                    proficiency = 'Intermediate'  # Default
+                else:
+                    continue  # Skip invalid items
+                
+                if not language_name:
+                    continue  # Skip empty language names
+                
+                # Use default proficiency if empty
+                if not proficiency:
+                    proficiency = 'Intermediate'
+                
+                try:
+                    # Look for existing language first
+                    existing_lang = Language.objects.filter(
+                        user=user,
+                        language=language_name
+                    ).first()
+                    
+                    if existing_lang:
+                        # Update existing language
+                        existing_lang.proficiency = proficiency
+                        try:
+                            # Try to set cv field if available
+                            existing_lang.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on language: {str(field_error)}")
+                        existing_lang.save()
+                        logger.info(f"Updated existing language: {language_name}, {proficiency}")
+                    else:
+                        # Create new language
+                        try:
+                            # Try with cv field first
+                            Language.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                language=language_name,
+                                proficiency=proficiency
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Language model, trying without it")
+                                Language.objects.create(
+                                    user=user,
+                                    language=language_name,
+                                    proficiency=proficiency
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new language: {language_name}, {proficiency}")
+                except Exception as inner_e:
+                    logger.error(f"Error processing language: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing languages section: {str(e)}")
+    
+    # Save certifications data (if present)
+    try:
+        if 'certifications' in rewritten_cv_data and isinstance(rewritten_cv_data['certifications'], list):
+            logger.info(f"Processing certifications data")
+            
+            for cert_data in rewritten_cv_data['certifications']:
+                # Extract certification details
+                if isinstance(cert_data, dict):
+                    cert_name = cert_data.get('name', '') or cert_data.get('certificate_name', '')
+                    issuing_org = cert_data.get('issuer', '') or cert_data.get('issuing_organization', '')
+                    date_obtained = cert_data.get('date', '') or cert_data.get('date_obtained', '')
+                    certificate_link = cert_data.get('url', '') or cert_data.get('link', '')
+                elif isinstance(cert_data, str):
+                    cert_name = cert_data
+                    issuing_org = ''
+                    date_obtained = None
+                    certificate_link = ''
+                else:
+                    continue  # Skip invalid items
+                
+                if not cert_name:
+                    continue  # Skip empty cert names
+                
+                try:
+                    # Look for existing certification first
+                    existing_cert = Certification.objects.filter(
+                        user=user,
+                        certificate_name=cert_name
+                    ).first()
+                    
+                    if existing_cert:
+                        # Update existing certification
+                        if issuing_org:
+                            existing_cert.issuing_organization = issuing_org
+                        if date_obtained:
+                            existing_cert.date_obtained = date_obtained
+                        if certificate_link:
+                            existing_cert.certificate_link = certificate_link
+                        try:
+                            # Try to set cv field if available
+                            existing_cert.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on certification: {str(field_error)}")
+                        existing_cert.save()
+                        logger.info(f"Updated existing certification: {cert_name}")
+                    else:
+                        # Create new certification
+                        try:
+                            # Try with cv field first
+                            Certification.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                certificate_name=cert_name,
+                                issuing_organization=issuing_org,
+                                date_obtained=date_obtained,
+                                certificate_link=certificate_link
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Certification model, trying without it")
+                                Certification.objects.create(
+                                    user=user,
+                                    certificate_name=cert_name,
+                                    issuing_organization=issuing_org,
+                                    date_obtained=date_obtained,
+                                    certificate_link=certificate_link
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new certification: {cert_name}")
+                except Exception as inner_e:
+                    logger.error(f"Error processing certification: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing certifications section: {str(e)}")
+    
+    # Save interests data (if present)
+    try:
+        if 'interests' in rewritten_cv_data and isinstance(rewritten_cv_data['interests'], list):
+            logger.info(f"Processing interests data")
+            
+            for interest_data in rewritten_cv_data['interests']:
+                # Extract interest name based on format
+                if isinstance(interest_data, dict):
+                    interest_name = interest_data.get('name', '') or interest_data.get('interest', '')
+                elif isinstance(interest_data, str):
+                    interest_name = interest_data
+                else:
+                    continue  # Skip invalid items
+                
+                if not interest_name:
+                    continue  # Skip empty interest names
+                
+                try:
+                    # Look for existing interest first
+                    existing_interest = Interest.objects.filter(
+                        user=user,
+                        name=interest_name
+                    ).first()
+                    
+                    if existing_interest:
+                        # Just update the cv reference
+                        try:
+                            # Try to set cv field if available
+                            existing_interest.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on interest: {str(field_error)}")
+                        existing_interest.save()
+                        logger.info(f"Updated existing interest: {interest_name}")
+                    else:
+                        # Create new interest
+                        try:
+                            # Try with cv field first
+                            Interest.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                name=interest_name
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Interest model, trying without it")
+                                Interest.objects.create(
+                                    user=user,
+                                    name=interest_name
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new interest: {interest_name}")
+                except Exception as inner_e:
+                    logger.error(f"Error processing interest: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing interests section: {str(e)}")
+    
+    # Save references data (if present)
+    try:
+        if 'references' in rewritten_cv_data and isinstance(rewritten_cv_data['references'], list):
+            logger.info(f"Processing references data")
+            
+            for ref_data in rewritten_cv_data['references']:
+                # Extract reference details
+                if isinstance(ref_data, dict):
+                    ref_name = ref_data.get('name', '')
+                    ref_title = ref_data.get('title', '') or ref_data.get('position', '')
+                    ref_company = ref_data.get('company', '') or ref_data.get('organization', '')
+                    ref_email = ref_data.get('email', '')
+                    ref_phone = ref_data.get('phone', '') or ref_data.get('contact', '')
+                    ref_type = ref_data.get('type', 'Professional')
+                else:
+                    continue  # Skip invalid items
+                
+                if not ref_name:
+                    continue  # Skip references without a name
+                
+                try:
+                    # Look for existing reference
+                    existing_ref = Reference.objects.filter(
+                        user=user,
+                        name=ref_name,
+                        company=ref_company
+                    ).first()
+                    
+                    if existing_ref:
+                        # Update existing reference
+                        try:
+                            # Try to set cv field if available
+                            existing_ref.cv = cv_writer_instance
+                        except Exception as field_error:
+                            if "cv" not in str(field_error):
+                                # Only log if it's not a missing field error
+                                logger.warning(f"Could not set CV field on reference: {str(field_error)}")
+                        if ref_title:
+                            existing_ref.title = ref_title
+                        if ref_email:
+                            existing_ref.email = ref_email
+                        if ref_phone:
+                            existing_ref.phone = ref_phone
+                        if ref_type:
+                            existing_ref.reference_type = ref_type
+                        existing_ref.save()
+                        logger.info(f"Updated existing reference: {ref_name}")
+                    else:
+                        # Create new reference
+                        try:
+                            # Try with cv field first
+                            Reference.objects.create(
+                                user=user,
+                                cv=cv_writer_instance,
+                                name=ref_name,
+                                title=ref_title or 'Not specified',
+                                company=ref_company or 'Not specified',
+                                email=ref_email or 'not@specified.com',
+                                phone=ref_phone,
+                                reference_type=ref_type
+                            )
+                        except Exception as field_error:
+                            # If cv field isn't available, try without it
+                            if "Cannot resolve keyword 'cv'" in str(field_error):
+                                logger.warning("CV field not found in Reference model, trying without it")
+                                Reference.objects.create(
+                                    user=user,
+                                    name=ref_name,
+                                    title=ref_title or 'Not specified',
+                                    company=ref_company or 'Not specified',
+                                    email=ref_email or 'not@specified.com',
+                                    phone=ref_phone,
+                                    reference_type=ref_type
+                                )
+                            else:
+                                # Re-raise other errors
+                                raise
+                        logger.info(f"Created new reference: {ref_name}")
+                except Exception as inner_e:
+                    logger.error(f"Error processing reference: {str(inner_e)}")
+    except Exception as e:
+        logger.error(f"Error processing references section: {str(e)}")
     
     # Return the CV writer instance
     return cv_writer_instance
@@ -1997,3 +2589,61 @@ def clean_ai_text(text):
     cleaned_text = cleaned_text.strip('"\'')
     
     return cleaned_text.strip()
+
+def format_date_string(date_str):
+    """
+    Format a date string to ensure it's in YYYY-MM-DD format for Django DateField.
+    
+    Args:
+        date_str (str): Date string that might be in various formats
+        
+    Returns:
+        str: Date string in YYYY-MM-DD format
+    """
+    import re
+    
+    # If it's already in YYYY-MM-DD format, return it
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        return date_str
+    
+    # If it's just a year (e.g. "2017"), convert to YYYY-01-01
+    if re.match(r'^\d{4}$', date_str):
+        return f"{date_str}-01-01"
+    
+    # If it's a year and month (e.g. "2017-06"), convert to YYYY-MM-01
+    if re.match(r'^\d{4}-\d{1,2}$', date_str):
+        year, month = date_str.split('-')
+        month = month.zfill(2)  # Ensure month is two digits
+        return f"{year}-{month}-01"
+    
+    # If it's "Present" or similar, return None to indicate current
+    if date_str.lower() in ('present', 'current', 'now'):
+        return None
+    
+    # If it's month and year (e.g. "June 2017"), try to parse it
+    month_names = {
+        'january': '01', 'february': '02', 'march': '03', 'april': '04',
+        'may': '05', 'june': '06', 'july': '07', 'august': '08',
+        'september': '09', 'october': '10', 'november': '11', 'december': '12',
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09',
+        'oct': '10', 'nov': '11', 'dec': '12'
+    }
+    
+    # Try to extract month and year from formats like "June 2017" or "Jun 2017"
+    month_year_match = re.search(r'(\w+)\s+(\d{4})', date_str, re.IGNORECASE)
+    if month_year_match:
+        month, year = month_year_match.groups()
+        month = month.lower()
+        if month in month_names:
+            return f"{year}-{month_names[month]}-01"
+    
+    # Default to January 1st of the specified year if we can extract a year
+    year_match = re.search(r'(\d{4})', date_str)
+    if year_match:
+        year = year_match.group(1)
+        return f"{year}-01-01"
+    
+    # If we can't parse the date, return a default date
+    logger.warning(f"Could not parse date string: {date_str}, using default date")
+    return "2000-01-01"  # Default date as fallback

@@ -518,6 +518,7 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             # Validate input data
             cv_id = request.data.get('cv_id')
             parser_type = request.data.get('parser_type', 'parsed_cv')
+            force_refresh = request.data.get('force_refresh', False)
             
             if not cv_id:
                 return Response({
@@ -534,7 +535,8 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     cv_data = parsed_cv.parsed_data
                     
                     # Check if we already have analysis data and it's not too old (e.g., less than 7 days)
-                    if parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
+                    # Only use cache if force_refresh is False
+                    if not force_refresh and parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
                         # Return cached analysis
                         logger.info(f"Returning cached analysis for ParsedCV ID {cv_id}")
                         return Response({
@@ -542,6 +544,8 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                             'cached': True,
                             'analysis_date': parsed_cv.analysis_date
                         })
+                    elif force_refresh:
+                        logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache")
                         
                 except ParsedCV.DoesNotExist:
                     return Response({
@@ -887,8 +891,9 @@ def analyze_cv(request, pk=None):
             cv_id = request.data.get('cv_id')  # From request body
             
         parser_type = request.data.get('parser_type', 'parsed_cv')
+        force_refresh = request.data.get('force_refresh', False)
         
-        logger.info(f"Analyzing CV with ID: {cv_id}, parser_type: {parser_type}")
+        logger.info(f"Analyzing CV with ID: {cv_id}, parser_type: {parser_type}, force_refresh: {force_refresh}")
         
         if not cv_id:
             logger.warning("No CV ID provided in analyze_cv request")
@@ -907,7 +912,8 @@ def analyze_cv(request, pk=None):
                 cv_data = parsed_cv.parsed_data
                 
                 # Check if we already have analysis data and it's not too old (e.g., less than 7 days)
-                if parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
+                # Only use cache if force_refresh is False
+                if not force_refresh and parsed_cv.analysis_data and parsed_cv.analysis_date and (timezone.now() - parsed_cv.analysis_date).days < 7:
                     # Return cached analysis
                     logger.info(f"Returning cached analysis for ParsedCV ID {cv_id}")
                     return Response({
@@ -915,6 +921,8 @@ def analyze_cv(request, pk=None):
                         'cached': True,
                         'analysis_date': parsed_cv.analysis_date
                     })
+                elif force_refresh:
+                    logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache")
                     
             except ParsedCV.DoesNotExist:
                 # Try fallback to the legacy cv_parser module
@@ -1102,3 +1110,82 @@ def create_rewrite_session(request):
             {'error': f'Failed to create rewrite session: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def clear_all_parsed_cv_data(request):
+    """
+    Clear all parsed CV data for the authenticated user.
+    This endpoint removes all AI parsed CV data including:
+    - ParsedCV records
+    - CVRewriteSession records
+    - Analysis data
+    - Temporary files
+    """
+    try:
+        user = request.user
+        confirmation = request.data.get('confirmation', '')
+        
+        # Require explicit confirmation
+        if confirmation != 'CONFIRMED':
+            return Response({
+                'error': 'Missing confirmation token',
+                'message': 'You must provide confirmation token to clear all parsed CV data'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"User {user.username} requested to clear all parsed CV data")
+        
+        # Count existing data before deletion
+        parsed_cv_count = ParsedCV.objects.filter(user=user).count()
+        rewrite_session_count = CVRewriteSession.objects.filter(user=user).count()
+        
+        # Delete all parsed CV data for the user
+        deleted_counts = {}
+        
+        # Get all parsed CVs to clean up files before deletion
+        parsed_cvs = ParsedCV.objects.filter(user=user)
+        temp_files_cleaned = 0
+        
+        for parsed_cv in parsed_cvs:
+            # Clean up temporary files if they exist
+            if parsed_cv.temp_file_path and os.path.exists(parsed_cv.temp_file_path):
+                try:
+                    os.remove(parsed_cv.temp_file_path)
+                    temp_files_cleaned += 1
+                    logger.info(f"Removed temporary file: {parsed_cv.temp_file_path}")
+                except Exception as file_e:
+                    logger.error(f"Error removing temporary file {parsed_cv.temp_file_path}: {str(file_e)}")
+        
+        # Delete ParsedCV records
+        parsed_cv_deleted = ParsedCV.objects.filter(user=user).delete()
+        deleted_counts['parsed_cvs'] = parsed_cv_deleted[0] if parsed_cv_deleted[0] else 0
+        
+        # Delete CV rewrite sessions
+        rewrite_sessions_deleted = CVRewriteSession.objects.filter(user=user).delete()
+        deleted_counts['rewrite_sessions'] = rewrite_sessions_deleted[0] if rewrite_sessions_deleted[0] else 0
+        
+        total_deleted = sum(deleted_counts.values())
+        
+        logger.info(f"Successfully cleared parsed CV data for user {user.username}. Deleted counts: {deleted_counts}")
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully cleared all parsed CV data for user {user.username}',
+            'deleted_counts': deleted_counts,
+            'total_deleted': total_deleted,
+            'temp_files_cleaned': temp_files_cleaned,
+            'summary': {
+                'parsed_cvs_before': parsed_cv_count,
+                'rewrite_sessions_before': rewrite_session_count,
+                'total_items_deleted': total_deleted,
+                'temp_files_cleaned': temp_files_cleaned
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error clearing parsed CV data for user {request.user.username}: {str(e)}")
+        return Response({
+            'error': 'Failed to clear parsed CV data',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
