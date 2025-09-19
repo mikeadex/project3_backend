@@ -265,8 +265,8 @@ REST_AUTH = {
 # Frontend URL (without trailing slash) - Use environment variable or default to production
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
 
-# Email settings - Use SMTP in production, console in development
-if os.getenv("EMAIL_HOST_USER"):
+# Email settings - Use SMTP in production (when Resend API key is set), console in development
+if os.getenv("RESEND_API_KEY"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -403,18 +403,19 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Email settings for production
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+# Email settings for production (Resend SMTP)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.resend.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ellacv.com")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "resend")  # Resend uses 'resend' as username
+EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY", "")     # Resend API key as password
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
 # Debug email configuration
 if DEBUG:
     print(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
-    print(f"Email Host User: {'Set' if EMAIL_HOST_USER else 'Not set'}")
+    print(f"Resend API Key: {'Set' if os.getenv('RESEND_API_KEY') else 'Not set'}")
+    print(f"Email Host: {EMAIL_HOST}")
     print(f"Frontend URL: {FRONTEND_URL}")
 
 # Default primary key field type
