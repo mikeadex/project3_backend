@@ -269,7 +269,14 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
 # For testing with testmail.app, use console backend to see email content in logs
 EMAIL_USE_TESTMAIL = os.getenv("USE_TESTMAIL_TESTING", "false").lower() == "true"
 
-if os.getenv("RESEND_API_KEY") and not EMAIL_USE_TESTMAIL:
+# Check if any email provider API key is configured
+has_email_api_key = (
+    os.getenv("RESEND_API_KEY") or 
+    os.getenv("SENDGRID_API_KEY") or 
+    os.getenv("BREVO_API_KEY")
+)
+
+if has_email_api_key and not EMAIL_USE_TESTMAIL:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
     # Console backend - perfect for testmail.app testing (shows email content in logs)
@@ -407,12 +414,26 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Email settings for production (Resend SMTP)
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.resend.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+# Email settings for production - Support multiple providers
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "resend").lower()
+
+if EMAIL_PROVIDER == "sendgrid":
+    EMAIL_HOST = "smtp.sendgrid.net"
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = "apikey"  # SendGrid uses 'apikey' as username
+    EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY", "")
+elif EMAIL_PROVIDER == "brevo":
+    EMAIL_HOST = "smtp-relay.brevo.com"
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = os.getenv("BREVO_EMAIL", "")
+    EMAIL_HOST_PASSWORD = os.getenv("BREVO_API_KEY", "")
+else:  # Default to Resend
+    EMAIL_HOST = "smtp.resend.com"
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = "resend"
+    EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY", "")
+
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "resend")  # Resend uses 'resend' as username
-EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY", "")     # Resend API key as password
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
 # Debug email configuration
@@ -421,15 +442,30 @@ if DEBUG or os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true":
     print("📧 EMAIL CONFIGURATION")
     print("=" * 50)
     print(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
+    print(f"Email Provider: {EMAIL_PROVIDER}")
     print(f"Use Testmail Testing: {EMAIL_USE_TESTMAIL}")
-    print(f"Resend API Key: {'Set' if os.getenv('RESEND_API_KEY') else 'Not set'}")
     print(f"Email Host: {EMAIL_HOST}")
+    print(f"Email Port: {EMAIL_PORT}")
     print(f"Frontend URL: {FRONTEND_URL}")
+    print("")
+    print("📦 API Key Status:")
+    print(f"   • Resend: {'✅ Set' if os.getenv('RESEND_API_KEY') else '❌ Not set'}")
+    print(f"   • SendGrid: {'✅ Set' if os.getenv('SENDGRID_API_KEY') else '❌ Not set'}")
+    print(f"   • Brevo: {'✅ Set' if os.getenv('BREVO_API_KEY') else '❌ Not set'}")
+    print("")
     if EMAIL_USE_TESTMAIL:
         print("🧪 TESTMAIL.APP TESTING MODE ENABLED")
         print("   • Register with: yourtest.anything@inbox.testmail.app")
         print("   • Email content will appear in console logs")
         print("   • Check verification links in logs")
+    elif has_email_api_key:
+        print(f"🚀 PRODUCTION EMAIL ENABLED via {EMAIL_PROVIDER.upper()}")
+        print("   • Real emails will be sent to users")
+        print("   • Check provider dashboard for delivery status")
+    else:
+        print("🔧 DEVELOPMENT MODE - Console Backend")
+        print("   • Emails will appear in logs only")
+        print("   • Add EMAIL_PROVIDER and API key for production")
     print("=" * 50)
 
 # Default primary key field type
