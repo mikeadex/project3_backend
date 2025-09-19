@@ -262,12 +262,14 @@ REST_AUTH = {
     "JWT_AUTH_HTTPONLY": False,
 }
 
-# Frontend URL (without trailing slash)
-FRONTEND_URL = "http://localhost:5173"
+# Frontend URL (without trailing slash) - Use environment variable or default to production
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
 
-# Email settings
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@ella.com"
+# Email settings - Use SMTP in production, console in development
+if os.getenv("EMAIL_HOST_USER"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 SITE_NAME = "Ella"
 SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
 
@@ -334,8 +336,10 @@ TEMPLATES = [
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = "/"
-ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = "/"
+ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False  # Don't auto-login after email confirmation
+ACCOUNT_LOGOUT_ON_GET = False
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -399,14 +403,19 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Email settings (console backend for development)
+# Email settings for production
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@ellacv.com")
 
-EMAIL_USE_TLS = True
+# Debug email configuration
+if DEBUG:
+    print(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
+    print(f"Email Host User: {'Set' if EMAIL_HOST_USER else 'Not set'}")
+    print(f"Frontend URL: {FRONTEND_URL}")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
