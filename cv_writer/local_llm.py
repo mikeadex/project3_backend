@@ -1,4 +1,3 @@
-from llama_cpp import Llama
 import os
 import logging
 import requests
@@ -7,6 +6,16 @@ from typing import Dict, Optional, List, Any
 from pathlib import Path
 import json
 from django.conf import settings
+
+# Conditional import for llama_cpp - fallback gracefully if not available
+try:
+    from llama_cpp import Llama
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("llama_cpp not available. Local LLM functionality will be disabled.")
+    Llama = None
+    LLAMA_CPP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +46,11 @@ class LocalLLMService(BaseLLMService):
     def _initialize_model(self):
         """Initialize the LLM model with optimized settings."""
         try:
+            # Check if llama_cpp is available
+            if not LLAMA_CPP_AVAILABLE:
+                logger.warning("llama_cpp not available. Local LLM will be disabled.")
+                return
+            
             # Only initialize local model if provider is 'local'
             if self.config['provider'] == 'local':
                 model_path = self.config['model_path']
@@ -53,14 +67,18 @@ class LocalLLMService(BaseLLMService):
                     raise FileNotFoundError(error_msg)
                 
                 # Initialize with optimized settings
-                self.model = Llama(
-                    model_path=model_path,
-                    n_ctx=4096,          # Increased context window
-                    n_batch=1024,        # Larger batch size
-                    n_threads=os.cpu_count(),  # Use all available threads
-                    n_gpu_layers=-1      # Use all GPU layers if available
-                )
-                logger.info(f"Local model initialized successfully from {model_path}")
+                if LLAMA_CPP_AVAILABLE and Llama:
+                    self.model = Llama(
+                        model_path=model_path,
+                        n_ctx=4096,          # Increased context window
+                        n_batch=1024,        # Larger batch size
+                        n_threads=os.cpu_count(),  # Use all available threads
+                        n_gpu_layers=-1      # Use all GPU layers if available
+                    )
+                    logger.info(f"Local model initialized successfully from {model_path}")
+                else:
+                    logger.error("Cannot initialize model: llama_cpp not available")
+                    return
             
         except Exception as e:
             logger.error(f"Error initializing local model: {str(e)}")
@@ -155,6 +173,9 @@ class LocalLLMService(BaseLLMService):
 
     def _local_model_improve(self, formatted_prompt: str, section: str, max_tokens: int) -> str:
         """Improve text using local Llama model"""
+        if not self.model or not LLAMA_CPP_AVAILABLE:
+            raise ValueError("Local model not available or llama_cpp not installed")
+            
         response = self.model(
             formatted_prompt,
             max_tokens=max_tokens,
@@ -251,8 +272,8 @@ class LocalLLMService(BaseLLMService):
             content = content.replace('A seasoned ', '', 1)  # Handle 'A seasoned' case
             content = content.strip()  # Remove leading/trailing whitespace
 
-        if not self.model:
-            raise ValueError("Model not initialized")
+        if not self.model or not LLAMA_CPP_AVAILABLE:
+            raise ValueError("Model not initialized or llama_cpp not available")
 
         try:
             # Select appropriate prompt based on section type

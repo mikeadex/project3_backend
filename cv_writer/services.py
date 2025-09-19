@@ -16,7 +16,15 @@ from .models import (
     SocialMedia,
     CVImprovement,
 )
-from .local_llm import ResilientLLMService  # Corrected import
+# Conditional import for local LLM service
+try:
+    from .local_llm import ResilientLLMService
+    LOCAL_LLM_AVAILABLE = True
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Local LLM service not available: {e}")
+    ResilientLLMService = None
+    LOCAL_LLM_AVAILABLE = False
 import time
 import re
 import traceback

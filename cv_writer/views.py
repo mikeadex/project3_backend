@@ -60,7 +60,16 @@ from .serializers import (
     CVTemplateSelectionSerializer
 )
 from .services import CVImprovementService
-from .local_llm import ResilientLLMService  # Updated import
+# Conditional import for local LLM service
+try:
+    from .local_llm import ResilientLLMService
+    LOCAL_LLM_AVAILABLE = True
+except ImportError as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Local LLM service not available: {e}")
+    ResilientLLMService = None
+    LOCAL_LLM_AVAILABLE = False
 from django.db.models import Q
 import logging
 from ai_cv_parser.services import CVRewriteService
@@ -347,6 +356,12 @@ def improve_section(request):
         print(f"Content: {content}")
         
         try:
+            if not LOCAL_LLM_AVAILABLE or not ResilientLLMService:
+                return Response(
+                    {'error': 'Local LLM service not available. This feature requires llama_cpp installation.'},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+                
             llm_service = ResilientLLMService()  # Updated
             result = llm_service.improve_section(section, content)
             
