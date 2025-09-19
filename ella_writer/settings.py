@@ -265,10 +265,14 @@ REST_AUTH = {
 # Frontend URL (without trailing slash) - Use environment variable or default to production
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
 
-# Email settings - Use SMTP in production (when Resend API key is set), console in development
-if os.getenv("RESEND_API_KEY"):
+# Email settings - Use SMTP in production, console for development/testing
+# For testing with testmail.app, use console backend to see email content in logs
+EMAIL_USE_TESTMAIL = os.getenv("USE_TESTMAIL_TESTING", "false").lower() == "true"
+
+if os.getenv("RESEND_API_KEY") and not EMAIL_USE_TESTMAIL:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
+    # Console backend - perfect for testmail.app testing (shows email content in logs)
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 SITE_NAME = "Ella"
 SITE_DOMAIN = FRONTEND_URL.replace("http://", "").replace("https://", "")
@@ -412,11 +416,21 @@ EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY", "")     # Resend API key as pa
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
 # Debug email configuration
-if DEBUG:
+if DEBUG or os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true":
+    print("=" * 50)
+    print("📧 EMAIL CONFIGURATION")
+    print("=" * 50)
     print(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
+    print(f"Use Testmail Testing: {EMAIL_USE_TESTMAIL}")
     print(f"Resend API Key: {'Set' if os.getenv('RESEND_API_KEY') else 'Not set'}")
     print(f"Email Host: {EMAIL_HOST}")
     print(f"Frontend URL: {FRONTEND_URL}")
+    if EMAIL_USE_TESTMAIL:
+        print("🧪 TESTMAIL.APP TESTING MODE ENABLED")
+        print("   • Register with: yourtest.anything@inbox.testmail.app")
+        print("   • Email content will appear in console logs")
+        print("   • Check verification links in logs")
+    print("=" * 50)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
