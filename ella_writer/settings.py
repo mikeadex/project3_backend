@@ -437,7 +437,8 @@ EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
 # Debug email configuration - ALWAYS show in production for debugging
-if DEBUG or os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true" or not DEBUG:
+SHOW_EMAIL_CONFIG = True  # Force enable for debugging
+if DEBUG or os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true" or SHOW_EMAIL_CONFIG:
     print("=" * 50)
     print("📧 EMAIL CONFIGURATION")
     print("=" * 50)

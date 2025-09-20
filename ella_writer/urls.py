@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/ai_cv_parser/", include("ai_cv_parser.urls")),
     path("api/subscription/", include("subscription.urls")),
     path("api/blog/", include("blog.urls")),  
+    path("api/users/", include("users.urls")),  # Debug endpoints
     # Health check endpoint for monitoring
     path("api/health/", health_check, name="health_check"),
     
