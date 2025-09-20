@@ -55,6 +55,9 @@ urlpatterns = [
     path("api/user/password/reset/", CustomPasswordResetView.as_view(), name="rest_password_reset"),
     path("api/user/password/reset/confirm/<uidb64>/<token>/", CustomPasswordResetConfirmView.as_view(), name="password_reset_confirm"),
     
+    # Custom email confirmation view (must be before dj-rest-auth registration URLs)
+    path("api/auth/registration/account-confirm-email/<key>/", CustomConfirmEmailView.as_view(), name="account_confirm_email"),
+    
     # dj-rest-auth URLs
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
