@@ -30,23 +30,22 @@ class CreateUserView(generics.CreateAPIView):
 
 
 class CustomConfirmEmailView(ConfirmEmailView):
-    template_name = 'account/email_confirm.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        logger.debug(f"Context data: {context}")
-        return context
-
-    def post(self, request, *args, **kwargs):
-        logger.debug("Processing email confirmation")
+    def get(self, request, *args, **kwargs):
+        logger.debug("Processing email confirmation (GET)")
         try:
+            # Process the confirmation
             response = super().post(request, *args, **kwargs)
-            messages.success(request, 'Email successfully confirmed!')
-            return redirect('/')
+            logger.info("Email successfully confirmed!")
+            # Redirect to frontend success page
+            return redirect(f'{settings.FRONTEND_URL}/email-confirmed?status=success')
         except Exception as e:
             logger.error(f"Error confirming email: {str(e)}")
-            messages.error(request, 'Error confirming email. Please try again.')
-            return redirect('/')
+            # Redirect to frontend error page  
+            return redirect(f'{settings.FRONTEND_URL}/email-confirmed?status=error')
+
+    def post(self, request, *args, **kwargs):
+        logger.debug("Processing email confirmation (POST)")
+        return self.get(request, *args, **kwargs)
 
 class CustomPasswordResetView(APIView):
     permission_classes = [AllowAny]
