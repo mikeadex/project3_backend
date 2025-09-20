@@ -66,10 +66,10 @@ SECRET_KEY = get_secret_key()
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "www.ellacvwriter.com",
-    "ellacvwriter.com",
     "www.ellacv.com",
     "ellacv.com",
+    "www.ellacvwriter.com",      # Legacy domain support
+    "ellacvwriter.com",          # Legacy domain support
     "ellacvwriter.vercel.app",
     "www.ellacvwriter.vercel.app",
     "localhost",
@@ -153,10 +153,10 @@ MIDDLEWARE = [
 # }
 
 CORS_ALLOWED_ORIGINS = [
-    "https://www.ellacvwriter.com",
-    "https://ellacvwriter.com",
-    "https://www.ellacv.com",
-    "https://ellacv.com",
+    "https://www.ellacv.com",        # Current production domain
+    "https://ellacv.com",            # Current production domain (non-www)
+    "https://www.ellacvwriter.com",  # Legacy domain support
+    "https://ellacvwriter.com",      # Legacy domain support
     "https://ellacvwriter.vercel.app",
     "https://www.ellacvwriter.vercel.app",
     "http://localhost:5173",
