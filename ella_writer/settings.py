@@ -423,7 +423,7 @@ if EMAIL_PROVIDER == "sendgrid":
     EMAIL_HOST_USER = "apikey"  # SendGrid uses 'apikey' as username
     EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY", "")
 elif EMAIL_PROVIDER == "brevo":
-    EMAIL_HOST = "smtp-relay.brevo.com"
+    EMAIL_HOST = "smtp-relay.sendinblue.com"  # Updated Brevo SMTP host
     EMAIL_PORT = 587
     EMAIL_HOST_USER = os.getenv("BREVO_EMAIL", "")
     EMAIL_HOST_PASSWORD = os.getenv("BREVO_API_KEY", "")
