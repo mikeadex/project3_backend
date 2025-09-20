@@ -7,6 +7,7 @@ from allauth.account.views import ConfirmEmailView
 from django.shortcuts import render, redirect
 from allauth.account.models import EmailConfirmation, EmailConfirmationHMAC
 from django.contrib import messages
+from django.views.generic import TemplateView
 import logging
 from django.contrib.auth.forms import PasswordResetForm
 from django.conf import settings
@@ -153,5 +154,20 @@ class CustomPasswordResetConfirmView(APIView):
                 {"error": "Failed to reset password"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class EmailVerificationSentView(TemplateView):
+    """Custom view for email verification sent - redirect to frontend"""
+    
+    def get(self, request, *args, **kwargs):
+        logger.debug("Email verification sent - redirecting to frontend")
+        # For social logins, redirect to dashboard since they're already authenticated
+        if request.user.is_authenticated:
+            return redirect(f'{settings.FRONTEND_URL}/dashboard')
+        else:
+            # For regular registration, redirect to login with success message
+            return redirect(f'{settings.FRONTEND_URL}/login?message=verification_sent')
+
+    def post(self, request, *args, **kwargs):
+        return self.get(request, *args, **kwargs)
 
 # Create your views here.

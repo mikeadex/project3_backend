@@ -9,7 +9,8 @@ from api.views import (
     CreateUserView,
     CustomConfirmEmailView,
     CustomPasswordResetView,
-    CustomPasswordResetConfirmView
+    CustomPasswordResetConfirmView,
+    EmailVerificationSentView
 )
 from dj_rest_auth.views import PasswordResetConfirmView
 from dj_rest_auth.registration.views import VerifyEmailView
@@ -57,6 +58,7 @@ urlpatterns = [
     
     # Custom email confirmation view (must be before dj-rest-auth registration URLs)
     path("api/auth/registration/account-confirm-email/<key>/", CustomConfirmEmailView.as_view(), name="account_confirm_email"),
+    path("api/auth/registration/account-email-verification-sent/", EmailVerificationSentView.as_view(), name="account_email_verification_sent"),
     
     # dj-rest-auth URLs
     path("api/auth/", include("dj_rest_auth.urls")),
