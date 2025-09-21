@@ -136,6 +136,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "api.middleware.SocialLoginRedirectMiddleware",  # Our social login redirect interceptor
 ]
 
 SOCIALACCOUNT_PROVIDERS = {
