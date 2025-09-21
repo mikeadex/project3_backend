@@ -5,6 +5,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class CorsMiddleware(MiddlewareMixin):
+    """
+    Custom CORS middleware for handling cross-origin requests
+    """
+    
+    def process_response(self, request, response):
+        """
+        Add CORS headers to all responses
+        """
+        # Allow all origins for API requests
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response['Access-Control-Allow-Credentials'] = 'true'
+        
+        return response
+    
+    def process_request(self, request):
+        """
+        Handle preflight OPTIONS requests
+        """
+        if request.method == 'OPTIONS':
+            from django.http import HttpResponse
+            response = HttpResponse()
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            response['Access-Control-Allow-Credentials'] = 'true'
+            return response
+
 class SocialLoginRedirectMiddleware(MiddlewareMixin):
     """
     Middleware to intercept social login redirects and replace them with JWT token redirects
