@@ -161,7 +161,7 @@ class EmailVerificationSentView(TemplateView):
     """SPA-compatible social login handler - generates JWT tokens for authenticated users"""
     
     def get(self, request, *args, **kwargs):
-        logger.debug("Processing social login callback for SPA")
+        logger.debug(f"Processing social login callback for SPA. User: {request.user}, Authenticated: {request.user.is_authenticated}")
         
         # For social logins, user should be authenticated at this point
         if request.user.is_authenticated:
@@ -173,12 +173,14 @@ class EmailVerificationSentView(TemplateView):
             # Create success redirect URL with tokens
             redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
             
-            logger.info(f"Social login successful for user: {request.user.email}")
+            logger.info(f"Social login successful for user: {request.user.email} (ID: {request.user.id})")
             return redirect(redirect_url)
         else:
+            # Debug why user is not authenticated
+            logger.error(f"EmailVerificationSentView: User not authenticated. Session data: {dict(request.session)}, User: {request.user}")
+            
             # For regular registration, redirect to login with success message
-            logger.warning("EmailVerificationSentView called but user not authenticated")
-            return redirect(f'{settings.FRONTEND_URL}/login?message=verification_sent')
+            return redirect(f'{settings.FRONTEND_URL}/login?message=authentication_failed')
 
     def post(self, request, *args, **kwargs):
         return self.get(request, *args, **kwargs)

@@ -372,7 +372,7 @@ TEMPLATES = [
 ]
 
 # Email verification settings
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_EMAIL_VERIFICATION = "optional"  # ✅ Allow social logins to skip verification
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
@@ -380,11 +380,13 @@ ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = f"{FRONTEND_URL}/email-c
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False  # Don't auto-login after email confirmation
 ACCOUNT_LOGOUT_ON_GET = False
 
-# Social account settings
+# Social account settings - These take precedence for social logins
 SOCIALACCOUNT_QUERY_EMAIL = True
 SOCIALACCOUNT_EMAIL_REQUIRED = True
-SOCIALACCOUNT_EMAIL_VERIFICATION = "none"  # Skip verification for social logins
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"  # ✅ Skip verification for social logins
 SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False  # ✅ Don't require email verification
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True  # ✅ Auto-connect social accounts
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
