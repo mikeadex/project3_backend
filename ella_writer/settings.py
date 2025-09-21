@@ -169,14 +169,15 @@ SOCIALACCOUNT_PROVIDERS = {
             'secret': os.getenv('LINKEDIN_OAUTH_CLIENT_SECRET', ''),
         },
         'SCOPE': [
-            'r_liteprofile',
-            'r_emailaddress',
+            'openid',
+            'profile', 
+            'email',
         ],
         'PROFILE_FIELDS': [
             'id',
-            'first-name',
-            'last-name',
-            'email-address',
+            'localizedFirstName',
+            'localizedLastName',
+            'emailAddress',
         ]
     },
 }
