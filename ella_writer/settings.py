@@ -523,6 +523,10 @@ ACCOUNT_LOGOUT_REDIRECT_URL = f"{FRONTEND_URL}/"
 SOCIALACCOUNT_LOGIN_ON_GET = True
 SOCIALACCOUNT_STORE_TOKENS = False
 
+# Custom adapters for SPA (Single Page Application) compatibility
+ACCOUNT_ADAPTER = 'api.adapters.SPAAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'api.adapters.SPASocialAccountAdapter'
+
 # Form setting
 ACCOUNT_FORMS = {
     "signup": "allauth.account.forms.SignupForm",
