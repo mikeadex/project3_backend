@@ -45,6 +45,14 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
         Process the response and check if we need to override social login redirects
         """
         
+        # Add comprehensive logging for ALL requests
+        if hasattr(request, 'path'):
+            logger.debug(f"🔍 MIDDLEWARE: Processing request path: {request.path}")
+            logger.debug(f"   User authenticated: {getattr(request, 'user', 'No user').is_authenticated if hasattr(request, 'user') else False}")
+            logger.debug(f"   Response type: {type(response).__name__}")
+            if isinstance(response, HttpResponseRedirect):
+                logger.debug(f"   Redirect URL: {getattr(response, 'url', 'No URL')}")
+        
         # Check if this is a redirect response from social login
         social_callback_patterns = [
             'google/login/callback',
@@ -79,24 +87,42 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                     request.session.pop('social_login_redirect', None)
                     return HttpResponseRedirect(redirect_url)
         
-        # Check for any redirect to allauth pages when user is authenticated (broad catch-all)
-        elif (isinstance(response, HttpResponseRedirect) and 
-              hasattr(request, 'user') and request.user.is_authenticated):
+        # COMPREHENSIVE CHECK: Catch ANY allauth page access by authenticated social users
+        elif (hasattr(request, 'user') and request.user.is_authenticated and 
+              hasattr(request, 'path')):
             
-            allauth_pages = [
+            # Allauth paths that social users should NOT see
+            allauth_paths = [
+                '/accounts/',
+                '/api/auth/registration/account-email-verification-sent/',
+                '/accounts/login/',
                 '/accounts/signup/',
-                '/accounts/login/', 
                 '/accounts/3rdparty/signup/',
                 '/accounts/socialaccount/signup/',
-                'ellacv.com/dashboard'  # Direct dashboard redirects
             ]
             
-            redirect_url_matches = any(page in str(getattr(response, 'url', '')) for page in allauth_pages)
+            # Check if current request path is an allauth page
+            is_allauth_page = any(path in request.path for path in allauth_paths)
             
-            if redirect_url_matches:
-                logger.info(f"🔄 MIDDLEWARE: Authenticated user redirect to allauth page intercepted")
+            # Also check for redirect responses to allauth pages
+            is_allauth_redirect = False
+            if isinstance(response, HttpResponseRedirect):
+                redirect_url = str(getattr(response, 'url', ''))
+                is_allauth_redirect = any(page in redirect_url for page in [
+                    '/accounts/signup/',
+                    '/accounts/login/', 
+                    '/accounts/3rdparty/signup/',
+                    '/accounts/socialaccount/signup/',
+                    'ellacv.com/dashboard'  # Direct dashboard redirects
+                ])
+            
+            if (is_allauth_page or is_allauth_redirect):
+                logger.info(f"🔄 MIDDLEWARE: Authenticated user accessing allauth page")
                 logger.info(f"   User: {request.user.email if hasattr(request.user, 'email') else 'Unknown'}")
-                logger.info(f"   Redirect URL: {getattr(response, 'url', 'Unknown')}")
+                logger.info(f"   Path: {request.path}")
+                logger.info(f"   Is redirect: {isinstance(response, HttpResponseRedirect)}")
+                if isinstance(response, HttpResponseRedirect):
+                    logger.info(f"   Redirect URL: {getattr(response, 'url', 'Unknown')}")
                 
                 # Check if user has social accounts (indicating social login)
                 if hasattr(request.user, 'socialaccount_set') and request.user.socialaccount_set.exists():
@@ -114,5 +140,7 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                     logger.info(f"🚀 MIDDLEWARE: Generated JWT redirect: {jwt_redirect_url}")
                     
                     return HttpResponseRedirect(jwt_redirect_url)
+                else:
+                    logger.info(f"ℹ️  MIDDLEWARE: User has no social accounts, allowing allauth page")
         
         return response
