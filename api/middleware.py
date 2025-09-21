@@ -46,9 +46,17 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
         """
         
         # Check if this is a redirect response from social login
-        if (isinstance(response, HttpResponseRedirect) and 
-            hasattr(request, 'path') and 
-            'google/login/callback' in request.path):
+        social_callback_patterns = [
+            'google/login/callback',
+            'github/login/callback', 
+            'linkedin_oauth2/login/callback'
+        ]
+        
+        is_social_callback = (isinstance(response, HttpResponseRedirect) and 
+                            hasattr(request, 'path') and 
+                            any(pattern in request.path for pattern in social_callback_patterns))
+        
+        if is_social_callback:
             
             logger.info(f"🔍 MIDDLEWARE: Intercepted social login redirect")
             logger.info(f"   Original redirect: {response.url if hasattr(response, 'url') else 'Unknown'}")
