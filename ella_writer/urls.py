@@ -27,6 +27,16 @@ def health_check(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    
+    # ⚠️  CRITICAL: Custom social auth overrides MUST come BEFORE allauth.urls
+    # Override specific allauth URLs with our SPA-compatible handlers
+    path("accounts/social/signup/", EmailVerificationSentView.as_view(), name="socialaccount_signup"),
+    path("accounts/signup/", EmailVerificationSentView.as_view(), name="account_signup"),
+    path("accounts/login/", EmailVerificationSentView.as_view(), name="account_login"),
+    path("accounts/social/login/cancelled/", EmailVerificationSentView.as_view(), name="socialaccount_login_cancelled"),
+    path("accounts/social/login/error/", EmailVerificationSentView.as_view(), name="socialaccount_login_error"),
+    
+    # Default allauth URLs (after our custom overrides)
     path("accounts/", include("allauth.urls")),
     path("api-auth/", include("rest_framework.urls")),
     path("", include("home.urls")),
