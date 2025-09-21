@@ -49,7 +49,9 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
         social_callback_patterns = [
             'google/login/callback',
             'github/login/callback', 
-            'linkedin_oauth2/login/callback'
+            'linkedin_oauth2/login/callback',
+            '3rdparty/signup',  # GitHub and LinkedIn use this path
+            'socialaccount/signup',  # Alternative allauth signup path
         ]
         
         is_social_callback = (isinstance(response, HttpResponseRedirect) and 
@@ -77,19 +79,40 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                     request.session.pop('social_login_redirect', None)
                     return HttpResponseRedirect(redirect_url)
         
-        # Check for any redirect to the frontend dashboard (backup approach)
+        # Check for any redirect to allauth pages when user is authenticated (broad catch-all)
         elif (isinstance(response, HttpResponseRedirect) and 
-              hasattr(response, 'url') and 
-              'ellacv.com/dashboard' in response.url):
+              hasattr(request, 'user') and request.user.is_authenticated):
             
-            # Check if this might be from a social login
-            if hasattr(request, 'session') and request.session.get('social_login_success'):
-                redirect_url = request.session.get('social_login_redirect')
-                if redirect_url:
-                    logger.info(f"🔄 MIDDLEWARE: Dashboard redirect intercepted, using JWT redirect: {redirect_url}")
-                    # Clear the session flags
-                    request.session.pop('social_login_success', None)
-                    request.session.pop('social_login_redirect', None)
-                    return HttpResponseRedirect(redirect_url)
+            allauth_pages = [
+                '/accounts/signup/',
+                '/accounts/login/', 
+                '/accounts/3rdparty/signup/',
+                '/accounts/socialaccount/signup/',
+                'ellacv.com/dashboard'  # Direct dashboard redirects
+            ]
+            
+            redirect_url_matches = any(page in str(getattr(response, 'url', '')) for page in allauth_pages)
+            
+            if redirect_url_matches:
+                logger.info(f"🔄 MIDDLEWARE: Authenticated user redirect to allauth page intercepted")
+                logger.info(f"   User: {request.user.email if hasattr(request.user, 'email') else 'Unknown'}")
+                logger.info(f"   Redirect URL: {getattr(response, 'url', 'Unknown')}")
+                
+                # Check if user has social accounts (indicating social login)
+                if hasattr(request.user, 'socialaccount_set') and request.user.socialaccount_set.exists():
+                    logger.info(f"🔐 MIDDLEWARE: Social user detected, generating JWT redirect")
+                    
+                    # Generate JWT tokens for this authenticated social user
+                    from rest_framework_simplejwt.tokens import RefreshToken
+                    from django.conf import settings
+                    
+                    refresh = RefreshToken.for_user(request.user)
+                    access_token = str(refresh.access_token)
+                    refresh_token = str(refresh)
+                    
+                    jwt_redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
+                    logger.info(f"🚀 MIDDLEWARE: Generated JWT redirect: {jwt_redirect_url}")
+                    
+                    return HttpResponseRedirect(jwt_redirect_url)
         
         return response
