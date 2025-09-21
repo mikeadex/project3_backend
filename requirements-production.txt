@@ -1,0 +1,56 @@
+# PRODUCTION-OPTIMIZED REQUIREMENTS
+# Lightweight version for faster builds and essential functionality only
+
+# Core Django and REST framework
+Django==4.2.15
+djangorestframework==3.15.1
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.3.1
+django-filter==24.3
+django-js-asset==2.2.0
+
+# Authentication
+django-allauth==64.0.0
+dj-rest-auth==6.0.0
+django-rest-auth==0.9.5
+PyJWT==2.7.0
+
+# Databases
+dj-database-url==2.1.0
+psycopg2-binary==2.9.9
+
+# Server and static files
+gunicorn==21.2.0
+whitenoise==6.6.0
+
+# Rich text editor
+django-tinymce==3.7.1
+
+# Basic document processing (lightweight)
+pillow==10.4.0
+PyPDF2==3.0.1
+python-docx==1.1.0
+
+# HTTP clients
+httpx==0.28.1
+requests>=2.26.0
+aiohttp>=3.8.0
+
+# Environment variables
+python-dotenv==1.0.0
+python-dateutil==2.8.2
+
+# Payment processing
+stripe==5.4.0
+
+# Additional utilities
+django-environ==0.11.2
+django-hitcount==1.3.5
+ua-parser==0.16.1
+user-agents==2.2.0
+
+# Image storage and processing
+cloudinary>=1.37.0
+
+# Note: ML/NLP dependencies moved to requirements-ml.txt for optional installation
+# This reduces build time from hours to minutes for core functionality

@@ -1,18 +1,28 @@
 import PyPDF2
 import docx
 import re
-import spacy
 import logging
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Tuple
 from dateutil import parser as date_parser
 import io
-import pdfplumber  # Alternative PDF parsing library
 import os
 import traceback
 import json
 import time  # Import time for timing measurements
+from django.conf import settings
+
+# Conditional ML imports - only load if ML features enabled
+try:
+    import spacy
+    SPACY_AVAILABLE = getattr(settings, 'ENABLE_ML_FEATURES', False)
+    if SPACY_AVAILABLE:
+        import pdfplumber  # Alternative PDF parsing library
+except ImportError:
+    SPACY_AVAILABLE = False
+    spacy = None
+    pdfplumber = None
 
 # Import CV writer service for DeepSeek integration
 try:

@@ -1,0 +1,25 @@
+# ML/NLP DEPENDENCIES - OPTIONAL
+# Install separately only when AI features are needed: pip install -r requirements-ml.txt
+
+# CRITICAL: Install numpy first to avoid binary incompatibility
+numpy==1.24.4
+
+# NLP dependencies - install in specific order  
+thinc==8.1.12
+spacy==3.6.1
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+nltk==3.8.1
+
+# Document processing (advanced)
+pdfplumber==0.11.5
+pdfminer.six==20231228
+
+# Additional ML utilities
+django-ckeditor==6.7.1
+django-ckeditor-5==0.2.12
+
+# Note: spaCy models and NLTK data will be downloaded separately
+# Run after installation: 
+# python -m spacy download en_core_web_sm
+# python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"

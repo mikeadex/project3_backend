@@ -537,11 +537,18 @@ ACCOUNT_PASSWORD_REQUIRED = True
 
 # Environment Configuration
 ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'development')
+ENABLE_ML_FEATURES = os.getenv('ENABLE_ML_FEATURES', 'false').lower() == 'true'
 
-# LLM Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# LLM Configuration (only load if ML features enabled)
+if ENABLE_ML_FEATURES:
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+else:
+    # Disable ML features for faster builds and lighter deployments
+    GEMINI_API_KEY = None
+    MISTRAL_API_KEY = None 
+    GROQ_API_KEY = None
 
 LLM_PROVIDERS = {
     'development': {
