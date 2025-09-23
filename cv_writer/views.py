@@ -1356,35 +1356,77 @@ def save_rewritten_cv(request):
         # 🚨 CRITICAL FIX: Re-save professional summary from rewrite session
         try:
             rewrite_result = rewrite_session.result
+            logger.info(f"🔍 DEBUGGING: Re-saving professional summary from rewrite session")
+            logger.info(f"  Session ID: {session_id}")
+            logger.info(f"  Rewrite result type: {type(rewrite_result)}")
+            logger.info(f"  Rewrite result keys: {list(rewrite_result.keys()) if isinstance(rewrite_result, dict) else 'Not a dict'}")
+            
             if rewrite_result and isinstance(rewrite_result, dict):
-                rewritten_cv_data = rewrite_result.get('rewritten_cv', {})
-                logger.info(f"🔍 Re-saving professional summary from rewrite session")
-                logger.info(f"  Session ID: {session_id}")
-                logger.info(f"  Rewritten CV data keys: {list(rewritten_cv_data.keys()) if rewritten_cv_data else 'No data'}")
+                # Check multiple possible paths for the professional summary
+                professional_summary_text = None
                 
-                # Check if professional summary exists in the rewritten data
-                if rewritten_cv_data.get('professional_summary'):
-                    logger.info(f"  Found professional summary: {rewritten_cv_data['professional_summary'][:100]}...")
+                # Path 1: Direct in rewritten_cv
+                rewritten_cv_data = rewrite_result.get('rewritten_cv', {})
+                if rewritten_cv_data and isinstance(rewritten_cv_data, dict):
+                    logger.info(f"  Rewritten CV data keys: {list(rewritten_cv_data.keys())}")
+                    if 'professional_summary' in rewritten_cv_data:
+                        professional_summary_text = rewritten_cv_data['professional_summary']
+                        logger.info(f"  Found professional summary in rewritten_cv: {professional_summary_text[:100] if professional_summary_text else 'None'}...")
+                
+                # Path 2: In original_cv (fallback)
+                if not professional_summary_text:
+                    original_cv_data = rewrite_result.get('original_cv', {})
+                    if original_cv_data and isinstance(original_cv_data, dict):
+                        logger.info(f"  Original CV data keys: {list(original_cv_data.keys())}")
+                        if 'professional_summary' in original_cv_data:
+                            professional_summary_text = original_cv_data['professional_summary']
+                            logger.info(f"  Found professional summary in original_cv: {professional_summary_text[:100] if professional_summary_text else 'None'}...")
+                
+                # Path 3: Check if rewritten_cv is truncated in logs but contains more data
+                if not professional_summary_text and rewritten_cv_data:
+                    # Sometimes the data might be there but not logged due to truncation
+                    logger.info(f"  Checking for professional_summary key existence: {'professional_summary' in rewritten_cv_data}")
+                    logger.info(f"  All rewritten_cv keys: {list(rewritten_cv_data.keys())}")
+                    
+                    # Force check the value
+                    ps_value = rewritten_cv_data.get('professional_summary')
+                    logger.info(f"  Professional summary value type: {type(ps_value)}")
+                    logger.info(f"  Professional summary value: {ps_value}")
+                    if ps_value:
+                        professional_summary_text = ps_value
+                
+                # If we found a professional summary, save it
+                if professional_summary_text:
+                    logger.info(f"✅ Found professional summary, saving to database")
+                    logger.info(f"  Text length: {len(professional_summary_text)}")
+                    logger.info(f"  Text content: {professional_summary_text[:200]}...")
                     
                     # Import necessary models and functions
                     from .models import ProfessionalSummary
                     from .services import clean_ai_text
                     
-                    # Get or create professional summary for this CV
-                    professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
+                    # Clean the text
+                    cleaned_text = clean_ai_text(professional_summary_text)
+                    logger.info(f"  Cleaned text length: {len(cleaned_text)}")
+                    logger.info(f"  Cleaned text content: {cleaned_text[:200]}...")
                     
+                    # Get or create professional summary for this CV
                     professional_summary, created = ProfessionalSummary.objects.update_or_create(
                         user=request.user,
                         cv=new_cv,
-                        defaults={'summary': professional_summary_text}
+                        defaults={'summary': cleaned_text}
                     )
                     
-                    logger.info(f"  Professional summary {'created' if created else 'updated'} for CV {new_cv.id}")
-                    logger.info(f"  Summary content: {professional_summary.summary[:100]}...")
+                    logger.info(f"✅ Professional summary {'created' if created else 'updated'} for CV {new_cv.id}")
+                    logger.info(f"✅ Saved summary content: {professional_summary.summary[:100]}...")
+                    logger.info(f"✅ Professional summary ID: {professional_summary.id}")
                 else:
-                    logger.warning(f"  No professional summary found in rewritten data")
+                    logger.warning(f"❌ No professional summary found in any path")
+                    logger.warning(f"  Rewrite result structure: {rewrite_result}")
+            else:
+                logger.error(f"❌ Rewrite result is not a valid dict: {rewrite_result}")
         except Exception as summary_error:
-            logger.error(f"Error re-saving professional summary: {str(summary_error)}")
+            logger.error(f"❌ Error re-saving professional summary: {str(summary_error)}", exc_info=True)
 
         # Update the CV with personal info if provided
         if personal_info:
