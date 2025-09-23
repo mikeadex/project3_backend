@@ -1353,80 +1353,71 @@ def save_rewritten_cv(request):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # 🚨 CRITICAL FIX: Re-save professional summary from rewrite session
+        # Re-save professional summary and personal info from rewrite session
         try:
             rewrite_result = rewrite_session.result
-            logger.info(f"🔍 DEBUGGING: Re-saving professional summary from rewrite session")
-            logger.info(f"  Session ID: {session_id}")
-            logger.info(f"  Rewrite result type: {type(rewrite_result)}")
-            logger.info(f"  Rewrite result keys: {list(rewrite_result.keys()) if isinstance(rewrite_result, dict) else 'Not a dict'}")
-            
             if rewrite_result and isinstance(rewrite_result, dict):
-                # Check multiple possible paths for the professional summary
                 professional_summary_text = None
                 
-                # Path 1: Direct in rewritten_cv
+                # Check rewritten_cv data first
                 rewritten_cv_data = rewrite_result.get('rewritten_cv', {})
-                if rewritten_cv_data and isinstance(rewritten_cv_data, dict):
-                    logger.info(f"  Rewritten CV data keys: {list(rewritten_cv_data.keys())}")
-                    if 'professional_summary' in rewritten_cv_data:
-                        professional_summary_text = rewritten_cv_data['professional_summary']
-                        logger.info(f"  Found professional summary in rewritten_cv: {professional_summary_text[:100] if professional_summary_text else 'None'}...")
+                if rewritten_cv_data and 'professional_summary' in rewritten_cv_data:
+                    professional_summary_text = rewritten_cv_data['professional_summary']
                 
-                # Path 2: In original_cv (fallback)
+                # Fallback to original_cv if not found in rewritten
                 if not professional_summary_text:
                     original_cv_data = rewrite_result.get('original_cv', {})
-                    if original_cv_data and isinstance(original_cv_data, dict):
-                        logger.info(f"  Original CV data keys: {list(original_cv_data.keys())}")
-                        if 'professional_summary' in original_cv_data:
-                            professional_summary_text = original_cv_data['professional_summary']
-                            logger.info(f"  Found professional summary in original_cv: {professional_summary_text[:100] if professional_summary_text else 'None'}...")
+                    if original_cv_data and 'professional_summary' in original_cv_data:
+                        professional_summary_text = original_cv_data['professional_summary']
                 
-                # Path 3: Check if rewritten_cv is truncated in logs but contains more data
-                if not professional_summary_text and rewritten_cv_data:
-                    # Sometimes the data might be there but not logged due to truncation
-                    logger.info(f"  Checking for professional_summary key existence: {'professional_summary' in rewritten_cv_data}")
-                    logger.info(f"  All rewritten_cv keys: {list(rewritten_cv_data.keys())}")
-                    
-                    # Force check the value
-                    ps_value = rewritten_cv_data.get('professional_summary')
-                    logger.info(f"  Professional summary value type: {type(ps_value)}")
-                    logger.info(f"  Professional summary value: {ps_value}")
-                    if ps_value:
-                        professional_summary_text = ps_value
-                
-                # If we found a professional summary, save it
+                # Save professional summary if found
                 if professional_summary_text:
-                    logger.info(f"✅ Found professional summary, saving to database")
-                    logger.info(f"  Text length: {len(professional_summary_text)}")
-                    logger.info(f"  Text content: {professional_summary_text[:200]}...")
-                    
-                    # Import necessary models and functions
                     from .models import ProfessionalSummary
                     from .services import clean_ai_text
                     
-                    # Clean the text
                     cleaned_text = clean_ai_text(professional_summary_text)
-                    logger.info(f"  Cleaned text length: {len(cleaned_text)}")
-                    logger.info(f"  Cleaned text content: {cleaned_text[:200]}...")
-                    
-                    # Get or create professional summary for this CV
-                    professional_summary, created = ProfessionalSummary.objects.update_or_create(
+                    ProfessionalSummary.objects.update_or_create(
                         user=request.user,
                         cv=new_cv,
                         defaults={'summary': cleaned_text}
                     )
+                
+                # LOAD PERSONAL INFO FROM ORIGINAL PARSED DATA
+                original_cv_data = rewrite_result.get('original_cv', {})
+                if original_cv_data and 'personal_info' in original_cv_data:
+                    personal_info_data = original_cv_data['personal_info']
                     
-                    logger.info(f"✅ Professional summary {'created' if created else 'updated'} for CV {new_cv.id}")
-                    logger.info(f"✅ Saved summary content: {professional_summary.summary[:100]}...")
-                    logger.info(f"✅ Professional summary ID: {professional_summary.id}")
-                else:
-                    logger.warning(f"❌ No professional summary found in any path")
-                    logger.warning(f"  Rewrite result structure: {rewrite_result}")
-            else:
-                logger.error(f"❌ Rewrite result is not a valid dict: {rewrite_result}")
+                    # Update the new CV with personal information from parsed data
+                    if personal_info_data.get('name'):
+                        name_parts = personal_info_data['name'].split(' ', 1)
+                        if len(name_parts) > 0:
+                            new_cv.first_name = name_parts[0]
+                        if len(name_parts) > 1:
+                            new_cv.last_name = name_parts[1]
+                    
+                    if personal_info_data.get('email'):
+                        # Store email in additional_information since CvWriter doesn't have email field
+                        email_info = f"Email: {personal_info_data['email']}"
+                        if new_cv.additional_information:
+                            new_cv.additional_information += f"\n{email_info}"
+                        else:
+                            new_cv.additional_information = email_info
+                    
+                    if personal_info_data.get('phone'):
+                        new_cv.contact_number = personal_info_data['phone']
+                    
+                    if personal_info_data.get('location'):
+                        location_parts = personal_info_data['location'].split(',')
+                        if len(location_parts) >= 2:
+                            new_cv.city = location_parts[0].strip()
+                            new_cv.country = location_parts[-1].strip()
+                        else:
+                            new_cv.city = personal_info_data['location']
+                    
+                    new_cv.save()
+                    
         except Exception as summary_error:
-            logger.error(f"❌ Error re-saving professional summary: {str(summary_error)}", exc_info=True)
+            logger.error(f"Error re-saving professional summary and personal info: {str(summary_error)}")
 
         # Update the CV with personal info if provided
         if personal_info:
@@ -1523,44 +1514,14 @@ def get_cv(request, cv_id):
         # 🚨 CRITICAL FIX: Get professional summary for THIS specific CV, not just any summary
         professional_summary = ProfessionalSummary.objects.filter(user=request.user, cv=cv).first()
         
-        # 🔍 DEBUG: Log professional summary fetching
-        print(f"\n🔍 CV Detail API - Professional Summary Debug:")
-        print(f"  CV ID: {cv_id}")
-        print(f"  User: {request.user.username}")
-        print(f"  Professional summary found: {professional_summary is not None}")
-        if professional_summary:
-            print(f"  Summary content: {professional_summary.summary[:100]}...")
-            print(f"  Summary CV ID: {professional_summary.cv.id if professional_summary.cv else 'None'}")
-        else:
-            # Check if there are ANY professional summaries for this user
-            all_summaries = ProfessionalSummary.objects.filter(user=request.user)
-            print(f"  Total summaries for user: {all_summaries.count()}")
-            for i, summary in enumerate(all_summaries):
-                print(f"    Summary {i+1}: CV={summary.cv.id if summary.cv else 'None'}, Content={summary.summary[:50]}...")
-        
         experiences = Experience.objects.filter(user=request.user).order_by('-start_date')
         education = Education.objects.filter(user=request.user).order_by('-start_date')
         
-        # Get and log skills data
-        raw_skills = Skill.objects.filter(user=request.user)
-        print("\nSkills Debug:")
-        print("1. Raw skills from DB:")
-        for skill in raw_skills:
-            print(f"  - {skill.skill_name} ({skill.skill_level})")
-        
-        skills = raw_skills.exclude(
+        # Get related data
+        skills = Skill.objects.filter(user=request.user).exclude(
             Q(skill_name__isnull=True) | Q(skill_name='') |
             Q(skill_level__isnull=True) | Q(skill_level='')
         )
-        print("\n2. Filtered skills:")
-        for skill in skills:
-            print(f"  - {skill.skill_name} ({skill.skill_level})")
-        
-        serialized_skills = SkillSerializer(skills, many=True).data
-        print("\n3. Serialized skills:")
-        for skill in serialized_skills:
-            print(f"  - {skill}")
-        
         languages = Language.objects.filter(user=request.user)
         certifications = Certification.objects.filter(user=request.user)
         interests = Interest.objects.filter(user=request.user)
@@ -1570,22 +1531,29 @@ def get_cv(request, cv_id):
         # Serialize CV data
         cv_data = CvWriterSerializer(cv).data
         
+        # Extract email from additional_information if it's stored there
+        email_from_additional = ''
+        if cv.additional_information:
+            import re
+            email_match = re.search(r'Email:\s*([^\n\r]+)', cv.additional_information)
+            if email_match:
+                email_from_additional = email_match.group(1).strip()
+        
         # Add all related data
         response_data = {
             'professional_summary': ProfessionalSummarySerializer(professional_summary).data.get('summary') if professional_summary else None,
             'experiences': ExperienceSerializer(experiences, many=True).data,
             'education': EducationSerializer(education, many=True).data,
-            'skills': serialized_skills,
+            'skills': SkillSerializer(skills, many=True).data,
             'languages': LanguageSerializer(languages, many=True).data,
             'certifications': CertificationSerializer(certifications, many=True).data,
             'interests': InterestSummarySerializer(interests, many=True).data,
             'social_media': SocialMediaSerializer(social_media, many=True).data,
             'references': ReferenceSerializer(references, many=True).data,
+            # Add extracted email for the frontend form
+            'email': email_from_additional,
         }
         cv_data.update(response_data)
-        
-        print("\n4. Final response skills data:")
-        print(f"  - {cv_data.get('skills')}")
         
         return Response(cv_data)
     except CvWriter.DoesNotExist:

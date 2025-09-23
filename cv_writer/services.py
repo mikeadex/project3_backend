@@ -1778,47 +1778,19 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
     try:
         professional_summary_text = None
         
-        # 🚨 ENHANCED DEBUGGING for professional summary saving
-        logger.info(f"🔍 save_rewritten_cv_to_database - Professional Summary Processing:")
-        logger.info(f"  CV Instance: {cv_writer_instance.id if cv_writer_instance else 'None'}")
-        logger.info(f"  User: {user.username}")
-        logger.info(f"  Rewritten CV Data Keys: {list(rewritten_cv_data.keys())}")
-        
         # Check for direct professional_summary field (string)
         if 'professional_summary' in rewritten_cv_data:
-            logger.info(f"  Found 'professional_summary' key")
-            logger.info(f"  Type: {type(rewritten_cv_data['professional_summary'])}")
-            logger.info(f"  Content: {rewritten_cv_data['professional_summary'][:100] if rewritten_cv_data['professional_summary'] else 'None'}...")
-            
             if isinstance(rewritten_cv_data['professional_summary'], str):
-                original_text = rewritten_cv_data['professional_summary']
-                professional_summary_text = clean_ai_text(original_text)
-                logger.info(f"  Original length: {len(original_text)}")
-                logger.info(f"  Cleaned length: {len(professional_summary_text)}")
-                logger.info(f"  Cleaned text: {professional_summary_text[:100]}...")
+                professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
             elif isinstance(rewritten_cv_data['professional_summary'], dict) and 'summary' in rewritten_cv_data['professional_summary']:
-                original_text = rewritten_cv_data['professional_summary']['summary']
-                professional_summary_text = clean_ai_text(original_text)
-                logger.info(f"  Found nested summary in dict")
-                logger.info(f"  Original length: {len(original_text)}")
-                logger.info(f"  Cleaned length: {len(professional_summary_text)}")
+                professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary']['summary'])
         
         # Check for nested professional_summary in summary field
         elif 'summary' in rewritten_cv_data and isinstance(rewritten_cv_data['summary'], str):
-            logger.info(f"  Found 'summary' key as fallback")
-            original_text = rewritten_cv_data['summary']
-            professional_summary_text = clean_ai_text(original_text)
-            logger.info(f"  Original length: {len(original_text)}")
-            logger.info(f"  Cleaned length: {len(professional_summary_text)}")
-        else:
-            logger.warning(f"  No professional summary found in rewritten CV data")
+            professional_summary_text = clean_ai_text(rewritten_cv_data['summary'])
             
         # If we found a professional summary, save it
         if professional_summary_text:
-            logger.info(f"🔍 Processing professional summary for database save")
-            logger.info(f"  Final text length: {len(professional_summary_text)}")
-            logger.info(f"  Final text: {professional_summary_text[:100]}...")
-            
             # First check if a summary already exists for this user and cv
             existing_summary = ProfessionalSummary.objects.filter(
                 user=user,
@@ -1826,22 +1798,16 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
             ).first()
             
             if existing_summary:
-                logger.info(f"✅ Updating existing professional summary for user {user.id}, CV {cv_writer_instance.id}")
                 existing_summary.summary = professional_summary_text
                 existing_summary.save()
-                logger.info(f"✅ Professional summary updated successfully")
             else:
-                logger.info(f"✅ Creating new professional summary for user {user.id}, CV {cv_writer_instance.id}")
-                new_summary = ProfessionalSummary.objects.create(
+                ProfessionalSummary.objects.create(
                     user=user,
                     cv=cv_writer_instance,
                     summary=professional_summary_text
                 )
-                logger.info(f"✅ Professional summary created successfully with ID: {new_summary.id}")
-        else:
-            logger.warning(f"❌ No professional summary text to save after processing")
     except Exception as e:
-        logger.error(f"❌ Error saving professional summary: {str(e)}", exc_info=True)
+        logger.error(f"Error saving professional summary: {str(e)}")
     
     # Save experience data (if present)
     try:
