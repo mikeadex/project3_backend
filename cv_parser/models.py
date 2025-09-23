@@ -70,10 +70,13 @@ class CVDocument(models.Model):
         # Create Professional Summary
         from cv_writer.models import ProfessionalSummary
         if parsed_data.get('professional_summary'):
+            # 🚨 CRITICAL FIX: Link professional summary to the specific CV
             ProfessionalSummary.objects.update_or_create(
                 user=user,
+                cv=cv_writer,  # 🎯 This was missing! Link to specific CV
                 defaults={'summary': parsed_data['professional_summary']}
             )
+            print(f"🔍 CV Transfer - Created professional summary for CV {cv_writer.id}: {parsed_data['professional_summary'][:100]}...")
 
         # Create Education entries
         from cv_writer.models import Education

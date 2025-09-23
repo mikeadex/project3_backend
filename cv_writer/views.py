@@ -1445,7 +1445,24 @@ def get_cv(request, cv_id):
         cv = CvWriter.objects.get(id=cv_id, user=request.user)
         
         # Get all related data
-        professional_summary = ProfessionalSummary.objects.filter(user=request.user).first()
+        # 🚨 CRITICAL FIX: Get professional summary for THIS specific CV, not just any summary
+        professional_summary = ProfessionalSummary.objects.filter(user=request.user, cv=cv).first()
+        
+        # 🔍 DEBUG: Log professional summary fetching
+        print(f"\n🔍 CV Detail API - Professional Summary Debug:")
+        print(f"  CV ID: {cv_id}")
+        print(f"  User: {request.user.username}")
+        print(f"  Professional summary found: {professional_summary is not None}")
+        if professional_summary:
+            print(f"  Summary content: {professional_summary.summary[:100]}...")
+            print(f"  Summary CV ID: {professional_summary.cv.id if professional_summary.cv else 'None'}")
+        else:
+            # Check if there are ANY professional summaries for this user
+            all_summaries = ProfessionalSummary.objects.filter(user=request.user)
+            print(f"  Total summaries for user: {all_summaries.count()}")
+            for i, summary in enumerate(all_summaries):
+                print(f"    Summary {i+1}: CV={summary.cv.id if summary.cv else 'None'}, Content={summary.summary[:50]}...")
+        
         experiences = Experience.objects.filter(user=request.user).order_by('-start_date')
         education = Education.objects.filter(user=request.user).order_by('-start_date')
         
