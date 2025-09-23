@@ -1353,6 +1353,39 @@ def save_rewritten_cv(request):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # 🚨 CRITICAL FIX: Re-save professional summary from rewrite session
+        try:
+            rewrite_result = rewrite_session.result
+            if rewrite_result and isinstance(rewrite_result, dict):
+                rewritten_cv_data = rewrite_result.get('rewritten_cv', {})
+                logger.info(f"🔍 Re-saving professional summary from rewrite session")
+                logger.info(f"  Session ID: {session_id}")
+                logger.info(f"  Rewritten CV data keys: {list(rewritten_cv_data.keys()) if rewritten_cv_data else 'No data'}")
+                
+                # Check if professional summary exists in the rewritten data
+                if rewritten_cv_data.get('professional_summary'):
+                    logger.info(f"  Found professional summary: {rewritten_cv_data['professional_summary'][:100]}...")
+                    
+                    # Import necessary models and functions
+                    from .models import ProfessionalSummary
+                    from .services import clean_ai_text
+                    
+                    # Get or create professional summary for this CV
+                    professional_summary_text = clean_ai_text(rewritten_cv_data['professional_summary'])
+                    
+                    professional_summary, created = ProfessionalSummary.objects.update_or_create(
+                        user=request.user,
+                        cv=new_cv,
+                        defaults={'summary': professional_summary_text}
+                    )
+                    
+                    logger.info(f"  Professional summary {'created' if created else 'updated'} for CV {new_cv.id}")
+                    logger.info(f"  Summary content: {professional_summary.summary[:100]}...")
+                else:
+                    logger.warning(f"  No professional summary found in rewritten data")
+        except Exception as summary_error:
+            logger.error(f"Error re-saving professional summary: {str(summary_error)}")
+
         # Update the CV with personal info if provided
         if personal_info:
             # Extract name fields
