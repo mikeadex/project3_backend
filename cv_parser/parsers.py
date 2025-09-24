@@ -465,22 +465,23 @@ class AdvancedDocumentParser:
                     result["phone"] = re.sub(r'\s+', ' ', result["phone"])
                     break
         
+        # Common title prefixes to avoid (defined here so they're always available)
+        title_prefixes = [
+            "Chief", "Senior", "Junior", "Principal", "Lead", "Director",
+            "Manager", "Vice", "President", "Head", "Executive", "Assistant",
+            "Officer", "Specialist", "Consultant", "Analyst", "Engineer",
+            "Developer", "Architect", "Administrator", "SVP", "EVP", "CTO", "CEO", "CFO", "COO"
+        ]
+        
+        # Section keywords to avoid
+        section_keywords = [
+            "profile", "summary", "contact", "information", "experience", 
+            "education", "skills", "certifications", "languages", "interests",
+            "objective", "references", "projects", "publications", "achievements"
+        ]
+        
         # Extract name - look for full name at various positions
         if not result["first_name"] and not result["last_name"]:
-            # Common title prefixes to avoid
-            title_prefixes = [
-                "Chief", "Senior", "Junior", "Principal", "Lead", "Director",
-                "Manager", "Vice", "President", "Head", "Executive", "Assistant",
-                "Officer", "Specialist", "Consultant", "Analyst", "Engineer",
-                "Developer", "Architect", "Administrator", "SVP", "EVP", "CTO", "CEO", "CFO", "COO"
-            ]
-            
-            # Section keywords to avoid
-            section_keywords = [
-                "profile", "summary", "contact", "information", "experience", 
-                "education", "skills", "certifications", "languages", "interests",
-                "objective", "references", "projects", "publications", "achievements"
-            ]
             
             # First try to extract name from beginning of the CV
             # Try multiple name patterns at the beginning of the CV
@@ -5848,22 +5849,23 @@ class AdvancedDocumentParser:
                     result["phone"] = re.sub(r'\s+', ' ', result["phone"])
                     break
         
+        # Common title prefixes to avoid (defined here so they're always available)
+        title_prefixes = [
+            "Chief", "Senior", "Junior", "Principal", "Lead", "Director",
+            "Manager", "Vice", "President", "Head", "Executive", "Assistant",
+            "Officer", "Specialist", "Consultant", "Analyst", "Engineer",
+            "Developer", "Architect", "Administrator", "SVP", "EVP", "CTO", "CEO", "CFO", "COO"
+        ]
+        
+        # Section keywords to avoid
+        section_keywords = [
+            "profile", "summary", "contact", "information", "experience", 
+            "education", "skills", "certifications", "languages", "interests",
+            "objective", "references", "projects", "publications", "achievements"
+        ]
+        
         # Extract name - look for full name at various positions
         if not result["first_name"] and not result["last_name"]:
-            # Common title prefixes to avoid
-            title_prefixes = [
-                "Chief", "Senior", "Junior", "Principal", "Lead", "Director",
-                "Manager", "Vice", "President", "Head", "Executive", "Assistant",
-                "Officer", "Specialist", "Consultant", "Analyst", "Engineer",
-                "Developer", "Architect", "Administrator", "SVP", "EVP", "CTO", "CEO", "CFO", "COO"
-            ]
-            
-            # Section keywords to avoid
-            section_keywords = [
-                "profile", "summary", "contact", "information", "experience", 
-                "education", "skills", "certifications", "languages", "interests",
-                "objective", "references", "projects", "publications", "achievements"
-            ]
             
             # First try to extract name from beginning of the CV
             # Try multiple name patterns at the beginning of the CV
