@@ -4989,6 +4989,11 @@ class AdvancedDocumentParser:
                     # If normal extraction failed, try OCR
                     text = self._ocr_pdf(file_path)
                     self.logger.info("Text extracted using: OCR")
+            elif document_type in ['.txt']:
+                # Read plain text files directly
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                self.logger.info("Text extracted using: direct read")
             else:
                 self.logger.warning(f"Unsupported document type: {document_type}")
                 return ""
@@ -10351,6 +10356,11 @@ class AdvancedDocumentParser:
                     # If normal extraction failed, try OCR
                     text = self._ocr_pdf(file_path)
                     self.logger.info("Text extracted using: OCR")
+            elif document_type in ['.txt']:
+                # Read plain text files directly
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                self.logger.info("Text extracted using: direct read")
             else:
                 self.logger.warning(f"Unsupported document type: {document_type}")
                 return ""

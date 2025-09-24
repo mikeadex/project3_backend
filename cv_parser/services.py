@@ -69,6 +69,10 @@ class DeepSeekService:
             elif file_extension == '.pdf':
                 reader = PdfReader(file_path)
                 text = '\n'.join([page.extract_text() for page in reader.pages])
+            elif file_extension == '.txt':
+                # Read plain text files directly
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    text = f.read()
             else:
                 raise ValueError(f"Unsupported file format: {file_extension}")
             
