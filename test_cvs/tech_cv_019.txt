@@ -1,0 +1,29 @@
+Mary Hernandez
+mary.hernandez@email.com | +1-802-528-2294 | New York, NY
+LinkedIn: linkedin.com/in/maryhernandez
+
+PROFESSIONAL SUMMARY
+--------------------
+Lead Data Scientist with 13 years of experience in tech industry. Proven track record of delivering high-quality results and collaborating effectively with cross-functional teams.
+
+PROFESSIONAL EXPERIENCE
+-----------------------
+Data Scientist | Dynamic Inc
+2023-09 - Present
+• Led development of strategic initiatives
+• Collaborated with 18 team members to achieve business objectives
+• Improved efficiency by 11%
+
+Associate Data Scientist | Beta Corp
+2022-07 - 2025-03
+• Led development of strategic initiatives
+• Managed project timelines effectively
+
+EDUCATION
+---------
+Bachelor of Arts in Computer Science
+Harvard University (2018)
+
+SKILLS
+------
+Docker • SQL • Python • Git • AWS • JavaScript

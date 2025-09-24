@@ -1,0 +1,51 @@
+Jessica Hassan
+jessica.hassan@email.com | +1-831-771-9521 | San Francisco, CA
+LinkedIn: linkedin.com/in/jessicahassan
+
+PROFESSIONAL SUMMARY
+--------------------
+Lead Data Scientist with 9 years of experience in tech industry. Proven track record of delivering high-quality results and collaborating effectively with cross-functional teams.
+
+PROFESSIONAL EXPERIENCE
+-----------------------
+Data Scientist | Elite Technologies
+2023-12 - Present
+• Led development of software solutions
+• Collaborated with 16 team members to achieve quality standards
+• Managed client relationships effectively
+• Improved customer satisfaction by 27%
+
+Associate Data Scientist | Global Group
+2024-04 - 2025-02
+• Led development of software solutions
+• Collaborated with 15 team members to achieve project goals
+
+Senior Data Scientist | Elite Systems
+2022-08 - 2024-05
+• Collaborated with 6 team members to achieve quality standards
+• Improved productivity by 22%
+• Led development of marketing campaigns
+• Managed project timelines effectively
+
+Associate Data Scientist | Elite LLC
+2020-06 - 2023-12
+• Improved efficiency by 33%
+• Led development of marketing campaigns
+• Managed client relationships effectively
+• Collaborated with 17 team members to achieve quality standards
+
+Associate Data Scientist | Dynamic Technologies
+2019-12 - 2025-09
+• Improved customer satisfaction by 28%
+• Collaborated with 11 team members to achieve project goals
+• Led development of marketing campaigns
+• Managed budget allocation effectively
+
+EDUCATION
+---------
+Master of Science in Computer Science
+Oxford University (2012)
+
+SKILLS
+------
+AWS • Git • Docker

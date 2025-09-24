@@ -1,0 +1,36 @@
+Wei Patel
+wei.patel@email.com | +1-454-109-5938 | San Francisco, CA
+LinkedIn: linkedin.com/in/weipatel
+
+PROFESSIONAL SUMMARY
+--------------------
+Mid-Level Data Scientist with 10 years of experience in tech industry. Proven track record of delivering high-quality results and collaborating effectively with cross-functional teams.
+
+PROFESSIONAL EXPERIENCE
+-----------------------
+Data Scientist | Dynamic Inc
+2024-09 - Present
+• Collaborated with 14 team members to achieve quality standards
+• Improved efficiency by 12%
+
+Senior Data Scientist | Dynamic Systems
+2022-08 - 2024-12
+• Improved productivity by 40%
+• Led development of process improvements
+• Collaborated with 17 team members to achieve project goals
+
+Associate Data Scientist | Beta LLC
+2023-04 - 2024-01
+• Collaborated with 15 team members to achieve quality standards
+• Managed budget allocation effectively
+• Improved productivity by 48%
+• Led development of marketing campaigns
+
+EDUCATION
+---------
+Master of Business Administration in Computer Science
+Harvard University (2019)
+
+SKILLS
+------
+Docker • React • Git • SQL

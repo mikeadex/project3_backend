@@ -38,10 +38,10 @@ class Command(BaseCommand):
         """Analyze existing CVs for role suggestion patterns"""
         self.stdout.write("Analyzing existing role suggestions...")
         
-        # Get sample of parsed CVs with analysis data
+        # Get sample of parsed CVs
         parsed_cvs = ParsedCV.objects.filter(
-            analysis_data__isnull=False
-        ).order_by('-analysis_date')[:sample_size]
+            parsed_data__isnull=False
+        ).order_by('-created_at')[:sample_size]
         
         if not parsed_cvs:
             self.stdout.write(
@@ -58,16 +58,17 @@ class Command(BaseCommand):
         
         for cv in parsed_cvs:
             try:
-                analysis_data = cv.analysis_data
+                # Since we don't have analysis_data, let's generate it on the fly for testing
+                self.stdout.write(f"Analyzing CV {cv.id}...")
                 
-                # Extract roles from different possible locations in the analysis
-                roles = self.extract_roles_from_analysis(analysis_data)
+                # Test role generation for this CV
+                roles = self.test_role_generation_for_cv(cv.parsed_data)
                 
                 cv_info = {
                     'cv_id': cv.id,
-                    'filename': cv.file_name,
+                    'filename': f"CV_{cv.id}",
                     'roles': roles,
-                    'analysis_date': cv.analysis_date.isoformat() if cv.analysis_date else None
+                    'analysis_date': cv.created_at.isoformat() if cv.created_at else None
                 }
                 
                 role_analysis['cv_roles'].append(cv_info)
@@ -87,6 +88,34 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.ERROR(f"Error analyzing CV {cv.id}: {str(e)}")
                 )
+                
+    def test_role_generation_for_cv(self, parsed_data):
+        """Generate roles for a CV to test the current system"""
+        try:
+            service = DeepSeekService()
+            
+            prompt = f"""
+            Analyze this CV and suggest suitable job roles:
+            
+            CV Data: {json.dumps(parsed_data, indent=2)}
+            
+            Provide response in JSON format:
+            {{
+                "potential_roles": {{
+                    "best_matches": [list of 3-5 job roles]
+                }}
+            }}
+            """
+            
+            response = service.make_custom_request(prompt)
+            
+            if isinstance(response, dict) and 'potential_roles' in response:
+                return response['potential_roles'].get('best_matches', [])
+                
+        except Exception as e:
+            self.stdout.write(f"Error generating roles: {str(e)}")
+            
+        return []
                 
         # Generate report
         self.generate_role_analysis_report(role_analysis)

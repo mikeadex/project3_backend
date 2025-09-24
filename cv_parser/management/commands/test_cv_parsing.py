@@ -56,14 +56,27 @@ class Command(BaseCommand):
             self.create_sample_structure()
             return
             
-        # Get test user
+        # Get or create test user
         try:
             self.test_user = User.objects.get(id=self.user_id)
         except User.DoesNotExist:
-            self.stdout.write(
-                self.style.ERROR(f'User with ID {self.user_id} does not exist')
-            )
-            return
+            # Try to find any existing user
+            existing_user = User.objects.first()
+            if existing_user:
+                self.test_user = existing_user
+                self.stdout.write(
+                    self.style.WARNING(f'User ID {self.user_id} not found. Using existing user: {existing_user.email}')
+                )
+            else:
+                # Create a test user
+                self.test_user = User.objects.create_user(
+                    username='test_cv_user',
+                    email='test@example.com',
+                    password='testpassword123'
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(f'Created test user: {self.test_user.email}')
+                )
             
         self.stdout.write(
             self.style.SUCCESS(f'Starting CV parsing tests with user: {self.test_user.email}')
@@ -322,10 +335,9 @@ Examples for {category}:
             self.logger.info(f"Starting analysis test for {file_path}")
             analysis_start = time.time()
             
-            # Create a ParsedCV instance for testing
+            # Create a ParsedCV instance for testing (note: no file_name field in model)
             parsed_cv = ParsedCV.objects.create(
                 user=self.test_user,
-                file_name=os.path.basename(file_path),
                 parsed_data=parsed_data
             )
             

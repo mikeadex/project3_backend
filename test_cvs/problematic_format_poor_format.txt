@@ -1,0 +1,8 @@
+bob    johnson
+email:bob@email.com phone:555-123-4567 location:somewhere
+SUMMARY:experienced developer
+experience:
+companyABC developer 2020-2023 did stuff
+companyXYZ developer 2018-2020 did more stuff
+education:university degree computer science
+skills:python,java,sql,etc

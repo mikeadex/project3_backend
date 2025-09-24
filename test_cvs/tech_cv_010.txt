@@ -1,0 +1,37 @@
+Michael Williams
+michael.williams@email.com | +1-827-644-8905 | London, UK
+LinkedIn: linkedin.com/in/michaelwilliams
+
+PROFESSIONAL SUMMARY
+--------------------
+Junior Software Engineer with 3 years of experience in tech industry. Proven track record of delivering high-quality results and collaborating effectively with cross-functional teams.
+
+PROFESSIONAL EXPERIENCE
+-----------------------
+Software Engineer | Alpha Technologies
+2022-10 - Present
+• Collaborated with 11 team members to achieve business objectives
+• Managed team performance effectively
+
+Associate Software Engineer | Advanced Solutions
+2021-11 - 2025-08
+• Collaborated with 13 team members to achieve project goals
+• Managed project timelines effectively
+• Improved efficiency by 27%
+• Led development of software solutions
+
+Junior Software Engineer | Premier Group
+2023-08 - 2024-10
+• Collaborated with 16 team members to achieve quality standards
+• Led development of software solutions
+• Improved revenue by 49%
+• Managed budget allocation effectively
+
+EDUCATION
+---------
+Master of Science in Computer Science
+Harvard University (2011)
+
+SKILLS
+------
+React • Python • SQL • Git • AWS
