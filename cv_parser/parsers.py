@@ -372,6 +372,36 @@ class AdvancedDocumentParser:
             print(f"CRITICAL ERROR extracting text from DOCX {docx_path}: {type(e).__name__} - {e}")
             return ''
 
+    def extract_experience(self, text: str, sections: Dict = None) -> List[Dict[str, Any]]:
+        """Public wrapper for experience extraction"""
+        try:
+            if sections:
+                return self._extract_experience_efficient(text, sections)
+            else:
+                return self._extract_experience(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_experience: {e}")
+            return []
+    
+    def extract_education(self, text: str) -> List[Dict[str, Any]]:
+        """Public wrapper for education extraction"""
+        try:
+            return self._extract_education(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_education: {e}")
+            return []
+    
+    def extract_skills(self, text: str, sections: Dict = None) -> List[str]:
+        """Public wrapper for skills extraction"""
+        try:
+            if sections:
+                return self._extract_skills_efficient(text, sections) if hasattr(self, '_extract_skills_efficient') else self._extract_skills(text)
+            else:
+                return self._extract_skills(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_skills: {e}")
+            return []
+
     def extract_personal_info(self, text: str) -> Dict[str, Any]:
         """
         Extract personal information from text
@@ -5755,6 +5785,36 @@ class AdvancedDocumentParser:
         except Exception as e:
             print(f"CRITICAL ERROR extracting text from DOCX {docx_path}: {type(e).__name__} - {e}")
             return ''
+
+    def extract_experience(self, text: str, sections: Dict = None) -> List[Dict[str, Any]]:
+        """Public wrapper for experience extraction"""
+        try:
+            if sections:
+                return self._extract_experience_efficient(text, sections)
+            else:
+                return self._extract_experience(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_experience: {e}")
+            return []
+    
+    def extract_education(self, text: str) -> List[Dict[str, Any]]:
+        """Public wrapper for education extraction"""
+        try:
+            return self._extract_education(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_education: {e}")
+            return []
+    
+    def extract_skills(self, text: str, sections: Dict = None) -> List[str]:
+        """Public wrapper for skills extraction"""
+        try:
+            if sections:
+                return self._extract_skills_efficient(text, sections) if hasattr(self, '_extract_skills_efficient') else self._extract_skills(text)
+            else:
+                return self._extract_skills(text)
+        except Exception as e:
+            self.logger.error(f"Error in extract_skills: {e}")
+            return []
 
     def extract_personal_info(self, text: str) -> Dict[str, Any]:
         """
