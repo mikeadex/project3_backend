@@ -1952,8 +1952,8 @@ class AdvancedDocumentParser:
             experience_text = text[start_pos:end_pos]
             logger.debug(f"Found dedicated experience section ({len(experience_text)} chars)")
         else:
-            # Try traditional section identification as fallback
-            experience_section_pattern = r'(?:Experience|Work\s+Experience|Employment|Professional\s+Experience|Employment\s+History|Work\s+History)[:\s]*\n*(.*?)(?=\n\s*(?:Education|Skills|Qualifications|Certifications|Languages|References|Additional\s+Information|\Z))'
+            # Try traditional section identification as fallback with improved patterns
+            experience_section_pattern = r'(?:PROFESSIONAL\s+EXPERIENCE|EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s+EXPERIENCE|EMPLOYMENT\s+HISTORY|WORK\s+HISTORY)[\s\n]*(?:[-=]+\s*\n)?(.*?)(?=\n\s*(?:EDUCATION|SKILLS|QUALIFICATIONS|CERTIFICATIONS|LANGUAGES|REFERENCES|ADDITIONAL\s+INFORMATION|\Z))'
             
             experience_section_match = re.search(experience_section_pattern, text, re.IGNORECASE | re.DOTALL)
             
@@ -2131,18 +2131,21 @@ class AdvancedDocumentParser:
         """
         # Split based on common patterns that indicate the start of a new job entry
         
-        # Common date patterns at the beginning of job entries
+        # Common date patterns at the beginning of job entries (enhanced for YYYY-MM format)
         date_patterns = [
             r'\n(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s.,]+\d{4})\s*(?:-|–|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s.,]+\d{4}|Present|Current|Now)',
+            r'\n(?:\d{4}-\d{2})\s*(?:-|–|to)\s*(?:\d{4}-\d{2}|Present|Current|Now)',
             r'\n(?:\d{1,2}/\d{4})\s*(?:-|–|to)\s*(?:\d{1,2}/\d{4}|Present|Current|Now)',
             r'\n(?:\d{4})\s*(?:-|–|to)\s*(?:\d{4}|Present|Current|Now)',
             r'\n(?:\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{4}|\d{4})\s*(?:-|–|to)\s*(?:\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{4}|\d{4}|Present|Current|Now)'
         ]
         
-        # Common job title patterns at the beginning of job entries
+        # Common job title patterns at the beginning of job entries (enhanced for "Title | Company" format)
         title_patterns = [
-            r'\n([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))[,\s]',
-            r'\n(?:Position|Title|Role):\s*([A-Za-z\s]+)'
+            r'\n([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))[,\s\|]',
+            r'\n([A-Z][A-Za-z\s]+(?:Scientist|Architect|Strategist|Advisor|Executive|Programmer|Technician))[,\s\|]',
+            r'\n(?:Position|Title|Role):\s*([A-Za-z\s]+)',
+            r'\n([A-Za-z\s]+)\s*\|\s*([A-Za-z\s]+(?:Inc|LLC|Corp|Company|Ltd|Group|Systems))'
         ]
         
         # Common company patterns at the beginning of job entries
@@ -7366,8 +7369,8 @@ class AdvancedDocumentParser:
             experience_text = text[start_pos:end_pos]
             logger.debug(f"Found dedicated experience section ({len(experience_text)} chars)")
         else:
-            # Try traditional section identification as fallback
-            experience_section_pattern = r'(?:Experience|Work\s+Experience|Employment|Professional\s+Experience|Employment\s+History|Work\s+History)[:\s]*\n*(.*?)(?=\n\s*(?:Education|Skills|Qualifications|Certifications|Languages|References|Additional\s+Information|\Z))'
+            # Try traditional section identification as fallback with improved patterns
+            experience_section_pattern = r'(?:PROFESSIONAL\s+EXPERIENCE|EXPERIENCE|WORK\s+EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s+EXPERIENCE|EMPLOYMENT\s+HISTORY|WORK\s+HISTORY)[\s\n]*(?:[-=]+\s*\n)?(.*?)(?=\n\s*(?:EDUCATION|SKILLS|QUALIFICATIONS|CERTIFICATIONS|LANGUAGES|REFERENCES|ADDITIONAL\s+INFORMATION|\Z))'
             
             experience_section_match = re.search(experience_section_pattern, text, re.IGNORECASE | re.DOTALL)
             
@@ -7545,18 +7548,21 @@ class AdvancedDocumentParser:
         """
         # Split based on common patterns that indicate the start of a new job entry
         
-        # Common date patterns at the beginning of job entries
+        # Common date patterns at the beginning of job entries (enhanced for YYYY-MM format)
         date_patterns = [
             r'\n(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s.,]+\d{4})\s*(?:-|–|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s.,]+\d{4}|Present|Current|Now)',
+            r'\n(?:\d{4}-\d{2})\s*(?:-|–|to)\s*(?:\d{4}-\d{2}|Present|Current|Now)',
             r'\n(?:\d{1,2}/\d{4})\s*(?:-|–|to)\s*(?:\d{1,2}/\d{4}|Present|Current|Now)',
             r'\n(?:\d{4})\s*(?:-|–|to)\s*(?:\d{4}|Present|Current|Now)',
             r'\n(?:\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{4}|\d{4})\s*(?:-|–|to)\s*(?:\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{4}|\d{4}|Present|Current|Now)'
         ]
         
-        # Common job title patterns at the beginning of job entries
+        # Common job title patterns at the beginning of job entries (enhanced for "Title | Company" format)
         title_patterns = [
-            r'\n([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))[,\s]',
-            r'\n(?:Position|Title|Role):\s*([A-Za-z\s]+)'
+            r'\n([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))[,\s\|]',
+            r'\n([A-Z][A-Za-z\s]+(?:Scientist|Architect|Strategist|Advisor|Executive|Programmer|Technician))[,\s\|]',
+            r'\n(?:Position|Title|Role):\s*([A-Za-z\s]+)',
+            r'\n([A-Za-z\s]+)\s*\|\s*([A-Za-z\s]+(?:Inc|LLC|Corp|Company|Ltd|Group|Systems))'
         ]
         
         # Common company patterns at the beginning of job entries
