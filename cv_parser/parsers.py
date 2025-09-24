@@ -4917,9 +4917,25 @@ class AdvancedDocumentParser:
             # Log timeout settings
             self.logger.info(f"Starting DeepSeek segmentation with {timeout}s timeout")
             
-            # Call DeepSeek to segment the text
+            # Call DeepSeek to segment the text (handle async properly)
             start_time = time.time()
-            segmented_text = segmentation_service.segment_cv(text, timeout=timeout)
+            
+            # Since segment_cv is async, we need to handle it properly
+            import asyncio
+            try:
+                # Try to get the current event loop, or create one if none exists
+                try:
+                    loop = asyncio.get_running_loop()
+                    # If we're in an async context, we can't use run() - skip segmentation
+                    self.logger.warning("Already in async context, skipping DeepSeek segmentation")
+                    segmented_text = None
+                except RuntimeError:
+                    # No running loop, we can create one
+                    segmented_text = asyncio.run(segmentation_service.segment_cv(text, timeout=timeout))
+            except Exception as async_e:
+                self.logger.warning(f"Async handling failed: {async_e}, skipping segmentation")
+                segmented_text = None
+                
             elapsed_time = time.time() - start_time
             
             # Log completion
@@ -10284,9 +10300,25 @@ class AdvancedDocumentParser:
             # Log timeout settings
             self.logger.info(f"Starting DeepSeek segmentation with {timeout}s timeout")
             
-            # Call DeepSeek to segment the text
+            # Call DeepSeek to segment the text (handle async properly)
             start_time = time.time()
-            segmented_text = segmentation_service.segment_cv(text, timeout=timeout)
+            
+            # Since segment_cv is async, we need to handle it properly
+            import asyncio
+            try:
+                # Try to get the current event loop, or create one if none exists
+                try:
+                    loop = asyncio.get_running_loop()
+                    # If we're in an async context, we can't use run() - skip segmentation
+                    self.logger.warning("Already in async context, skipping DeepSeek segmentation")
+                    segmented_text = None
+                except RuntimeError:
+                    # No running loop, we can create one
+                    segmented_text = asyncio.run(segmentation_service.segment_cv(text, timeout=timeout))
+            except Exception as async_e:
+                self.logger.warning(f"Async handling failed: {async_e}, skipping segmentation")
+                segmented_text = None
+                
             elapsed_time = time.time() - start_time
             
             # Log completion
