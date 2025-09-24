@@ -57,6 +57,61 @@ class DeepSeekAPIService:
             logger.warning("DeepSeek API key not found in environment variables")
             raise ValueError("DeepSeek API key is required")
 
+    async def segment_cv(self, text: str, timeout: int = 60) -> Optional[str]:
+        """
+        Segment a CV text into structured sections using DeepSeek API.
+        
+        Args:
+            text: CV text to segment
+            timeout: Maximum time to wait for response
+            
+        Returns:
+            Segmented CV text with section markers or None if failed
+        """
+        try:
+            prompt = f"""Please analyze and segment the following CV/resume text into clearly defined sections. 
+Return the text organized with clear section markers using this format:
+
+PERSONAL_INFO
+===========
+[Contact information, name, phone, email, address, etc.]
+===========
+SUMMARY
+===========
+[Professional summary, objective, or profile]
+===========
+EXPERIENCE
+===========
+[Work experience, employment history]
+===========
+EDUCATION
+===========
+[Education, degrees, certifications]
+===========
+SKILLS
+===========
+[Technical skills, competencies]
+===========
+LANGUAGES
+===========
+[Language skills and proficiency levels]
+===========
+CERTIFICATIONS
+===========
+[Professional certifications]
+===========
+
+Here is the CV text to segment:
+
+{text}
+
+Please maintain the original content but organize it clearly into the appropriate sections."""
+
+            return await self.generate(prompt, max_tokens=2000, temperature=0.1)
+        except Exception as e:
+            logger.error(f"Error in segment_cv: {e}")
+            return None
+
     async def generate(
         self,
         prompt: str,
