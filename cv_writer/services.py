@@ -645,7 +645,7 @@ Return only the improved version without any additional explanations."""
         if use_deepseek and self.deepseek_service:
             try:
                 logger.info("Attempting to segment CV with DeepSeek")
-                segmented_text = self.deepseek_service.segment_cv(text, timeout)
+                segmented_text = await self.deepseek_service.segment_cv(text, timeout)
                 
                 # Check if we got a valid response
                 if segmented_text and "==========" in segmented_text:
@@ -1430,7 +1430,7 @@ class CVImprovementService:
         if use_deepseek and self.deepseek_service:
             try:
                 logger.info("Attempting to segment CV with DeepSeek")
-                segmented_text = self.deepseek_service.segment_cv(text, timeout)
+                segmented_text = await self.deepseek_service.segment_cv(text, timeout)
                 
                 # Check if we got a valid response
                 if segmented_text and "==========" in segmented_text:
