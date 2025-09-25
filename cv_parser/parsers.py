@@ -3449,20 +3449,91 @@ class AdvancedDocumentParser:
         if email_matches:
             info['email'] = email_matches[0]
             
-        # Look for phone numbers
-        phone_matches = re.findall(r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', section_text)
-        if phone_matches:
-            info['phone'] = ''.join(phone_matches[0]).strip()
+        # Look for phone numbers (enhanced for international formats)
+        phone_patterns = [
+            r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}',  # US format
+            r'(\+\d{1,3}[-.\s]?)?\d{10,11}',  # UK/International format (10-11 digits)
+            r'(\+\d{1,3}[-.\s]?)?\d{4}[-.\s]?\d{6}',  # UK format with spacing
+            r'(\+\d{1,3}[-.\s]?)?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',  # Alternative spacing
+            r'0\d{10}'  # UK mobile starting with 0
+        ]
+        
+        for pattern in phone_patterns:
+            phone_matches = re.findall(pattern, section_text)
+            if phone_matches:
+                if isinstance(phone_matches[0], tuple):
+                    info['phone'] = ''.join(phone_matches[0]).strip()
+                else:
+                    info['phone'] = phone_matches[0].strip()
+                break
             
-        # Look for LinkedIn URLs or handles
-        linkedin_matches = re.findall(r'(linkedin\.com/in/[A-Za-z0-9_-]+|@[A-Za-z0-9_-]+\s+\(?LinkedIn\)?)', section_text, re.IGNORECASE)
-        if linkedin_matches:
-            info['linkedin'] = linkedin_matches[0]
+        # Enhanced LinkedIn detection
+        linkedin_patterns = [
+            r'linkedin\.com/in/[A-Za-z0-9_-]+',  # Full URL
+            r'linkedin\.com/[A-Za-z0-9_-]+',     # Partial URL
+            r'(?:•\s*)?LinkedIn(?:\s*[:|•]?\s*([A-Za-z0-9_-]+))?',  # Just "LinkedIn" mention
+            r'@[A-Za-z0-9_-]+\s+\(?LinkedIn\)?'  # Handle format
+        ]
+        
+        for pattern in linkedin_patterns:
+            linkedin_matches = re.findall(pattern, section_text, re.IGNORECASE)
+            if linkedin_matches:
+                match = linkedin_matches[0]
+                if 'linkedin.com' in match.lower():
+                    info['linkedin'] = match
+                else:
+                    info['linkedin'] = f"linkedin.com/in/{match}" if match else "LinkedIn"
+                break
+        
+        # Enhanced location extraction
+        location_patterns = [
+            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z]{2,})',  # "Kent, UK" format
+            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*•',  # Before bullet point
+            r'(?:Location|Address):\s*([^,\n•]+)',  # Labeled location
+            r'([A-Z][a-z]+(?:,\s*[A-Z][a-z]+)+)'  # General city, country format
+        ]
+        
+        for pattern in location_patterns:
+            location_matches = re.findall(pattern, section_text)
+            if location_matches:
+                if isinstance(location_matches[0], tuple):
+                    info['location'] = ', '.join(filter(None, location_matches[0]))
+                else:
+                    info['location'] = location_matches[0].strip()
+                break
             
-        # Try to extract name - look for the first line that might contain a name
+        # Enhanced name extraction - look for prominent names in early lines
         lines = section_text.strip().split('\n')
-        if lines:
-            name_line = lines[0].strip()
+        
+        # Try multiple strategies for name extraction
+        for i in range(min(3, len(lines))):  # Check first 3 lines
+            line = lines[i].strip()
+            
+            # Skip empty lines, email addresses, and obvious headers
+            if (not line or 
+                '@' in line or 
+                re.search(r'curriculum\s*vitae|resume|cv|profile|contact', line, re.IGNORECASE) or
+                re.search(r'^\w+:|phone|email|address', line, re.IGNORECASE)):
+                continue
+            
+            # Clean the line of special characters and extra info
+            clean_line = re.sub(r'[•|•\-]+.*$', '', line)  # Remove bullet points and content after
+            clean_line = clean_line.split('•')[0].strip()  # Take part before bullet
+            clean_line = clean_line.split('|')[0].strip()  # Take part before pipe
+            
+            # Check if it looks like a name (1-3 words, mostly letters)
+            words = clean_line.split()
+            if (1 <= len(words) <= 3 and 
+                all(re.match(r'^[A-Za-z\'-]+$', word) for word in words) and
+                len(clean_line) >= 3):
+                
+                name_parts = clean_line.split()
+                if len(name_parts) >= 2:
+                    info['first_name'] = name_parts[0]
+                    info['last_name'] = ' '.join(name_parts[1:])
+                else:
+                    info['first_name'] = clean_line
+                break
             # Remove email, phone, LinkedIn if they're on the first line
             name_line = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', name_line)
             name_line = re.sub(r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', '', name_line)
@@ -8866,20 +8937,91 @@ class AdvancedDocumentParser:
         if email_matches:
             info['email'] = email_matches[0]
             
-        # Look for phone numbers
-        phone_matches = re.findall(r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', section_text)
-        if phone_matches:
-            info['phone'] = ''.join(phone_matches[0]).strip()
+        # Look for phone numbers (enhanced for international formats)
+        phone_patterns = [
+            r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}',  # US format
+            r'(\+\d{1,3}[-.\s]?)?\d{10,11}',  # UK/International format (10-11 digits)
+            r'(\+\d{1,3}[-.\s]?)?\d{4}[-.\s]?\d{6}',  # UK format with spacing
+            r'(\+\d{1,3}[-.\s]?)?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',  # Alternative spacing
+            r'0\d{10}'  # UK mobile starting with 0
+        ]
+        
+        for pattern in phone_patterns:
+            phone_matches = re.findall(pattern, section_text)
+            if phone_matches:
+                if isinstance(phone_matches[0], tuple):
+                    info['phone'] = ''.join(phone_matches[0]).strip()
+                else:
+                    info['phone'] = phone_matches[0].strip()
+                break
             
-        # Look for LinkedIn URLs or handles
-        linkedin_matches = re.findall(r'(linkedin\.com/in/[A-Za-z0-9_-]+|@[A-Za-z0-9_-]+\s+\(?LinkedIn\)?)', section_text, re.IGNORECASE)
-        if linkedin_matches:
-            info['linkedin'] = linkedin_matches[0]
+        # Enhanced LinkedIn detection
+        linkedin_patterns = [
+            r'linkedin\.com/in/[A-Za-z0-9_-]+',  # Full URL
+            r'linkedin\.com/[A-Za-z0-9_-]+',     # Partial URL
+            r'(?:•\s*)?LinkedIn(?:\s*[:|•]?\s*([A-Za-z0-9_-]+))?',  # Just "LinkedIn" mention
+            r'@[A-Za-z0-9_-]+\s+\(?LinkedIn\)?'  # Handle format
+        ]
+        
+        for pattern in linkedin_patterns:
+            linkedin_matches = re.findall(pattern, section_text, re.IGNORECASE)
+            if linkedin_matches:
+                match = linkedin_matches[0]
+                if 'linkedin.com' in match.lower():
+                    info['linkedin'] = match
+                else:
+                    info['linkedin'] = f"linkedin.com/in/{match}" if match else "LinkedIn"
+                break
+        
+        # Enhanced location extraction
+        location_patterns = [
+            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z]{2,})',  # "Kent, UK" format
+            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*•',  # Before bullet point
+            r'(?:Location|Address):\s*([^,\n•]+)',  # Labeled location
+            r'([A-Z][a-z]+(?:,\s*[A-Z][a-z]+)+)'  # General city, country format
+        ]
+        
+        for pattern in location_patterns:
+            location_matches = re.findall(pattern, section_text)
+            if location_matches:
+                if isinstance(location_matches[0], tuple):
+                    info['location'] = ', '.join(filter(None, location_matches[0]))
+                else:
+                    info['location'] = location_matches[0].strip()
+                break
             
-        # Try to extract name - look for the first line that might contain a name
+        # Enhanced name extraction - look for prominent names in early lines
         lines = section_text.strip().split('\n')
-        if lines:
-            name_line = lines[0].strip()
+        
+        # Try multiple strategies for name extraction
+        for i in range(min(3, len(lines))):  # Check first 3 lines
+            line = lines[i].strip()
+            
+            # Skip empty lines, email addresses, and obvious headers
+            if (not line or 
+                '@' in line or 
+                re.search(r'curriculum\s*vitae|resume|cv|profile|contact', line, re.IGNORECASE) or
+                re.search(r'^\w+:|phone|email|address', line, re.IGNORECASE)):
+                continue
+            
+            # Clean the line of special characters and extra info
+            clean_line = re.sub(r'[•|•\-]+.*$', '', line)  # Remove bullet points and content after
+            clean_line = clean_line.split('•')[0].strip()  # Take part before bullet
+            clean_line = clean_line.split('|')[0].strip()  # Take part before pipe
+            
+            # Check if it looks like a name (1-3 words, mostly letters)
+            words = clean_line.split()
+            if (1 <= len(words) <= 3 and 
+                all(re.match(r'^[A-Za-z\'-]+$', word) for word in words) and
+                len(clean_line) >= 3):
+                
+                name_parts = clean_line.split()
+                if len(name_parts) >= 2:
+                    info['first_name'] = name_parts[0]
+                    info['last_name'] = ' '.join(name_parts[1:])
+                else:
+                    info['first_name'] = clean_line
+                break
             # Remove email, phone, LinkedIn if they're on the first line
             name_line = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', name_line)
             name_line = re.sub(r'(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', '', name_line)
