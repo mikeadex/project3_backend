@@ -736,6 +736,214 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 'error': f'Failed to retrieve parsed data: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=True, methods=['GET'], url_path='download-pdf')
+    def download_cv_pdf(self, request, pk=None):
+        """Download the parsed CV as a PDF file"""
+        try:
+            parsed_cv = self.get_object()
+            
+            # Check ownership
+            if parsed_cv.user != request.user:
+                return Response({
+                    'error': 'Access denied: CV does not belong to user'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if parsed_cv.status != 'completed':
+                return Response({
+                    'error': f'CV parsing is not completed. Current status: {parsed_cv.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Get CV data
+            cv_data = parsed_cv.parsed_data
+            if not cv_data:
+                return Response({
+                    'error': 'No parsed data available for this CV'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Generate PDF for the CV
+            from reportlab.lib.pagesizes import A4
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from io import BytesIO
+            from django.http import HttpResponse
+            import html
+            
+            # Create a PDF buffer
+            buffer = BytesIO()
+            
+            # Create the PDF document
+            doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+            
+            # Get styles
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                spaceAfter=30,
+                textColor=colors.darkblue
+            )
+            
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                spaceAfter=12,
+                spaceBefore=20,
+                textColor=colors.darkblue
+            )
+            
+            content = []
+            
+            # Add title
+            name = cv_data.get('personal_info', {}).get('name', 'CV')
+            if not name:
+                name = cv_data.get('personal_info', {}).get('first_name', '') + ' ' + cv_data.get('personal_info', {}).get('last_name', '')
+            name = name.strip() or 'CV'
+            
+            content.append(Paragraph(html.escape(name), title_style))
+            content.append(Spacer(1, 12))
+            
+            # Add personal information
+            personal_info = cv_data.get('personal_info', {})
+            if personal_info:
+                content.append(Paragraph("Contact Information", heading_style))
+                
+                if personal_info.get('email'):
+                    content.append(Paragraph(f"Email: {html.escape(personal_info['email'])}", styles['Normal']))
+                if personal_info.get('phone'):
+                    content.append(Paragraph(f"Phone: {html.escape(str(personal_info['phone']))}", styles['Normal']))
+                if personal_info.get('location'):
+                    content.append(Paragraph(f"Location: {html.escape(personal_info['location'])}", styles['Normal']))
+                if personal_info.get('linkedin'):
+                    content.append(Paragraph(f"LinkedIn: {html.escape(personal_info['linkedin'])}", styles['Normal']))
+                
+                content.append(Spacer(1, 12))
+            
+            # Add professional summary
+            if cv_data.get('professional_summary'):
+                content.append(Paragraph("Professional Summary", heading_style))
+                content.append(Paragraph(html.escape(cv_data['professional_summary']), styles['Normal']))
+                content.append(Spacer(1, 12))
+            
+            # Add experience
+            experiences = cv_data.get('experience', [])
+            if experiences:
+                content.append(Paragraph("Experience", heading_style))
+                
+                for exp in experiences:
+                    if isinstance(exp, dict):
+                        job_title = exp.get('job_title', '') or exp.get('title', '')
+                        company = exp.get('company', '') or exp.get('company_name', '')
+                        
+                        if job_title or company:
+                            title_line = f"{job_title} at {company}" if job_title and company else job_title or company
+                            content.append(Paragraph(html.escape(title_line), styles['Heading3']))
+                        
+                        if exp.get('start_date') or exp.get('end_date'):
+                            date_range = f"{exp.get('start_date', '')} - {exp.get('end_date', 'Present')}"
+                            content.append(Paragraph(html.escape(date_range), styles['Normal']))
+                        
+                        if exp.get('description'):
+                            content.append(Paragraph(html.escape(exp['description']), styles['Normal']))
+                        
+                        content.append(Spacer(1, 8))
+                
+                content.append(Spacer(1, 12))
+            
+            # Add education
+            education = cv_data.get('education', [])
+            if education:
+                content.append(Paragraph("Education", heading_style))
+                
+                for edu in education:
+                    if isinstance(edu, dict):
+                        degree = edu.get('degree', '')
+                        school = edu.get('school', '') or edu.get('school_name', '')
+                        field = edu.get('field', '') or edu.get('field_of_study', '')
+                        
+                        edu_line = []
+                        if degree:
+                            edu_line.append(degree)
+                        if field:
+                            edu_line.append(f"in {field}")
+                        if school:
+                            edu_line.append(f"from {school}")
+                        
+                        if edu_line:
+                            content.append(Paragraph(html.escape(" ".join(edu_line)), styles['Normal']))
+                        
+                        if edu.get('start_date') or edu.get('end_date'):
+                            date_range = f"{edu.get('start_date', '')} - {edu.get('end_date', '')}"
+                            content.append(Paragraph(html.escape(date_range), styles['Normal']))
+                        
+                        content.append(Spacer(1, 8))
+                
+                content.append(Spacer(1, 12))
+            
+            # Add skills
+            skills = cv_data.get('skills', [])
+            if skills:
+                content.append(Paragraph("Skills", heading_style))
+                
+                if isinstance(skills, list):
+                    for skill in skills:
+                        if isinstance(skill, dict):
+                            skill_name = skill.get('name', '')
+                            skill_level = skill.get('level', '')
+                            if skill_name:
+                                skill_text = f"{skill_name}" + (f" ({skill_level})" if skill_level else "")
+                                content.append(Paragraph(f"• {html.escape(skill_text)}", styles['Normal']))
+                        elif isinstance(skill, str):
+                            content.append(Paragraph(f"• {html.escape(skill)}", styles['Normal']))
+                else:
+                    content.append(Paragraph(html.escape(str(skills)), styles['Normal']))
+                
+                content.append(Spacer(1, 12))
+            
+            # Add certifications
+            certifications = cv_data.get('certifications', [])
+            if certifications:
+                content.append(Paragraph("Certifications", heading_style))
+                
+                for cert in certifications:
+                    if isinstance(cert, dict):
+                        cert_name = cert.get('name', '') or cert.get('certificate_name', '')
+                        issuer = cert.get('issuer', '') or cert.get('issuing_organization', '')
+                        date = cert.get('date', '') or cert.get('date_obtained', '')
+                        
+                        cert_line = cert_name
+                        if issuer:
+                            cert_line += f" - {issuer}"
+                        if date:
+                            cert_line += f" ({date})"
+                        
+                        content.append(Paragraph(f"• {html.escape(cert_line)}", styles['Normal']))
+                    elif isinstance(cert, str):
+                        content.append(Paragraph(f"• {html.escape(cert)}", styles['Normal']))
+                
+                content.append(Spacer(1, 12))
+            
+            # Build the PDF
+            doc.build(content)
+            
+            # Get the value from the BytesIO buffer
+            pdf = buffer.getvalue()
+            buffer.close()
+            
+            # Create the HttpResponse with PDF
+            response = HttpResponse(pdf, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{name.replace(" ", "_")}_CV.pdf"'
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error downloading CV as PDF: {str(e)}", exc_info=True)
+            return Response({
+                'error': f'Failed to generate PDF: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def rewrite_cv(request):
