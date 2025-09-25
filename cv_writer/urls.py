@@ -28,6 +28,7 @@ urlpatterns = [
     path('cv/', views.CvWriterListCreate.as_view(), name='cv-list-create'),
     path('cv/clear-all/', views.clear_all_cv_data, name='clear-all-cv-data'),
     path('cv/<int:cv_id>/detail/', views.get_cv, name='get_cv'),
+    path('cv/<int:cv_id>/', views.get_cv, name='get_cv_short'),  # Backward compatibility
     path('cv/<int:cv_id>/improve/', views.improve_cv, name='improve-cv'),  
 
     # Section endpoints

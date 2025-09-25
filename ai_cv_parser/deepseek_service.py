@@ -285,6 +285,17 @@ class DeepSeekService:
         - certifications: Array of certifications with name, issuer, and date
         - languages: Array of language proficiencies with language name and level
         
+        🚨 CRITICAL INSTRUCTIONS FOR WORK EXPERIENCE - FOLLOW EXACTLY:
+        - NEVER EVER use "Position", "Role", "Job" as job_title 
+        - ALWAYS extract the EXACT job title before "|" or "at"
+        - Examples you MUST follow:
+          * "Compliance Manager | Furst Management Ltd" → job_title: "Compliance Manager", company: "Furst Management Ltd"
+          * "Enterprise Risk Management (ERM) Analyst | Convex Insurance UK Limited" → job_title: "Enterprise Risk Management (ERM) Analyst", company: "Convex Insurance UK Limited"
+          * "Senior Developer at Google Inc" → job_title: "Senior Developer", company: "Google Inc"
+        - If you see "Manager", "Analyst", "Developer", "Engineer", etc. - use the FULL title
+        - FORBIDDEN WORDS for job_title: "Position", "Role", "Job", "Employee", "Worker"
+        - Extract job_title as the specific professional title, NOT generic terms
+        
         If a section has no information, include it as an empty array or object.
         If dates are unclear, make reasonable estimates based on the context.
         Focus on accuracy and completeness while maintaining the JSON structure.
@@ -306,6 +317,10 @@ class DeepSeekService:
                 try:
                     # First try to parse directly
                     parsed_data = json.loads(response)
+                    
+                    # 🚨 POST-PROCESS: Fix "Position at Company" format
+                    parsed_data = self._fix_position_format(parsed_data)
+                    
                     logger.info(f"Successfully parsed CV in {time.time() - start_time:.2f} seconds")
                     return parsed_data
                 except json.JSONDecodeError:
@@ -313,11 +328,19 @@ class DeepSeekService:
                     if "```json" in response:
                         json_content = response.split("```json")[1].split("```")[0].strip()
                         parsed_data = json.loads(json_content)
+                        
+                        # 🚨 POST-PROCESS: Fix "Position at Company" format
+                        parsed_data = self._fix_position_format(parsed_data)
+                        
                         logger.info(f"Successfully parsed CV JSON from markdown in {time.time() - start_time:.2f} seconds")
                         return parsed_data
                     elif "```" in response:
                         json_content = response.split("```")[1].split("```")[0].strip()
                         parsed_data = json.loads(json_content)
+                        
+                        # 🚨 POST-PROCESS: Fix "Position at Company" format
+                        parsed_data = self._fix_position_format(parsed_data)
+                        
                         logger.info(f"Successfully parsed CV from code block in {time.time() - start_time:.2f} seconds")
                         return parsed_data
                     else:
@@ -331,6 +354,38 @@ class DeepSeekService:
         # If we get here, all attempts failed
         logger.error(f"Failed to parse CV after {max_retries} attempts. Last error: {last_error}")
         raise ValueError(f"Failed to parse CV data. Last error: {last_error}")
+    
+    def _fix_position_format(self, parsed_data):
+        """
+        Post-process parsed data to fix 'Position at Company' format that DeepSeek keeps returning
+        """
+        if not isinstance(parsed_data, dict) or 'experience' not in parsed_data:
+            return parsed_data
+            
+        if not isinstance(parsed_data['experience'], list):
+            return parsed_data
+        
+        for exp in parsed_data['experience']:
+            if not isinstance(exp, dict):
+                continue
+                
+            job_title = exp.get('job_title', '')
+            if not isinstance(job_title, str):
+                continue
+                
+            # Fix "Position at Company" format
+            if job_title.startswith('Position at '):
+                company_from_title = job_title.replace('Position at ', '').strip()
+                
+                # If company field is missing or generic, extract from title
+                if not exp.get('company') or exp.get('company') in ['Unknown Company', '']:
+                    exp['company'] = company_from_title
+                
+                # Set job title to a placeholder that transfer logic will handle
+                exp['job_title'] = f"Professional at {company_from_title}"
+                logger.info(f"Fixed 'Position at' format: company='{company_from_title}', title='Professional'")
+        
+        return parsed_data
     
     async def extract_sections(self, text):
         """

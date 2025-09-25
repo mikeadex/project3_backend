@@ -2146,6 +2146,8 @@ class AdvancedDocumentParser:
         
         # Common job title patterns at the beginning of job entries (enhanced for "Title | Company" format)
         title_patterns = [
+            # 🚨 PRIORITY: Enhanced patterns for "Title | Company" format (your specific case)
+            r'\n([A-Z][A-Za-z\s\(\)\-&]+(?:Manager|Analyst|Developer|Engineer|Director|Specialist|Coordinator|Officer|Lead|Head|Chief|Consultant|Assistant|Representative|Administrator|Supervisor))\s*\|\s*([A-Za-z\s&.,]+(?:Ltd|Limited|Inc|LLC|Corp|Company|Group|Systems|Tech|Solutions))',
             r'\n([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))[,\s\|]',
             r'\n([A-Z][A-Za-z\s]+(?:Scientist|Architect|Strategist|Advisor|Executive|Programmer|Technician))[,\s\|]',
             r'\n(?:Position|Title|Role):\s*([A-Za-z\s]+)',
@@ -4435,6 +4437,8 @@ class AdvancedDocumentParser:
         """
         # Regular expressions for different job title patterns
         title_patterns = [
+            # 🚨 NEW: Title | Company format (most common in modern CVs)
+            r'([A-Z][A-Za-z\s\(\)\-&]+(?:Manager|Analyst|Developer|Engineer|Director|Specialist|Coordinator|Officer|Lead|Head|Chief|Consultant|Assistant|Representative|Administrator|Supervisor))\s*\|\s*[A-Z]',
             # Title with specific role indicators
             r'([A-Z][A-Za-z\s]+(?:Developer|Engineer|Manager|Analyst|Designer|Consultant|Specialist|Coordinator|Director|Assistant|Officer|Representative|Administrator|Supervisor|Lead|Head|Chief))\s*(?:\(.*?\))?\s*(?:,|\.|at|with|for)',
             # Title with label

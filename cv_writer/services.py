@@ -897,11 +897,17 @@ class LlamaAPIService:
     
     def __init__(self):
         self.api_key = settings.LLAMA_API_KEY
+        logger.debug(f"LLaMA API key from settings: {self.api_key[:10]}..." if self.api_key else "None")
+        
         if not self.api_key:
-            raise ValueError("LLaMA API key not found")
+            raise ValueError("LLaMA API key not found in Django settings")
             
         self.api_url = os.environ.get('LLAMA_API_URL', "https://api.llama.cloud/v1/chat/completions")
         self.model = os.environ.get('LLAMA_MODEL', "llama-3-70b-instruct")  # Can be configured
+        
+        logger.debug(f"LLaMA API URL: {self.api_url}")
+        logger.debug(f"LLaMA Model: {self.model}")
+        
         self.headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -1051,8 +1057,10 @@ class CVImprovementService:
             self.llama_service = LlamaAPIService()
             self.available_services.append(self.llama_service)
             self._initialized_services.append("Llama")
+            logger.info("Successfully initialized LLaMA API service")
         except Exception as e:
             logger.warning(f"Failed to initialize LLaMA API: {str(e)}")
+            logger.debug(f"LLaMA API error details: {traceback.format_exc()}")
             self.llama_service = None
 
         # Initialize DeepSeek for segmentation if enabled

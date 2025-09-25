@@ -1559,23 +1559,24 @@ def get_cv(request, cv_id):
         # Get CV and check ownership
         cv = CvWriter.objects.get(id=cv_id, user=request.user)
         
-        # Get all related data
+        # Get all related data FOR THIS SPECIFIC CV
         # 🚨 CRITICAL FIX: Get professional summary for THIS specific CV, not just any summary
         professional_summary = ProfessionalSummary.objects.filter(user=request.user, cv=cv).first()
         
-        experiences = Experience.objects.filter(user=request.user).order_by('-start_date')
-        education = Education.objects.filter(user=request.user).order_by('-start_date')
+        # 🚨 CRITICAL FIX: Filter by CV, not just user - this was causing "Unknown Position"
+        experiences = Experience.objects.filter(user=request.user, cv=cv).order_by('-start_date')
+        education = Education.objects.filter(user=request.user, cv=cv).order_by('-start_date')
         
-        # Get related data
-        skills = Skill.objects.filter(user=request.user).exclude(
+        # Get related data FOR THIS SPECIFIC CV
+        skills = Skill.objects.filter(user=request.user, cv=cv).exclude(
             Q(skill_name__isnull=True) | Q(skill_name='') |
             Q(skill_level__isnull=True) | Q(skill_level='')
         )
-        languages = Language.objects.filter(user=request.user)
-        certifications = Certification.objects.filter(user=request.user)
-        interests = Interest.objects.filter(user=request.user)
-        social_media = SocialMedia.objects.filter(user=request.user)
-        references = Reference.objects.filter(user=request.user)
+        languages = Language.objects.filter(user=request.user, cv=cv)
+        certifications = Certification.objects.filter(user=request.user, cv=cv)
+        interests = Interest.objects.filter(user=request.user, cv=cv)
+        social_media = SocialMedia.objects.filter(user=request.user, cv=cv)
+        references = Reference.objects.filter(user=request.user, cv=cv)
 
         # Serialize CV data
         cv_data = CvWriterSerializer(cv).data

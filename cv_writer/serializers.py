@@ -75,7 +75,7 @@ class SkillSerializer(serializers.ModelSerializer):
         return {
             'id': instance.id,
             'name': instance.skill_name,
-            'proficiency': instance.skill_level,
+            'level': instance.skill_level,
             'created_at': instance.created_at,
             'updated_at': instance.updated_at
         }

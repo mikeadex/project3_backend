@@ -250,9 +250,9 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
     # Important: This is a temporary measure to fix immediate issues
     # TODO: Once stable, replace with specific allowed origins for better security
     
-    # Disable Django's CORS middleware in production since we're handling CORS at the WSGI level
-    # This prevents duplicate headers that cause browser errors
-    MIDDLEWARE = [m for m in MIDDLEWARE if 'corsheaders.middleware.CorsMiddleware' not in m]
+    # Keep CORS middleware for OAuth callbacks to work properly
+    # Note: Commenting out CORS removal to fix OAuth regression
+    # MIDDLEWARE = [m for m in MIDDLEWARE if 'corsheaders.middleware.CorsMiddleware' not in m]
     
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
@@ -294,6 +294,10 @@ REST_AUTH = {
 
 # Frontend URL (without trailing slash) - Use environment variable or default to production
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
+
+# OAuth redirect URLs should point to production frontend
+LOGIN_REDIRECT_URL = f"{FRONTEND_URL}/auth/social-callback"
+SOCIALACCOUNT_LOGIN_ON_GET = True
 
 # Email settings - Use SMTP in production, console for development/testing
 # For testing with testmail.app, use console backend to see email content in logs

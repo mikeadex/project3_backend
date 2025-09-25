@@ -20,9 +20,10 @@ class FallbackService:
         # Initialize with configurable fallback options
         self.current_service = "mock"  # Default to mock responses
         # Try alternative APIs based on available keys
-        if os.environ.get('LLAMA_API'):
+        llama_api_key = os.environ.get('LLAMA_API_KEY') or os.environ.get('LLAMA_API')
+        if llama_api_key:
             self.current_service = "llama"
-            self.api_key = os.environ.get('LLAMA_API')
+            self.api_key = llama_api_key
             self.api_url = "https://api.llama-api.com/chat/completions"
             self.model = "llama-3-8b"
         elif os.environ.get('MISTRAL_API_KEY'):

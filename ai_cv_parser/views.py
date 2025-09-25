@@ -96,6 +96,8 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             
             # Check if user already has a parsed CV
             existing_cv = ParsedCV.objects.filter(user=request.user).first()
+            logger.info(f"CV existence check: user={request.user.username}, existing_cv={existing_cv}, force_overwrite={force_overwrite}")
+            
             if existing_cv and not force_overwrite:
                 # User has an existing CV but hasn't confirmed overwrite
                 return Response({
@@ -196,10 +198,12 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 parsed_cv.save(update_fields=['status', 'error_message'])
                 return
             
-            # Parse the CV using DeepSeek API or other parsing method
+            # Parse the CV using intelligent service selection (DeepSeek → LLM → Traditional)
             try:
-                service = DeepSeekService()
-                parsed_data = service.parse_document(file_path)
+                # Use AdvancedDocumentParser which has proper fallback logic
+                from cv_parser.parsers import AdvancedDocumentParser
+                parser = AdvancedDocumentParser()
+                parsed_data = parser.parse_document(file_path)
                 
                 # Check if we got an error response with fallback data
                 if 'error' in parsed_data:
@@ -367,45 +371,120 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 ProfessionalSummary.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    content=parsed_data.get('professional_summary')
+                    summary=parsed_data.get('professional_summary')
                 )
                 logger.info(f"Added professional summary to CV Writer")
             
+            # Helper function to parse dates
+            def parse_date(date_str):
+                """Parse various date formats to YYYY-MM-DD"""
+                if not date_str or date_str.lower() in ['present', 'current', 'now']:
+                    return None
+                
+                try:
+                    # Handle different date formats
+                    if len(date_str) == 7 and '-' in date_str:  # YYYY-MM format
+                        return f"{date_str}-01"  # Add day as 01
+                    elif len(date_str) == 4:  # YYYY format
+                        return f"{date_str}-01-01"  # Add month and day as 01
+                    elif len(date_str) == 10:  # Already YYYY-MM-DD
+                        return date_str
+                    else:
+                        # Try to parse other formats
+                        from datetime import datetime
+                        try:
+                            # Try common formats
+                            for fmt in ['%Y-%m', '%Y', '%m/%Y', '%m-%Y']:
+                                try:
+                                    dt = datetime.strptime(date_str, fmt)
+                                    return dt.strftime('%Y-%m-01')
+                                except ValueError:
+                                    continue
+                        except:
+                            pass
+                        return None
+                except:
+                    return None
+            
             # Create experiences
             experiences = parsed_data.get('experience', [])
+            logger.info(f"DEBUG: Processing {len(experiences)} experiences from parsed data")
+            for i, exp_data in enumerate(experiences):
+                logger.info(f"DEBUG: Experience {i}: {exp_data}")
+            
             for exp_data in experiences:
-                # Default start/end dates if not available
-                start_date = exp_data.get('start_date', None)
-                end_date = exp_data.get('end_date', None)
+                # Parse start/end dates properly
+                start_date = parse_date(exp_data.get('start_date', None))
+                end_date = parse_date(exp_data.get('end_date', None))
                 
-                Experience.objects.create(
+                # Extract job title - try multiple field names
+                raw_title = (exp_data.get('job_title') or 
+                           exp_data.get('title') or 
+                           exp_data.get('position') or 
+                           'Unknown Position')
+                
+                # Extract company name - try multiple field names  
+                raw_company = (exp_data.get('company_name') or
+                              exp_data.get('company') or
+                              exp_data.get('employer') or
+                              'Unknown Company')
+                
+                # Handle "Position at Company" format
+                if " at " in raw_title and raw_company == 'Unknown Company':
+                    # Split "Position at Company Name" format
+                    parts = raw_title.split(" at ", 1)
+                    if len(parts) == 2:
+                        job_title = parts[0].strip() if parts[0].strip() != "Position" else "Unknown Position"
+                        company_name = parts[1].strip()
+                    else:
+                        job_title = raw_title
+                        company_name = raw_company
+                else:
+                    job_title = raw_title
+                    company_name = raw_company
+                
+                # 🚨 PREVENT DUPLICATES: Check if this experience already exists for this CV
+                existing_exp = Experience.objects.filter(
                     user=request.user,
                     cv=cv_writer,
-                    company=exp_data.get('company', 'Unknown Company'),
-                    title=exp_data.get('title', 'Unknown Position'),
-                    start_date=start_date,
-                    end_date=end_date,
-                    current=exp_data.get('current', False),
-                    description=exp_data.get('description', '')
-                )
+                    company_name=company_name,
+                    job_title=job_title
+                ).first()
+                
+                if not existing_exp:
+                    Experience.objects.create(
+                        user=request.user,
+                        cv=cv_writer,
+                        company_name=company_name,
+                        job_title=job_title,
+                        start_date=start_date,
+                        end_date=end_date,
+                        current=exp_data.get('current', False),
+                        job_description=exp_data.get('description', ''),
+                        achievements='',  # Required field
+                        employment_type='Full-time'  # Required field with default
+                    )
+                    logger.info(f"Created experience: {job_title} at {company_name}")
+                else:
+                    logger.info(f"Skipped duplicate experience: {job_title} at {company_name}")
             logger.info(f"Added {len(experiences)} experiences to CV Writer")
             
             # Create education entries
             education_entries = parsed_data.get('education', [])
             for edu_data in education_entries:
-                # Default start/end dates if not available
-                start_date = edu_data.get('start_date', None)
-                end_date = edu_data.get('end_date', None)
+                # Parse start/end dates properly  
+                start_date = parse_date(edu_data.get('start_date', None))
+                end_date = parse_date(edu_data.get('end_date', None))
                 
                 Education.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    institution=edu_data.get('institution', 'Unknown Institution'),
+                    school_name=edu_data.get('institution', 'Unknown Institution'),
                     degree=edu_data.get('degree', 'Unknown Degree'),
-                    field=edu_data.get('field', ''),
+                    field_of_study=edu_data.get('field', ''),
                     start_date=start_date,
                     end_date=end_date,
-                    description=edu_data.get('description', '')
+                    current=edu_data.get('current', False)
                 )
             logger.info(f"Added {len(education_entries)} education entries to CV Writer")
             
@@ -423,8 +502,8 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 Skill.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    name=skill_name,
-                    level=skill_level
+                    skill_name=skill_name,
+                    skill_level=skill_level
                 )
             logger.info(f"Added {len(skills)} skills to CV Writer")
             
@@ -442,7 +521,7 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 Language.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    name=lang_name,
+                    language=lang_name,
                     proficiency=proficiency
                 )
             logger.info(f"Added {len(languages)} languages to CV Writer")
@@ -458,14 +537,24 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 else:
                     cert_name = cert_data.get('name', 'Unknown Certification')
                     issuer = cert_data.get('issuer', '')
-                    issue_date = cert_data.get('issue_date', None)
+                    issue_date = parse_date(cert_data.get('issue_date', None))
+                
+                # Check if issuer is a valid URL, otherwise include it in the name
+                certificate_name = cert_name
+                certificate_link = None
+                
+                if issuer:
+                    if issuer.startswith(('http://', 'https://')):
+                        certificate_link = issuer  # It's a URL
+                    else:
+                        certificate_name = f"{cert_name} - {issuer}"  # Include issuer in name
                 
                 Certification.objects.create(
                     user=request.user,
                     cv=cv_writer,
-                    name=cert_name,
-                    issuer=issuer,
-                    issue_date=issue_date
+                    certificate_name=certificate_name,
+                    certificate_link=certificate_link,
+                    certificate_date=issue_date
                 )
             logger.info(f"Added {len(certifications)} certifications to CV Writer")
             
@@ -630,8 +719,13 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     'error': 'No CV data found'
                 }, status=status.HTTP_404_NOT_FOUND)
                 
-            # Prepare the prompt for analysis
-            service = DeepSeekService()
+            # Prepare the prompt for analysis - use intelligent service selection
+            try:
+                from .fallback_service import FallbackService
+                service = FallbackService()
+            except ImportError:
+                # Fallback to DeepSeek if FallbackService not available
+                service = DeepSeekService()
             
             # Continue with existing prompt preparation
             prompt = f"""
@@ -1263,9 +1357,14 @@ def analyze_cv(request, pk=None):
                 'error': 'No CV data found'
             }, status=status.HTTP_404_NOT_FOUND)
             
-        # Prepare the prompt for analysis
-        from .deepseek_service import DeepSeekService
-        service = DeepSeekService()
+        # Prepare the prompt for analysis - use intelligent service selection
+        try:
+            from .fallback_service import FallbackService
+            service = FallbackService()
+        except ImportError:
+            # Fallback to DeepSeek if FallbackService not available
+            from .deepseek_service import DeepSeekService
+            service = DeepSeekService()
         
         # Continue with existing prompt preparation
         prompt = f"""

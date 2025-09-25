@@ -336,6 +336,9 @@ class DeepSeekService:
                                 "raw_content": content[:500] + "..." if len(content) > 500 else content
                             }
                     
+                    # 🚨 POST-PROCESS: Fix "Position at Company" format
+                    parsed_data = self._fix_position_format(parsed_data)
+                    
                     # Add metadata
                     parsed_data['metadata'] = {
                         'parsing_time': response.elapsed.total_seconds(),
@@ -468,3 +471,35 @@ class DeepSeekService:
                 break
                 
         return contact_info
+    
+    def _fix_position_format(self, parsed_data):
+        """
+        Post-process parsed data to fix 'Position at Company' format that DeepSeek keeps returning
+        """
+        if not isinstance(parsed_data, dict) or 'experience' not in parsed_data:
+            return parsed_data
+            
+        if not isinstance(parsed_data['experience'], list):
+            return parsed_data
+        
+        for exp in parsed_data['experience']:
+            if not isinstance(exp, dict):
+                continue
+                
+            job_title = exp.get('job_title', '')
+            if not isinstance(job_title, str):
+                continue
+                
+            # Fix "Position at Company" format
+            if job_title.startswith('Position at '):
+                company_from_title = job_title.replace('Position at ', '').strip()
+                
+                # If company field is missing or generic, extract from title
+                if not exp.get('company') or exp.get('company') in ['Unknown Company', '']:
+                    exp['company'] = company_from_title
+                
+                # Set job title to a placeholder that transfer logic will handle
+                exp['job_title'] = f"Professional at {company_from_title}"
+                logger.info(f"cv_parser: Fixed 'Position at' format: company='{company_from_title}', title='Professional'")
+        
+        return parsed_data
