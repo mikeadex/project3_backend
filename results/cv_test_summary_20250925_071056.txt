@@ -1,0 +1,32 @@
+================================================================================
+CV PARSING AND ANALYSIS TEST REPORT
+================================================================================
+
+Test Duration: 806.53 seconds
+Total Files Tested: 33
+Successful Parses: 33 (100.0%)
+Failed Parses: 0 (0.0%)
+Successful Analyses: 33 (100.0%)
+Failed Analyses: 0 (0.0%)
+
+PARSING METHODS USED:
+----------------------------------------
+standard: 33 files
+
+ROLE SUGGESTION ANALYSIS:
+----------------------------------------
+Unique Roles Suggested: 61
+Role Diversity Score: 1.85
+
+Most Common Role Suggestions:
+  Entry-level positions: 6 times
+  Retail associate: 6 times
+  Administrative assistant: 4 times
+  Data entry clerk: 4 times
+  IT Support Specialist: 3 times
+  Healthcare Assistant: 3 times
+  Entry-level Healthcare Administrator: 3 times
+  Administrative Assistant: 3 times
+  Customer service representative: 3 times
+  General labor roles: 2 times
+

@@ -1,0 +1,33 @@
+CV ROLE SUGGESTION ANALYSIS REPORT
+==================================================
+
+ROLE FREQUENCY ANALYSIS:
+------------------------------
+Entry-level positions: 6 suggestions
+Retail associate: 6 suggestions
+Administrative assistant: 4 suggestions
+Data entry clerk: 4 suggestions
+IT Support Specialist: 3 suggestions
+Healthcare Assistant: 3 suggestions
+Entry-level Healthcare Administrator: 3 suggestions
+Administrative Assistant: 3 suggestions
+Customer service representative: 3 suggestions
+General labor roles: 2 suggestions
+
+ROLE SUGGESTIONS BY CATEGORY:
+------------------------------
+
+UNCATEGORIZED:
+  Entry-level positions: 6
+  Retail associate: 6
+  Administrative assistant: 4
+  Data entry clerk: 4
+  IT Support Specialist: 3
+
+ROLE DIVERSITY ANALYSIS:
+------------------------------
+Total Unique Roles: 61
+Average Roles per CV: 1.85
+Role Diversity Score: 1.85
+
+✅ DIVERSITY SCORE HEALTHY: Good balance of specific and diverse role suggestions.
