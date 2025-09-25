@@ -646,14 +646,14 @@ def cv_from_parser(request):
             if isinstance(cert_data, dict):
                 Certification.objects.create(
                     cv=cv,
-                    name=cert_data.get('name', ''),
-                    issuing_organization=cert_data.get('issuer', ''),
-                    date_obtained=parse_date(cert_data.get('year', '')) if cert_data.get('year') else None
+                    certificate_name=cert_data.get('name', ''),
+                    certificate_link=cert_data.get('issuer', ''),
+                    certificate_date=parse_date(cert_data.get('year', '')) if cert_data.get('year') else None
                 )
             elif cert_data:
                 Certification.objects.create(
                     cv=cv,
-                    name=cert_data if isinstance(cert_data, str) else str(cert_data)
+                    certificate_name=cert_data if isinstance(cert_data, str) else str(cert_data)
                 )
         
         # Return the new CV ID

@@ -2356,9 +2356,9 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                     if existing_cert:
                         # Update existing certification
                         if issuing_org:
-                            existing_cert.issuing_organization = issuing_org
+                            existing_cert.certificate_link = issuing_org
                         if date_obtained:
-                            existing_cert.date_obtained = date_obtained
+                            existing_cert.certificate_date = date_obtained
                         if certificate_link:
                             existing_cert.certificate_link = certificate_link
                         try:
@@ -2378,9 +2378,8 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                                 user=user,
                                 cv=cv_writer_instance,
                                 certificate_name=cert_name,
-                                issuing_organization=issuing_org,
-                                date_obtained=date_obtained,
-                                certificate_link=certificate_link
+                                certificate_link=issuing_org,
+                                certificate_date=date_obtained
                             )
                         except Exception as field_error:
                             # If cv field isn't available, try without it
@@ -2389,9 +2388,8 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                                 Certification.objects.create(
                                     user=user,
                                     certificate_name=cert_name,
-                                    issuing_organization=issuing_org,
-                                    date_obtained=date_obtained,
-                                    certificate_link=certificate_link
+                                    certificate_link=issuing_org,
+                                    certificate_date=date_obtained
                                 )
                             else:
                                 # Re-raise other errors

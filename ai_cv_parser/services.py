@@ -408,10 +408,9 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                         Certification.objects.create(
                             user=user,
                             cv=new_cv,
-                            name=name,
-                            issuing_authority=cert.get('issuer', '') or cert.get('organization', ''),
-                            issue_date=cert.get('issue_date', None),
-                            expiration_date=cert.get('expiration_date', None)
+                            certificate_name=name,
+                            certificate_link=cert.get('issuer', '') or cert.get('organization', ''),
+                            certificate_date=cert.get('issue_date', None) or cert.get('date', None)
                         )
                 except Exception as e:
                     logger.error(f"Error adding certification: {str(e)}")
