@@ -523,47 +523,42 @@ class CVRewriteService:
         self.improvement_prompts = {
             'professional_summary': {
                 'template': """
+                Rewrite this professional summary to be more impactful and ATS-friendly for the {industry} industry.
                 
-                As an expert CV writer, improve this professional summary to be more impactful and ATS-friendly.
-                Make it concise (3-4 sentences), achievement-focused, and tailored for the {industry} industry.
-
                 Original Summary:
                 {content}
 
-                Guidelines:
-                1. Start with a strong professional identity statement
-                2. Highlight key achievements with metrics when possible
-                3. Showcase relevant skills and expertise
-                4. End with a clear value proposition
-                5. Use active voice and power verbs
-                6. Optimize for ATS keywords
-                7. Keep it under 200 words
+                Requirements:
+                - Return ONLY the improved summary text
+                - NO markdown formatting (no **, ##, •, etc.)
+                - NO explanatory text or commentary  
+                - NO section headers or labels
+                - 3-4 sentences maximum
+                - Include metrics and achievements where possible
+                - Use active voice and professional language
+                - Optimize for ATS keywords
 
-                Improved Summary:
-                
-                """
+                Improved Summary:"""
             },
             'experience': {
                 'template': """
-                
-                Transform this job experience into powerful, achievement-focused bullet points.
-                Focus on quantifiable results and impactful contributions.
+                Rewrite this job experience description with achievement-focused bullet points for the {industry} industry.
 
                 Original Experience:
                 {content}
 
-                Guidelines:
-                1. Start each bullet with a strong action verb
-                2. Include metrics and specific achievements (%, $, numbers)
-                3. Show impact on business/organization
-                4. Highlight leadership and initiative
-                5. Include relevant technical skills
-                6. Focus on results over responsibilities
-                7. Use industry-specific keywords
+                Requirements:
+                - Return ONLY the improved bullet points
+                - NO markdown formatting (no **, ##, •, ###, etc.)
+                - NO explanatory text, commentary, or section headers
+                - NO phrases like "Of course" or "Here are the improved points"
+                - Use plain text bullet points with simple dashes (-)
+                - Start each point with a strong action verb
+                - Include specific metrics and achievements (%, numbers, timelines)
+                - Focus on business impact and results
+                - Maximum 6 bullet points
 
-                Improved Experience:
-                
-                """
+                Improved Experience:"""
             },
             'skills': {
                 'template': """
