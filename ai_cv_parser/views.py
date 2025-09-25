@@ -317,17 +317,40 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             except Exception as db_e:
                 logger.error(f"Could not update ParsedCV record after error: {str(db_e)}")
     
-    @action(detail=False, methods=['POST'], url_path='transfer-to-writer')
-    def transfer_to_writer(self, request):
+    @action(detail=True, methods=['POST'], url_path='transfer-to-writer')
+    def transfer_to_writer(self, request, pk=None):
         """Transfer parsed CV data to the CV writer app"""
         try:
-            # Get parsed data from request
-            parsed_data = request.data.get('parsed_data')
-            if not parsed_data:
-                logger.warning(f"No parsed data provided in transfer request")
+            # Get the ParsedCV instance by ID
+            try:
+                parsed_cv = self.get_object()  # This gets the ParsedCV by pk
+                if parsed_cv.user != request.user:
+                    return Response({
+                        'error': 'Access denied: CV does not belong to user'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                    
+                # Extract parsed data from the ParsedCV object
+                parsed_data = parsed_cv.parsed_data
+                if not parsed_data:
+                    return Response({
+                        'error': 'No parsed data available for this CV'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                logger.info(f"Found ParsedCV {pk} with parsed data for user {request.user.username}")
+                
+            except ParsedCV.DoesNotExist:
                 return Response({
-                    'error': 'No parsed data provided'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    'error': 'CV not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Also check if parsed_data was provided in request body (for backward compatibility)
+            if not parsed_data:
+                parsed_data = request.data.get('parsed_data')
+                if not parsed_data:
+                    logger.warning(f"No parsed data available in CV {pk} or request body")
+                    return Response({
+                        'error': 'No parsed data provided'
+                    }, status=status.HTTP_400_BAD_REQUEST)
             
             logger.info(f"Transferring parsed data to CV Writer for user {request.user.username}")
             
