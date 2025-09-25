@@ -563,9 +563,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                                 parser = AdvancedDocumentParser()
                                 fresh_parsed_data = parser.parse_document_comprehensive(original_file_path)
                                 
-                                # Update the stored parsed data with fresh results
+                                # Update the stored parsed data with fresh results and clear analysis cache
                                 parsed_cv.parsed_data = fresh_parsed_data
-                                parsed_cv.save(update_fields=['parsed_data'])
+                                parsed_cv.analysis_data = None  # Clear cached analysis
+                                parsed_cv.analysis_date = None  # Clear analysis date
+                                parsed_cv.save(update_fields=['parsed_data', 'analysis_data', 'analysis_date'])
                                 
                                 # Use the fresh data for analysis
                                 cv_data = fresh_parsed_data
@@ -973,9 +975,11 @@ def analyze_cv(request, pk=None):
                             parser = AdvancedDocumentParser()
                             fresh_parsed_data = parser.parse_document_comprehensive(original_file_path)
                             
-                            # Update the stored parsed data with fresh results
+                            # Update the stored parsed data with fresh results and clear analysis cache
                             parsed_cv.parsed_data = fresh_parsed_data
-                            parsed_cv.save(update_fields=['parsed_data'])
+                            parsed_cv.analysis_data = None  # Clear cached analysis
+                            parsed_cv.analysis_date = None  # Clear analysis date
+                            parsed_cv.save(update_fields=['parsed_data', 'analysis_data', 'analysis_date'])
                             
                             # Use the fresh data for analysis
                             cv_data = fresh_parsed_data
