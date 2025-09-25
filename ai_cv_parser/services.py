@@ -594,13 +594,29 @@ class CVRewriteService:
             logger.info(f"Starting CV rewrite for user {user.username}")
             logger.info(f"CV data structure: {cv_data.keys()}")
             
-            # Extract the actual CV data - it's nested inside a 'data' key
-            if 'data' in cv_data and isinstance(cv_data['data'], dict):
+            # Extract the actual CV data - check multiple possible locations
+            cv_content = None
+            
+            # Option 1: Frontend sends parsed_cv.parsed_data structure
+            if 'parsed_cv' in cv_data and isinstance(cv_data['parsed_cv'], dict):
+                parsed_cv = cv_data['parsed_cv']
+                if 'parsed_data' in parsed_cv and isinstance(parsed_cv['parsed_data'], dict):
+                    cv_content = parsed_cv['parsed_data']
+                    logger.info(f"Found parsed_cv.parsed_data with keys: {cv_content.keys()}")
+            
+            # Option 2: Legacy 'data' key structure  
+            elif 'data' in cv_data and isinstance(cv_data['data'], dict):
                 cv_content = cv_data['data']
-                logger.info(f"Found nested data with keys: {cv_content.keys()}")
+                logger.info(f"Found legacy data structure with keys: {cv_content.keys()}")
+            
+            # Option 3: Direct top-level structure
             else:
                 cv_content = cv_data
                 logger.info("Using top-level data structure")
+            
+            if not cv_content:
+                logger.error("Could not extract CV content from input data")
+                raise ValueError("Invalid CV data structure")
                 
             improved_sections = {}
 
@@ -738,9 +754,10 @@ class CVRewriteService:
                     improvement_tasks.append(None)
                 
                 # Experience sections
-                if 'experiences' in cv_data and len(cv_data['experiences']) > 0:
+                experiences = cv_content.get('experiences') or cv_content.get('experience') or []
+                if experiences and len(experiences) > 0:
                     experience_tasks = []
-                    for exp in cv_data['experiences']:
+                    for exp in experiences:
                         if 'description' in exp and exp['description']:
                             experience_tasks.append(
                                 self._improve_section(
@@ -756,8 +773,13 @@ class CVRewriteService:
                     improvement_tasks.append([])
                 
                 # Skills section (treat as a single unit for now)
-                if 'skills' in cv_data and len(cv_data['skills']) > 0:
-                    skills_content = "\n".join([skill.get('name', '') for skill in cv_data['skills']])
+                skills = cv_content.get('skills', [])
+                if skills and len(skills) > 0:
+                    # Handle skills as list of objects or strings
+                    if isinstance(skills[0], dict):
+                        skills_content = "\n".join([skill.get('name', '') for skill in skills])
+                    else:
+                        skills_content = "\n".join(skills)
                     improvement_tasks.append(
                         self._improve_section(
                             'skills',
@@ -886,13 +908,38 @@ class CVRewriteService:
             improved_sections = {}
             
             try:
-                # Process sections sequentially (no async/await)
-                industry = cv_data.get('personal_info', {}).get('industry', 'technology')
+                # Extract the actual CV data - check multiple possible locations
+                cv_content = None
                 
-                # Professional summary section
-                if 'professional_summary' in cv_data and 'content' in cv_data['professional_summary']:
+                # Option 1: Frontend sends parsed_cv.parsed_data structure
+                if 'parsed_cv' in cv_data and isinstance(cv_data['parsed_cv'], dict):
+                    parsed_cv = cv_data['parsed_cv']
+                    if 'parsed_data' in parsed_cv and isinstance(parsed_cv['parsed_data'], dict):
+                        cv_content = parsed_cv['parsed_data']
+                        logger.info(f"[SYNC] Found parsed_cv.parsed_data with keys: {cv_content.keys()}")
+                
+                # Option 2: Legacy 'data' key structure  
+                elif 'data' in cv_data and isinstance(cv_data['data'], dict):
+                    cv_content = cv_data['data']
+                    logger.info(f"[SYNC] Found legacy data structure with keys: {cv_content.keys()}")
+                
+                # Option 3: Direct top-level structure
+                else:
+                    cv_content = cv_data
+                    logger.info("[SYNC] Using top-level data structure")
+                
+                if not cv_content:
+                    logger.error("[SYNC] Could not extract CV content from input data")
+                    raise ValueError("Invalid CV data structure")
+                
+                # Process sections sequentially (no async/await)
+                industry = cv_content.get('personal_info', {}).get('industry', 'technology')
+                
+                # Professional summary section - handle as direct string
+                prof_summary = cv_content.get('professional_summary')
+                if prof_summary and isinstance(prof_summary, str):
                     prompt = self.improvement_prompts['professional_summary']['template'].format(
-                        content=cv_data['professional_summary']['content'],
+                        content=prof_summary,
                         industry=industry
                     )
                     improved_summary = self.deepseek_service.generate_completion_sync(prompt, max_tokens=400)
@@ -900,9 +947,10 @@ class CVRewriteService:
                         improved_sections['professional_summary'] = improved_summary
                 
                 # Experience sections
-                if 'experiences' in cv_data and len(cv_data['experiences']) > 0:
+                experiences = cv_content.get('experiences') or cv_content.get('experience') or []
+                if experiences and len(experiences) > 0:
                     improved_experiences = []
-                    for exp in cv_data['experiences']:
+                    for exp in experiences:
                         improved_exp = exp.copy()
                         if 'description' in exp and exp['description']:
                             prompt = self.improvement_prompts['experience']['template'].format(
@@ -916,8 +964,13 @@ class CVRewriteService:
                     improved_sections['experiences'] = improved_experiences
                 
                 # Skills section
-                if 'skills' in cv_data and len(cv_data['skills']) > 0:
-                    skills_content = "\n".join([skill.get('name', '') for skill in cv_data['skills']])
+                skills = cv_content.get('skills', [])
+                if skills and len(skills) > 0:
+                    # Handle skills as list of objects or strings
+                    if isinstance(skills[0], dict):
+                        skills_content = "\n".join([skill.get('name', '') for skill in skills])
+                    else:
+                        skills_content = "\n".join(skills)
                     prompt = self.improvement_prompts['skills']['template'].format(
                         content=skills_content,
                         industry=industry
