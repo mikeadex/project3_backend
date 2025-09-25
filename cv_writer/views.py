@@ -1559,6 +1559,9 @@ def get_cv(request, cv_id):
     except CvWriter.DoesNotExist:
         return Response({'error': 'CV not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        import traceback
+        logger.error(f"Error in get_cv for CV {cv_id}: {str(e)}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

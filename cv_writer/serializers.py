@@ -91,7 +91,7 @@ class LanguageSerializer(serializers.ModelSerializer):
 class CertificationSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='certificate_name')
     date_obtained = serializers.DateField(source='certificate_date')
-    issuing_organization = serializers.URLField(source='certificate_link')
+    issuing_organization = serializers.CharField(source='certificate_link')
 
     class Meta:
         model = Certification
