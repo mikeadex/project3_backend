@@ -1154,6 +1154,55 @@ def rewrite_cv(request):
                         logger.warning("No rewritten CV data found in results, using processed original")
                         rewritten_cv = processed_cv_data
                     
+                    # 🚨 CRITICAL FIX: Merge improved sections with original CV data to preserve all fields
+                    # The improved sections only contain text improvements, not the complete data structure
+                    if rewritten_cv != processed_cv_data:  # Only merge if we have improved sections
+                        logger.info("Merging improved sections with original CV data to preserve all fields")
+                        
+                        # Start with the complete original CV data
+                        complete_rewritten_cv = processed_cv_data.copy()
+                        
+                        # Update with improved sections while preserving original structure
+                        if 'professional_summary' in rewritten_cv:
+                            complete_rewritten_cv['professional_summary'] = rewritten_cv['professional_summary']
+                            logger.info("Updated professional summary with improved version")
+                        
+                        if 'experience' in rewritten_cv and isinstance(rewritten_cv['experience'], list):
+                            # Merge improved experience descriptions with original experience data
+                            original_experiences = complete_rewritten_cv.get('experience', [])
+                            improved_experiences = rewritten_cv['experience']
+                            
+                            merged_experiences = []
+                            for i, orig_exp in enumerate(original_experiences):
+                                merged_exp = orig_exp.copy()
+                                # Update description if we have an improved version
+                                if i < len(improved_experiences) and 'description' in improved_experiences[i]:
+                                    merged_exp['description'] = improved_experiences[i]['description']
+                                    logger.info(f"Updated experience {i+1} description with improved version")
+                                merged_experiences.append(merged_exp)
+                            
+                            complete_rewritten_cv['experience'] = merged_experiences
+                            logger.info(f"Merged {len(merged_experiences)} experience entries")
+                        
+                        if 'skills' in rewritten_cv:
+                            # If skills is a string, keep original structure but note the improvement
+                            if isinstance(rewritten_cv['skills'], str):
+                                # Keep original skills structure but add improved text as a note
+                                # For now, preserve original skills array structure
+                                logger.info("Skills improvement available but preserving original structure")
+                            else:
+                                complete_rewritten_cv['skills'] = rewritten_cv['skills']
+                                logger.info("Updated skills with improved version")
+                        
+                        # Always preserve education, certifications, languages, etc. from original
+                        for section in ['education', 'certifications', 'languages', 'personal_info']:
+                            if section in processed_cv_data:
+                                complete_rewritten_cv[section] = processed_cv_data[section]
+                                logger.info(f"Preserved original {section} data")
+                        
+                        rewritten_cv = complete_rewritten_cv
+                        logger.info("Successfully merged improved sections with original CV data")
+                    
                     # Add the rewritten CV to the final result
                     final_result['rewritten_cv'] = rewritten_cv
                     
