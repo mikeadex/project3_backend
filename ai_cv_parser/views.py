@@ -545,7 +545,40 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                             'analysis_date': parsed_cv.analysis_date
                         })
                     elif force_refresh:
-                        logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache")
+                        logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache and re-parsing CV")
+                        
+                        # Re-parse the CV with improved parser when force_refresh is True
+                        try:
+                            from cv_parser.parsers import AdvancedDocumentParser
+                            import tempfile
+                            import os
+                            
+                            # Get the original file path
+                            original_file_path = parsed_cv.original_file.path if parsed_cv.original_file else None
+                            
+                            if original_file_path and os.path.exists(original_file_path):
+                                logger.info(f"Re-parsing original file: {original_file_path}")
+                                
+                                # Use our enhanced parser
+                                parser = AdvancedDocumentParser()
+                                fresh_parsed_data = parser.parse_document_comprehensive(original_file_path)
+                                
+                                # Update the stored parsed data with fresh results
+                                parsed_cv.parsed_data = fresh_parsed_data
+                                parsed_cv.save(update_fields=['parsed_data'])
+                                
+                                # Use the fresh data for analysis
+                                cv_data = fresh_parsed_data
+                                logger.info(f"Successfully re-parsed CV with enhanced parser. Experience entries: {len(fresh_parsed_data.get('experience', []))}, Skills: {len(fresh_parsed_data.get('skills', []))}")
+                                
+                            else:
+                                logger.warning(f"Original file not found for re-parsing: {original_file_path}")
+                                cv_data = parsed_cv.parsed_data
+                                
+                        except Exception as reparse_error:
+                            logger.error(f"Failed to re-parse CV: {str(reparse_error)}")
+                            # Fall back to existing parsed data
+                            cv_data = parsed_cv.parsed_data
                         
                 except ParsedCV.DoesNotExist:
                     return Response({
@@ -922,7 +955,40 @@ def analyze_cv(request, pk=None):
                         'analysis_date': parsed_cv.analysis_date
                     })
                 elif force_refresh:
-                    logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache")
+                    logger.info(f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache and re-parsing CV")
+                    
+                    # Re-parse the CV with improved parser when force_refresh is True
+                    try:
+                        from cv_parser.parsers import AdvancedDocumentParser
+                        import tempfile
+                        import os
+                        
+                        # Get the original file path
+                        original_file_path = parsed_cv.original_file.path if parsed_cv.original_file else None
+                        
+                        if original_file_path and os.path.exists(original_file_path):
+                            logger.info(f"Re-parsing original file: {original_file_path}")
+                            
+                            # Use our enhanced parser
+                            parser = AdvancedDocumentParser()
+                            fresh_parsed_data = parser.parse_document_comprehensive(original_file_path)
+                            
+                            # Update the stored parsed data with fresh results
+                            parsed_cv.parsed_data = fresh_parsed_data
+                            parsed_cv.save(update_fields=['parsed_data'])
+                            
+                            # Use the fresh data for analysis
+                            cv_data = fresh_parsed_data
+                            logger.info(f"Successfully re-parsed CV with enhanced parser. Experience entries: {len(fresh_parsed_data.get('experience', []))}, Skills: {len(fresh_parsed_data.get('skills', []))}")
+                            
+                        else:
+                            logger.warning(f"Original file not found for re-parsing: {original_file_path}")
+                            cv_data = parsed_cv.parsed_data
+                            
+                    except Exception as reparse_error:
+                        logger.error(f"Failed to re-parse CV: {str(reparse_error)}")
+                        # Fall back to existing parsed data
+                        cv_data = parsed_cv.parsed_data
                     
             except ParsedCV.DoesNotExist:
                 # Try fallback to the legacy cv_parser module

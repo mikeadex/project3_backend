@@ -5528,29 +5528,21 @@ class AdvancedDocumentParser:
         
         # Look for comma-separated patterns that might contain skills
         # Common patterns like "Technologies: Python, JavaScript, SQL"
+        # Simplified patterns to avoid catastrophic backtracking
         skill_section_patterns = [
-            r'(?:Technologies|Skills|Tools|Languages|Frameworks|Software|Tech Stack|Programming)[:\s]+(.*?)(?=\n[A-Z]|\n\n|\Z)',
-            r'(?:Technical Skills|Programming Languages|Development Tools)[:\s]+(.*?)(?=\n[A-Z]|\n\n|\Z)',
-            r'(?:Proficient in|Experience with|Knowledge of)[:\s]+(.*?)(?=\n[A-Z]|\n\n|\Z)'
+            r'(?:Technologies|Skills|Tools|Languages|Frameworks|Software|Tech Stack|Programming)[:\s]+([^\n]+)',
+            r'(?:Technical Skills|Programming Languages|Development Tools)[:\s]+([^\n]+)',
+            r'(?:Proficient in|Experience with|Knowledge of)[:\s]+([^\n]+)'
         ]
         
         for pattern in skill_section_patterns:
             matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
             for match in matches:
-                # Split by commas and other common separators (including PDF Unicode)
-                separators = [',', '(cid:127)', '\u2022', '•', '|', '·', ';']
-                potential_skills = []
-                current_text = match
-                
-                # Try each separator and use the one that gives the most splits
-                best_split = [current_text.strip()]
-                for separator in separators:
-                    if separator in current_text:
-                        split_result = [skill.strip() for skill in current_text.split(separator)]
-                        if len(split_result) > len(best_split):
-                            best_split = split_result
-                
-                potential_skills = best_split
+                # Simplified separator processing (temporarily disable advanced logic)
+                if '(cid:127)' in match:
+                    potential_skills = [skill.strip() for skill in match.split('(cid:127)')]
+                else:
+                    potential_skills = [skill.strip() for skill in match.split(',')]
                 for skill in potential_skills:
                     # Clean up skill text (remove extra whitespace, newlines)
                     skill = re.sub(r'\s+', ' ', skill).strip()
@@ -5568,18 +5560,11 @@ class AdvancedDocumentParser:
                 re.search(r'experience|worked|responsible|developed|managed|led', line, re.IGNORECASE)):
                 continue
                 
-            # Look for lines with 3+ separated items that could be skills
-            separators = [',', '(cid:127)', '\u2022', '•', '|', '·', ';']
-            best_items = [line.strip()]
-            
-            # Try each separator and use the one that gives the most splits
-            for separator in separators:
-                if separator in line:
-                    split_result = [item.strip() for item in line.split(separator)]
-                    if len(split_result) > len(best_items):
-                        best_items = split_result
-            
-            comma_items = best_items
+            # Simplified line processing (temporarily disable advanced logic)
+            if '(cid:127)' in line:
+                comma_items = [item.strip() for item in line.split('(cid:127)')]
+            else:
+                comma_items = [item.strip() for item in line.split(',')]
             if len(comma_items) >= 3:
                 tech_count = 0
                 for item in comma_items[:5]:  # Check first 5 items
