@@ -567,24 +567,20 @@ class CVRewriteService:
             },
             'skills': {
                 'template': """
+                Convert these skills into a simple list format. Each skill should be on its own line in the format: "Skill Name (Proficiency Level)"
                 
-                Organize and enhance these skills for maximum impact in the {industry} industry.
-                Create clear categories and indicate proficiency levels.
+                Proficiency levels: Expert, Advanced, Intermediate, Beginner
+                Prioritize skills relevant to the {industry} industry.
 
                 Original Skills:
                 {content}
 
-                Guidelines:
-                1. Group into categories (Technical, Soft Skills, Domain Knowledge)
-                2. Add proficiency levels (Expert, Advanced, Intermediate)
-                3. Prioritize most relevant skills first
-                4. Use industry-standard terminology
-                5. Include both hard and soft skills
-                6. Remove outdated or basic skills
-                7. Ensure ATS compatibility
+                Return ONLY the formatted skills list, one per line. Example format:
+                Python (Advanced)
+                Project Management (Expert)
+                Communication (Advanced)
 
-                Improved Skills:
-                
+                Formatted Skills:
                 """
             }
         }
