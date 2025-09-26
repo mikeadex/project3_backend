@@ -2002,9 +2002,13 @@ class AdvancedDocumentParser:
             
             # Clean up dates
             if dates:
+                # Handle tuple from regex with multiple groups
+                if isinstance(dates, tuple):
+                    dates = dates[0] if dates else ""
                 # Standardize date format
-                dates = dates.replace('–', '-').replace('to', '-').replace('  ', ' ')
-                dates = re.sub(r'\s+', ' ', dates)
+                if isinstance(dates, str):
+                    dates = dates.replace('–', '-').replace('to', '-').replace('  ', ' ')
+                    dates = re.sub(r'\s+', ' ', dates)
             
             # Extract company
             company_patterns = [
@@ -3113,7 +3117,10 @@ class AdvancedDocumentParser:
                             # This is likely part of a date range
                             date_match = re.search(r'TO\s*\n?((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\s+to\s+(?:Current|Present|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}))', entry.get("company"))
                             if date_match:
-                                entry["dates"] = date_match.group(1).replace("to", "-")
+                                date_val = date_match.group(1)
+                                if isinstance(date_val, tuple):
+                                    date_val = date_val[0] if date_val else ""
+                                entry["dates"] = str(date_val).replace("to", "-")
                                 entry["company"] = ""
                                 entry_cleaned = True
                         
@@ -3740,7 +3747,10 @@ class AdvancedDocumentParser:
             return skills
         else:
             # Paragraph format - split by commas or similar separators
-            skills_text = section_text.replace('\n', ' ')
+            # Handle potential tuple from regex groups
+            if isinstance(section_text, tuple):
+                section_text = section_text[0] if section_text else ""
+            skills_text = str(section_text).replace('\n', ' ')
             skills = []
             for skill in re.split(r'[,;]|\s{2,}', skills_text):
                 skill = skill.strip()
@@ -3834,7 +3844,10 @@ class AdvancedDocumentParser:
         if date_match:
             certification['date'] = date_match.group().strip()
             # Remove date from the name
-            name = text.replace(certification['date'], '').strip()
+            cert_date = certification['date']
+            if isinstance(cert_date, tuple):
+                cert_date = cert_date[0] if cert_date else ""
+            name = text.replace(str(cert_date), '').strip()
             name = re.sub(r'\s*[-–]\s*$', '', name)  # Remove trailing dash
             certification['name'] = name.strip()
         else:
@@ -4944,13 +4957,22 @@ class AdvancedDocumentParser:
                     description = block
                     
                     if entry.get("dates"):
-                        description = description.replace(entry["dates"], "", 1)
+                        dates_val = entry["dates"]
+                        if isinstance(dates_val, tuple):
+                            dates_val = dates_val[0] if dates_val else ""
+                        description = description.replace(str(dates_val), "", 1)
                     
                     if entry.get("title"):
-                        description = description.replace(entry["title"], "", 1)
+                        title_val = entry["title"]
+                        if isinstance(title_val, tuple):
+                            title_val = title_val[0] if title_val else ""
+                        description = description.replace(str(title_val), "", 1)
                     
                     if entry.get("company"):
-                        description = description.replace(entry["company"], "", 1)
+                        company_val = entry["company"]
+                        if isinstance(company_val, tuple):
+                            company_val = company_val[0] if company_val else ""
+                        description = description.replace(str(company_val), "", 1)
                     
                     # Clean up description - remove common phrases that might remain
                     description = re.sub(r'(?:at|with|for)\s+', '', description)
