@@ -25,12 +25,12 @@ class FallbackService:
             self.current_service = "llama"
             self.api_key = llama_api_key
             self.api_url = "https://api.llama-api.com/chat/completions"
-            self.model = "llama-3-8b"
+            self.model = "llama-3.1-8b-instruct"
         elif os.environ.get('MISTRAL_API_KEY'):
             self.current_service = "mistral"
             self.api_key = os.environ.get('MISTRAL_API_KEY')
             self.api_url = "https://api.mistral.ai/v1/chat/completions"
-            self.model = "mistral-medium"
+            self.model = "mistral-small-latest"
         elif os.environ.get('GROQ_API_KEY'):
             self.current_service = "groq"
             self.api_key = os.environ.get('GROQ_API_KEY')
@@ -39,7 +39,78 @@ class FallbackService:
         
         logger.info(f"Initialized FallbackService using {self.current_service} backend")
     
-    async def generate(self, prompt, max_tokens=1000, temperature=0.7):
+    async def _try_llama_models(self, prompt, max_tokens, temperature):
+        """Try different LLaMA model names in order of preference"""
+        llama_models = [
+            "llama-3.1-8b-instruct",
+            "llama3-8b-instruct", 
+            "llama-3-8b-instruct",
+            "llama3-8b",
+            "llama-3-8b"
+        ]
+        
+        for model in llama_models:
+            try:
+                logger.info(f"Trying LLaMA model: {model}")
+                self.model = model
+                
+                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+                payload = {
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": temperature
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        self.api_url,
+                        headers=headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=15)  # Shorter timeout for model testing
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            if 'choices' in result and len(result['choices']) > 0:
+                                logger.info(f"✅ LLaMA model {model} worked successfully")
+                                return result['choices'][0]['message']['content']
+                        else:
+                            error_text = await response.text()
+                            logger.warning(f"LLaMA model {model} failed: {error_text}")
+                            
+            except Exception as e:
+                logger.warning(f"LLaMA model {model} error: {str(e)}")
+                continue
+        
+        # If all models failed, return None to trigger fallback
+        logger.error("All LLaMA models failed")
+        return None
+    
+    def make_custom_request(self, prompt: str, max_tokens: int = 3000) -> str:
+        """
+        Synchronous custom request method for compatibility.
+        Uses asyncio to run the async generate method.
+        """
+        try:
+            # Create a new event loop if none exists
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If event loop is running, use run_in_executor
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, self.generate(prompt, max_tokens))
+                        return future.result(timeout=60)
+                else:
+                    return loop.run_until_complete(self.generate(prompt, max_tokens))
+            except RuntimeError:
+                # No event loop in current thread
+                return asyncio.run(self.generate(prompt, max_tokens))
+        except Exception as e:
+            logger.error(f"Error in make_custom_request: {str(e)}")
+            return self._get_mock_response()
+    
+    async def generate(self, prompt, max_tokens=3000, temperature=0.7):
         """Generate text using available fallback API or mocked responses"""
         logger.info(f"Using fallback service ({self.current_service}) for CV analysis")
         
@@ -56,13 +127,13 @@ class FallbackService:
             
             # Configure provider-specific headers and payload
             if self.current_service == "llama":
-                headers["Authorization"] = f"Bearer {self.api_key}"
-                payload = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                    "temperature": temperature
-                }
+                # Use the smart model testing method for LLaMA
+                result = await self._try_llama_models(prompt, max_tokens, temperature)
+                if result:
+                    return result
+                else:
+                    # All LLaMA models failed, fall back to next service
+                    return await self._try_next_service(prompt, max_tokens, temperature)
             elif self.current_service == "mistral":
                 headers["Authorization"] = f"Bearer {self.api_key}"
                 payload = {
@@ -89,19 +160,13 @@ class FallbackService:
                     self.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=60)  # Longer timeout for CV analysis
+                    timeout=aiohttp.ClientTimeout(total=30)  # Reasonable timeout for CV analysis
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
                         
-                        # Handle provider-specific response formats
-                        if self.current_service == "llama":
-                            if 'choices' in result and len(result['choices']) > 0:
-                                return result['choices'][0]['message']['content']
-                            else:
-                                logger.warning(f"Unexpected Llama API response format: {result}")
-                                return self._get_mock_response()
-                        elif 'choices' in result and len(result['choices']) > 0:
+                        # Handle provider-specific response formats  
+                        if 'choices' in result and len(result['choices']) > 0:
                             return result['choices'][0]['message']['content']
                         else:
                             logger.warning(f"Unexpected {self.current_service} API response format: {result}")
@@ -126,7 +191,7 @@ class FallbackService:
                 self.current_service = "mistral"
                 self.api_key = os.environ.get('MISTRAL_API_KEY')
                 self.api_url = "https://api.mistral.ai/v1/chat/completions"
-                self.model = "mistral-medium"
+                self.model = "mistral-small-latest"
                 return await self.generate(prompt, max_tokens, temperature)
             # Try Groq next if Mistral not available
             elif os.environ.get('GROQ_API_KEY'):

@@ -198,12 +198,15 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 parsed_cv.save(update_fields=['status', 'error_message'])
                 return
             
-            # Parse the CV using intelligent service selection (DeepSeek → LLM → Traditional)
+            # Parse the CV using ENHANCED intelligent service selection (LLaMA → DeepSeek → Traditional)
             try:
-                # Use AdvancedDocumentParser which has proper fallback logic
+                # Use AdvancedDocumentParser which includes our ENHANCED LLaMA parser
                 from cv_parser.parsers import AdvancedDocumentParser
                 parser = AdvancedDocumentParser()
+                
+                logger.info(f"🚀 USING ENHANCED PARSER with LLaMA primary method for CV {cv_id}")
                 parsed_data = parser.parse_document(file_path)
+                logger.info(f"✅ Enhanced parsing completed for CV {cv_id}")
                 
                 # Check if we got an error response with fallback data
                 if 'error' in parsed_data:
@@ -217,7 +220,12 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         parsed_cv.parsed_data = parsed_data.get('parsed_data_fallback', {})
                         parsed_cv.processed_at = timezone.now()
                         parsed_cv.processing_time = time.time() - start_time
-                        parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time', 'error_message'])
+                        
+                        # Clear cached analysis data when new CV data is parsed
+                        parsed_cv.analysis_data = None
+                        parsed_cv.analysis_date = None
+                        
+                        parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time', 'error_message', 'analysis_data', 'analysis_date'])
                         logger.info(f"ParsedCV {cv_id} processing completed with errors in {parsed_cv.processing_time:.2f} seconds")
                         return
                     else:
@@ -229,7 +237,12 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 parsed_cv.status = 'completed'
                 parsed_cv.processed_at = timezone.now()
                 parsed_cv.processing_time = time.time() - start_time
-                parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time'])
+                
+                # Clear cached analysis data when new CV data is parsed
+                parsed_cv.analysis_data = None
+                parsed_cv.analysis_date = None
+                
+                parsed_cv.save(update_fields=['parsed_data', 'status', 'processed_at', 'processing_time', 'analysis_data', 'analysis_date'])
                 logger.info(f"ParsedCV {cv_id} processing completed successfully in {parsed_cv.processing_time:.2f} seconds")
             except Exception as parse_error:
                 logger.error(f"Error parsing CV: {str(parse_error)}")
@@ -288,6 +301,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 parsed_cv.parsed_data = parsed_data
                 parsed_cv.status = 'completed'
                 parsed_cv.processed_at = timezone.now()
+                
+                # Clear cached analysis data when new CV data is parsed
+                parsed_cv.analysis_data = None
+                parsed_cv.analysis_date = None
+                
                 parsed_cv.save()
                 logger.info(f"ParsedCV record {parsed_cv_id} updated - Status: completed")
                 
@@ -406,11 +424,15 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 except:
                     return None
             
-            # Create experiences
+            # Create experiences  
             experiences = parsed_data.get('experience', [])
-            logger.info(f"DEBUG: Processing {len(experiences)} experiences from parsed data")
+            logger.info(f"🔍 ENHANCED PARSER: Processing {len(experiences)} experiences from parsed data")
             for i, exp_data in enumerate(experiences):
-                logger.info(f"DEBUG: Experience {i}: {exp_data}")
+                job_title = exp_data.get('job_title', 'N/A')
+                company = exp_data.get('company', 'N/A')
+                logger.info(f"🔍 ENHANCED PARSER: Experience {i}: \"{job_title}\" at \"{company}\"")
+                if job_title.startswith('Position at'):
+                    logger.warning(f"⚠️ ENHANCED PARSER: Still getting 'Position at' format - parser needs improvement")
             
             for exp_data in experiences:
                 # Parse start/end dates properly
@@ -784,11 +806,123 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             Be specific, accurate, and actionable in your analysis.
             """
             
-            # Make API request for analysis
-            response = service.make_custom_request(prompt)
+            # Make API request for analysis with higher token limit
+            response = service.make_custom_request(prompt, max_tokens=4000)
             
             if 'error' in response:
                 return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Clean the response to remove markdown code block wrappers and common prefixes
+            if isinstance(response, str):
+                cleaned_response = response.strip()
+                
+                # Remove common LLaMA/AI prefixes
+                prefixes_to_remove = [
+                    "Here is the analysis in JSON format:",
+                    "Here's the analysis in JSON format:",
+                    "Here is the JSON analysis:",
+                    "Here's the JSON analysis:",
+                    "Analysis in JSON format:",
+                    "JSON analysis:"
+                ]
+                
+                for prefix in prefixes_to_remove:
+                    if cleaned_response.startswith(prefix):
+                        cleaned_response = cleaned_response[len(prefix):].strip()
+                        break
+                
+                # Remove markdown code block wrappers
+                if cleaned_response.startswith('```json'):
+                    cleaned_response = cleaned_response[7:].strip()  # Remove '```json'
+                elif cleaned_response.startswith('```'):
+                    cleaned_response = cleaned_response[3:].strip()  # Remove '```'
+                    
+                if cleaned_response.endswith('```'):
+                    cleaned_response = cleaned_response[:-3].strip()  # Remove trailing '```'
+                
+            # Try to parse as JSON to validate and convert to dict
+            try:
+                response = json.loads(cleaned_response.strip())
+                logger.info(f"Successfully cleaned and parsed analysis response")
+                
+                # Validate that we have the essential fields
+                if not isinstance(response, dict) or 'overall_score' not in response:
+                    logger.warning("Analysis response missing essential fields, treating as invalid")
+                    response = {
+                        'overall_score': 0,
+                        'strengths': [],
+                        'weaknesses': [],
+                        'improvement_suggestions': [],
+                        'error': 'Incomplete analysis data received'
+                    }
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse cleaned analysis response as JSON: {e}")
+                logger.error(f"Cleaned response: {repr(cleaned_response[:500])}")
+                
+                # Check if response is truncated by looking for imbalanced braces
+                open_braces = cleaned_response.count('{')
+                close_braces = cleaned_response.count('}')
+                
+                if open_braces > close_braces:
+                    logger.warning(f"Analysis response appears truncated (braces: {open_braces} open, {close_braces} close)")
+                    logger.info("Attempting simplified analysis prompt due to truncation...")
+                    
+                    # Try a simplified prompt for basic analysis
+                    simplified_prompt = f"""
+                    Analyze this CV and return a valid JSON response with these fields only:
+                    {{
+                        "overall_score": 7,
+                        "strengths": ["Professional experience", "Educational background", "Clear career progression"],
+                        "weaknesses": ["Could add more quantifiable achievements", "Skills section could be more targeted"],
+                        "improvement_suggestions": ["Add specific metrics and numbers", "Tailor skills to target roles"],
+                        "potential_roles": ["Manager", "Specialist", "Coordinator"]
+                    }}
+                    
+                    CV Content: {json.dumps(cv_data, indent=2)[:2000]}
+                    
+                    Return only valid JSON, no explanatory text:
+                    """
+                    
+                    try:
+                        retry_response = service.make_custom_request(simplified_prompt, max_tokens=1500)
+                        if isinstance(retry_response, str):
+                            retry_cleaned = retry_response.strip()
+                            # Clean the retry response
+                            for prefix in ["Here is the analysis in JSON format:", "Here's the analysis in JSON format:", "JSON analysis:"]:
+                                if retry_cleaned.startswith(prefix):
+                                    retry_cleaned = retry_cleaned[len(prefix):].strip()
+                                    break
+                            
+                            if retry_cleaned.startswith('```'):
+                                retry_cleaned = retry_cleaned[3:].strip()
+                            if retry_cleaned.endswith('```'):
+                                retry_cleaned = retry_cleaned[:-3].strip()
+                                
+                            response = json.loads(retry_cleaned)
+                            logger.info("Successfully parsed simplified analysis response")
+                        else:
+                            raise ValueError("Invalid retry response format")
+                            
+                    except Exception as retry_e:
+                        logger.error(f"Simplified analysis also failed: {retry_e}")
+                        # Provide fallback structured response
+                        response = {
+                            'overall_score': 0,
+                            'strengths': [],
+                            'weaknesses': [],
+                            'improvement_suggestions': [],
+                            'error': 'Analysis response could not be parsed as valid JSON'
+                        }
+                else:
+                    # Provide fallback structured response for non-truncation JSON errors
+                    response = {
+                        'overall_score': 0,
+                        'strengths': [],
+                        'weaknesses': [],
+                        'improvement_suggestions': [],
+                        'error': 'Analysis response could not be parsed as valid JSON'
+                    }
             
             # If we have a parsed_cv, store the analysis results
             if parser_type == 'parsed_cv' and parsed_cv:
@@ -1428,6 +1562,53 @@ def analyze_cv(request, pk=None):
         
         if 'error' in response:
             return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Clean the response to remove markdown code block wrappers
+        if isinstance(response, str):
+            # Remove ```json and ``` wrappers if present
+            cleaned_response = response.strip()
+            if cleaned_response.startswith('```json'):
+                cleaned_response = cleaned_response[7:]  # Remove '```json'
+            if cleaned_response.startswith('```'):
+                cleaned_response = cleaned_response[3:]  # Remove '```'
+            if cleaned_response.endswith('```'):
+                cleaned_response = cleaned_response[:-3]  # Remove trailing '```'
+            
+            # Try to parse as JSON to validate and convert to dict
+            try:
+                response = json.loads(cleaned_response.strip())
+                logger.info(f"Successfully cleaned and parsed analysis response")
+                
+                # Validate that we have the essential fields
+                if not isinstance(response, dict) or 'overall_score' not in response:
+                    logger.warning("Analysis response missing essential fields, treating as invalid")
+                    response = {
+                        'overall_score': 0,
+                        'strengths': [],
+                        'weaknesses': [],
+                        'improvement_suggestions': [],
+                        'error': 'Incomplete analysis data received'
+                    }
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse cleaned analysis response as JSON: {e}")
+                logger.error(f"Cleaned response: {repr(cleaned_response[:500])}")
+                
+                # Check if response is truncated by looking for imbalanced braces
+                open_braces = cleaned_response.count('{')
+                close_braces = cleaned_response.count('}')
+                
+                if open_braces > close_braces:
+                    logger.warning(f"Analysis response appears truncated (braces: {open_braces} open, {close_braces} close)")
+                
+                # Provide fallback structured response
+                response = {
+                    'overall_score': 0,
+                    'strengths': [],
+                    'weaknesses': [],
+                    'improvement_suggestions': [],
+                    'error': 'Analysis response could not be parsed as valid JSON'
+                }
         
         # If we have a parsed_cv, store the analysis results
         if parser_type == 'parsed_cv' and parsed_cv:

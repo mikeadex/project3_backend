@@ -922,6 +922,9 @@ class CVRewriteService:
             # Ensure clean database connection
             refresh_db_connection()
             
+            # Improve each section
+            improved_sections = {}
+            
             try:
                 # Extract the actual CV data - check multiple possible locations
                 cv_content = None
@@ -1012,9 +1015,6 @@ class CVRewriteService:
                     }
                     
                     logger.info(f"🎉 [SYNC] 3-Layer CV Rewrite Success: Score {quality_result['quality_score']:.2f}, Approved: {approved}")
-                    logger.info(f"🔍 [SYNC] Final response keys: {list(response.keys())}")
-                    logger.info(f"🔍 [SYNC] Response approved: {response.get('approved')}")
-                    logger.info(f"🔍 [SYNC] Response quality_score: {response.get('quality_score')}")
                     return response
                     
                 except Exception as save_error:
@@ -1054,6 +1054,109 @@ class CVRewriteService:
             logger.error(f"Error creating CV version: {str(e)}")
             return None
             
+                    prompt = self.improvement_prompts['professional_summary']['template'].format(
+                        content=prof_summary,
+                        industry=industry
+                    )
+                    improved_summary = self.deepseek_service.generate_completion_sync(prompt, max_tokens=400)
+                    if improved_summary:
+                        improved_sections['professional_summary'] = improved_summary
+                
+                # Experience sections
+                experiences = cv_content.get('experiences') or cv_content.get('experience') or []
+                if experiences and len(experiences) > 0:
+                    improved_experiences = []
+                    for exp in experiences:
+                        improved_exp = exp.copy()
+                        if 'description' in exp and exp['description']:
+                            prompt = self.improvement_prompts['experience']['template'].format(
+                                content=exp['description'],
+                                industry=industry
+                            )
+                            improved_description = self.deepseek_service.generate_completion_sync(prompt, max_tokens=600)
+                            if improved_description:
+                                improved_exp['description'] = improved_description
+                        improved_experiences.append(improved_exp)
+                    improved_sections['experiences'] = improved_experiences
+                
+                # Skills section
+                skills = cv_content.get('skills', [])
+                if skills and len(skills) > 0:
+                    # Handle skills as list of objects or strings
+                    if isinstance(skills[0], dict):
+                        skills_content = "\n".join([skill.get('name', '') for skill in skills])
+                    else:
+                        skills_content = "\n".join(skills)
+                    prompt = self.improvement_prompts['skills']['template'].format(
+                        content=skills_content,
+                        industry=industry
+                    )
+                    improved_skills_text = self.deepseek_service.generate_completion_sync(prompt, max_tokens=800)
+                    
+                    if improved_skills_text:
+                        # Simple parsing of skills into a list
+                        skill_lines = improved_skills_text.strip().split('\n')
+                        skills = []
+                        for line in skill_lines:
+                            line = line.strip()
+                            if line:
+                                # Try to extract name and level, e.g., "Python (Expert)"
+                                parts = line.split('(')
+                                if len(parts) > 1 and ')' in parts[1]:
+                                    name = parts[0].strip()
+                                    level = parts[1].split(')')[0].strip()
+                                    skills.append({'name': name, 'level': level})
+                                else:
+                                    skills.append({'name': line})
+                        
+                        improved_sections['skills'] = skills
+                
+            except Exception as section_error:
+                logger.error(f"Error improving sections in sync method: {str(section_error)}")
+                # Continue with partial results if we have any
+            
+            # Create new CV version with improved sections
+            try:
+                # Use the synchronous function directly
+                new_cv_id = self._create_cv_version_sync(cv_data, improved_sections, user)
+                
+                return {
+                    'status': 'success',
+                    'message': 'CV rewritten successfully',
+                    'new_cv_id': new_cv_id,
+                    'improved_sections': improved_sections,
+                    'rewritten_cv': improved_sections  # Add a rewritten_cv copy of improved_sections
+                }
+                
+            except Exception as cv_error:
+                logger.error(f"Error creating new CV version in sync method: {str(cv_error)}")
+                
+                return {
+                    'status': 'partial_success' if improved_sections else 'error',
+                    'message': 'Failed to create new CV, but section improvements are available' if improved_sections else 'Failed to improve CV',
+                    'error': str(cv_error),
+                    'improved_sections': improved_sections,
+                    'rewritten_cv': improved_sections  # Add a rewritten_cv copy of improved_sections
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in rewrite_cv_sync: {str(e)}")
+            
+            return {
+                'status': 'error',
+                'message': 'Failed to rewrite CV',
+                'error': str(e),
+                'rewritten_cv': cv_data,  # Return original CV data for fallback
+                'improved_sections': {}
+            }
+            
+    def _create_cv_version_sync(self, cv_data, improved_sections, user):
+        """
+        Synchronous version of _create_cv_version to avoid threading issues
+        """
+        with transaction.atomic():
+            return create_cv_with_sections_sync(user, cv_data, improved_sections)
+
     async def _safely_update_session_with_results(self, session, improved_sections, new_cv_id):
         """Helper method to update session with retry logic"""
         max_retries = 3

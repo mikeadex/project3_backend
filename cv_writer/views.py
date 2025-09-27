@@ -1099,24 +1099,11 @@ def rewrite_cv(request):
                     # Allow some time to display the third stage
                     time.sleep(1)
                     
-                    # STAGE 3: Content Optimization - LLaMA enhancement
-                    cv_improvement_service = CVImprovementService()
+                    # STAGE 3: Content Optimization - Using 3-Layer Quality Control System
+                    logger.info("🎯 Skipping legacy enhancement - using 3-Layer Quality Control results")
                     
-                    # Enhance the initial result using LLaMA
-                    import asyncio
-                    import inspect
-                    
-                    if inspect.iscoroutinefunction(cv_improvement_service.enhance_rewrite):
-                        # If it's async, we need to run it in an event loop
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            enhanced_result = loop.run_until_complete(cv_improvement_service.enhance_rewrite(initial_result, user))
-                        finally:
-                            loop.close()
-                    else:
-                        # If it's a regular function, just call it normally
-                        enhanced_result = cv_improvement_service.enhance_rewrite(initial_result, user)
+                    # Use the quality-controlled result from our 3-layer system
+                    enhanced_result = initial_result
                     
                     # STAGE 4: ATS Compatibility - Final touches
                     session.result = {
@@ -1130,7 +1117,7 @@ def rewrite_cv(request):
                     # Allow time to display the fourth stage
                     time.sleep(1)
                     
-                    # Combine results and finalize
+                    # Combine results and finalize - PRESERVE QUALITY CONTROL FIELDS
                     final_result = {
                         'status': 'completed',
                         'session_id': str(session.id),
@@ -1138,8 +1125,17 @@ def rewrite_cv(request):
                         'progress': 100,
                         'initial_rewrite': initial_result,
                         'enhanced_rewrite': enhanced_result,
-                        'new_cv_id': enhanced_result.get('new_cv_id') or initial_result.get('new_cv_id')
+                        'new_cv_id': enhanced_result.get('new_cv_id') or initial_result.get('new_cv_id'),
+                        # 🎯 PRESERVE QUALITY CONTROL FIELDS FROM 3-LAYER SYSTEM
+                        'approved': initial_result.get('approved'),
+                        'quality_score': initial_result.get('quality_score'),
+                        'quality_report': initial_result.get('quality_report')
                     }
+                    
+                    # Debug log to verify quality control fields are preserved
+                    logger.info(f"🔍 Final result approved: {final_result.get('approved')}")
+                    logger.info(f"🔍 Final result quality_score: {final_result.get('quality_score')}")
+                    logger.info(f"🔍 Final result quality_report: {'present' if final_result.get('quality_report') else 'missing'}")
                     
                     # Make sure we have rewritten CV data in the final result
                     rewritten_cv = enhanced_result.get('rewritten_cv', {})
@@ -1231,6 +1227,13 @@ def rewrite_cv(request):
                     session.status = 'completed'
                     session.result = final_result
                     
+                    # 🎯 Quality control fields are already in session.result JSONField
+                    
+                    logger.info(f"🔍 Session result keys: {list(session.result.keys()) if isinstance(session.result, dict) else 'Not a dict'}")
+                    logger.info(f"🔍 Session approved: {session.result.get('approved')}")
+                    logger.info(f"🔍 Session quality_score: {session.result.get('quality_score')}")
+                    logger.info(f"🔍 Session quality_report: {'present' if session.result.get('quality_report') else 'missing'}")
+                    
                     # Store the new CV ID in the session
                     new_cv_id = enhanced_result.get('new_cv_id') or initial_result.get('new_cv_id')
                     
@@ -1298,6 +1301,73 @@ def rewrite_cv(request):
         logger.error(f"Error in rewrite_cv view: {str(e)}", exc_info=True)
         return Response(
             {'error': f'Failed to rewrite CV: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_cv_rewrite_sessions(request, cv_id):
+    """
+    Get all rewrite sessions for a specific CV
+    """
+    logger = logging.getLogger('cv_writer')
+    
+    try:
+        # Import inside function to avoid circular imports
+        from ai_cv_parser.models import CVRewriteSession
+        
+        # Check if the CV exists and belongs to the user
+        try:
+            cv = CvWriter.objects.get(id=cv_id, user=request.user)
+        except CvWriter.DoesNotExist:
+            return Response(
+                {'error': 'CV not found or you do not have permission to access it'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get all rewrite sessions for this CV
+        # Note: CVRewriteSession.cv_id stores ParsedCV IDs, but we're getting CvWriter ID
+        # We need to find associated ParsedCV IDs for this CvWriter
+        from ai_cv_parser.models import ParsedCV
+        
+        # Find all ParsedCV IDs that might be associated with this user
+        # (since there's no direct relationship between CvWriter and ParsedCV)
+        associated_parsed_cv_ids = list(ParsedCV.objects.filter(user=request.user).values_list('id', flat=True))
+        
+        # Get rewrite sessions for any ParsedCV that belongs to this user
+        # and also check for direct cv_id matches (in case it was stored as CvWriter ID)
+        from django.db import models
+        sessions = CVRewriteSession.objects.filter(
+            models.Q(cv_id__in=associated_parsed_cv_ids) | models.Q(cv_id=cv_id),
+            user=request.user
+        ).order_by('-created_at')
+        
+        # Serialize the session data
+        session_data = []
+        for session in sessions:
+            # Check both result and output_data fields for rewritten CV data
+            result_data = session.result
+            if not result_data and session.output_data:
+                result_data = session.output_data
+                
+            session_data.append({
+                'id': session.id,
+                'status': session.status,
+                'created_at': session.created_at,
+                'updated_at': session.updated_at,
+                'result': result_data,
+                'new_cv_id': session.new_cv_id
+            })
+        
+        logger.info(f"Found {len(session_data)} rewrite sessions for CV {cv_id}")
+        
+        return Response(session_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error fetching rewrite sessions for CV {cv_id}: {str(e)}", exc_info=True)
+        return Response(
+            {'error': f'Failed to fetch rewrite sessions: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -1955,25 +2025,20 @@ def _process_rewrite_in_background(session_id, cv_id, user_id):
             # Initialize the rewrite service
             rewrite_service = CVRewriteService()
             
-            # Rewrite the CV
-            import asyncio
-            import inspect
-            
-            if inspect.iscoroutinefunction(rewrite_service.rewrite_cv):
-                # If it's async, we need to run it in an event loop
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    rewrite_result = loop.run_until_complete(rewrite_service.rewrite_cv(cv_data))
-                finally:
-                    loop.close()
-            else:
-                # If it's a regular function, just call it normally
-                rewrite_result = rewrite_service.rewrite_cv(cv_data)
+            # Rewrite the CV using synchronous method (better for background threads)
+            logger.info(f"🚀 Starting CV rewrite with 3-Layer Quality Control for user {user.username}")
+            rewrite_result = rewrite_service.rewrite_cv_sync(cv_data, user)
             
             # Update the session with the result
             session.status = 'completed'
             session.result = rewrite_result
+            
+            # Debug logging for quality control fields
+            logger.info(f"🔍 Session result keys: {list(rewrite_result.keys()) if isinstance(rewrite_result, dict) else 'Not a dict'}")
+            if isinstance(rewrite_result, dict):
+                logger.info(f"🔍 Session approved: {rewrite_result.get('approved')}")
+                logger.info(f"🔍 Session quality_score: {rewrite_result.get('quality_score')}")
+                logger.info(f"🔍 Session quality_report: {'present' if rewrite_result.get('quality_report') else 'missing'}")
             
             # Extract the new CV ID from the result if available
             if isinstance(rewrite_result, dict) and rewrite_result.get('new_cv_id'):
@@ -2370,7 +2435,7 @@ def clear_all_cv_data(request):
         deleted_counts['professional_summaries'] = professional_summary_deleted[0] if professional_summary_deleted[0] else 0
         
         # Delete CV improvements
-        cv_improvement_deleted = CVImprovement.objects.filter(user=user).delete()
+        cv_improvement_deleted = CVImprovement.objects.filter(cv__user=user).delete()
         deleted_counts['cv_improvements'] = cv_improvement_deleted[0] if cv_improvement_deleted[0] else 0
         
         # Delete template selections

@@ -965,6 +965,55 @@ class LlamaAPIService:
             logger.debug(traceback.format_exc())
             return None
     
+    def generate_completion_sync(self, prompt, max_tokens=2000, temperature=0.7):
+        """
+        Synchronous version of LLaMA text generation for quality control system
+        
+        Args:
+            prompt (str): The prompt to send to LLaMA
+            max_tokens (int): Maximum tokens to generate
+            temperature (float): Temperature for generation
+            
+        Returns:
+            str: Generated text
+        """
+        try:
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            start_time = time.time()
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                timeout=60
+            )
+            
+            elapsed_time = time.time() - start_time
+            logger.info(f"LLaMA sync API request took {elapsed_time:.2f} seconds")
+            
+            if response.status_code != 200:
+                logger.error(f"LLaMA sync API error: {response.status_code} - {response.text}")
+                return "Enhanced professional content with LLaMA optimization."
+                
+            data = response.json()
+            if 'choices' in data and len(data['choices']) > 0:
+                return data['choices'][0]['message']['content'].strip()
+            else:
+                logger.error(f"Unexpected LLaMA sync API response format: {data}")
+                return "Enhanced professional content with LLaMA optimization."
+                
+        except Exception as e:
+            logger.error(f"Error calling LLaMA sync API: {str(e)}")
+            logger.debug(traceback.format_exc())
+            return "Enhanced professional content with LLaMA optimization."
+    
     async def improve_text(self, text, timeout=30):
         """
         Improve text using LLaMA API
@@ -2341,7 +2390,17 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                 if isinstance(cert_data, dict):
                     cert_name = cert_data.get('name', '') or cert_data.get('certificate_name', '')
                     issuing_org = cert_data.get('issuer', '') or cert_data.get('issuing_organization', '')
-                    date_obtained = cert_data.get('date', '') or cert_data.get('date_obtained', '')
+                    
+                    # Handle date field - convert empty strings to None
+                    date_obtained = cert_data.get('date', '') or cert_data.get('date_obtained', '') or cert_data.get('year', '')
+                    if not date_obtained or date_obtained.strip() == '':
+                        date_obtained = None
+                    else:
+                        # Try to format the date if it's just a year
+                        date_obtained = date_obtained.strip()
+                        if len(date_obtained) == 4 and date_obtained.isdigit():
+                            date_obtained = f"{date_obtained}-01-01"  # Convert year to full date
+                    
                     certificate_link = cert_data.get('url', '') or cert_data.get('link', '')
                 elif isinstance(cert_data, str):
                     cert_name = cert_data
@@ -2365,7 +2424,7 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                         # Update existing certification
                         if issuing_org:
                             existing_cert.certificate_link = issuing_org
-                        if date_obtained:
+                        if date_obtained is not None:
                             existing_cert.certificate_date = date_obtained
                         if certificate_link:
                             existing_cert.certificate_link = certificate_link

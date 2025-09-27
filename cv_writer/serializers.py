@@ -81,12 +81,9 @@ class SkillSerializer(serializers.ModelSerializer):
         }
 
 class LanguageSerializer(serializers.ModelSerializer):
-    language = serializers.CharField(source='language_name')
-    proficiency = serializers.CharField(source='language_level')
-
     class Meta:
         model = Language
-        fields = ['id', 'language', 'proficiency', 'is_custom', 'created_at', 'updated_at']
+        fields = ['id', 'language', 'proficiency', 'created_at', 'updated_at']
 
 class CertificationSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='certificate_name')

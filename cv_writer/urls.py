@@ -29,7 +29,8 @@ urlpatterns = [
     path('cv/clear-all/', views.clear_all_cv_data, name='clear-all-cv-data'),
     path('cv/<int:cv_id>/detail/', views.get_cv, name='get_cv'),
     path('cv/<int:cv_id>/', views.get_cv, name='get_cv_short'),  # Backward compatibility
-    path('cv/<int:cv_id>/improve/', views.improve_cv, name='improve-cv'),  
+    path('cv/<int:cv_id>/improve/', views.improve_cv, name='improve-cv'),
+    path('cv/<int:cv_id>/rewrite-sessions/', views.get_cv_rewrite_sessions, name='get-cv-rewrite-sessions'),  
 
     # Section endpoints
     path('professional-summary/', views.ProfessionalSummaryListCreate.as_view(), name='professional-summary-list-create'),
