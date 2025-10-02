@@ -30,8 +30,8 @@ DEEPSEEK_TIMEOUT = int(os.getenv('DEEPSEEK_TIMEOUT', 20))  # Default to 20 secon
 
 # LLaMA API Configuration
 LLAMA_API_KEY = os.getenv('LLAMA_API_KEY')
-LLAMA_API_URL = os.getenv('LLAMA_API_URL', 'https://api.llama.cloud/v1/chat/completions')
-LLAMA_MODEL = os.getenv('LLAMA_MODEL', 'llama-3-70b-instruct')
+LLAMA_API_URL = os.getenv('LLAMA_API_URL', 'https://api.llama-api.com/chat/completions')
+LLAMA_MODEL = os.getenv('LLAMA_MODEL', 'llama3-8b-instruct')
 
 # Stripe API Configuration
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
