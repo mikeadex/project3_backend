@@ -703,6 +703,149 @@ class CVRewriteService:
             },
         }
 
+    def _filter_work_experience_from_education(
+        self, cv_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Filter out work experience entries that are wrongly placed in education array.
+        Also moves certifications to certifications array.
+
+        Returns: Cleaned CV content with work experience removed from education
+        """
+        if not cv_content or not isinstance(cv_content.get("education"), list):
+            return cv_content
+
+        logger.info(
+            f"🔍 Filtering education array: {len(cv_content['education'])} entries"
+        )
+
+        cleaned_education = []
+        moved_certifications = []
+        skipped_work_experience = 0
+
+        # Job title keywords that indicate work experience
+        job_title_keywords = [
+            "manager",
+            "analyst",
+            "officer",
+            "director",
+            "coordinator",
+            "specialist",
+            "consultant",
+            "administrator",
+            "executive",
+            "developer",
+            "engineer",
+            "designer",
+            "technician",
+            "supervisor",
+            "assistant",
+            "associate",
+            "lead",
+            "senior",
+            "junior",
+            "principal",
+            "founder",
+            "co-founder",
+            "ceo",
+            "cto",
+            "cfo",
+            "president",
+        ]
+
+        # Certification keywords
+        cert_keywords = [
+            "bootcamp",
+            "certification",
+            "certificate",
+            "training",
+            "course",
+            "workshop",
+            "l3 diploma",
+            "l4 diploma",
+            "l5 diploma",
+        ]
+
+        # Known certification providers
+        cert_providers = [
+            "code institute",
+            "coursera",
+            "udemy",
+            "linkedin learning",
+            "ilx group",
+            "waes",
+            "general assembly",
+        ]
+
+        for edu_entry in cv_content["education"]:
+            degree = edu_entry.get("degree", "").lower()
+            school = (
+                edu_entry.get("school") or edu_entry.get("institution") or ""
+            ).lower()
+
+            # Check if it's work experience
+            is_job_title = any(keyword in degree for keyword in job_title_keywords)
+            has_degree_word = any(
+                word in degree
+                for word in [
+                    "degree",
+                    "diploma",
+                    "bachelor",
+                    "master",
+                    "phd",
+                    "bsc",
+                    "msc",
+                ]
+            )
+
+            if is_job_title and not has_degree_word:
+                skipped_work_experience += 1
+                logger.warning(f"🚨 Filtering work experience from education: {degree}")
+                continue
+
+            # Check if it's a certification
+            is_cert = any(keyword in degree for keyword in cert_keywords)
+            is_cert_provider = any(provider in school for provider in cert_providers)
+
+            # Check if it's a formal degree
+            is_formal_degree = any(
+                word in degree
+                for word in ["bachelor", "master", "phd", "bsc", "msc", "ba", "ma"]
+            )
+
+            if (is_cert or is_cert_provider) and not is_formal_degree:
+                moved_certifications.append(edu_entry)
+                logger.info(f"📜 Moving to certifications: {degree}")
+                continue
+
+            # This is legitimate education
+            cleaned_education.append(edu_entry)
+
+        # Update the education array
+        cv_content["education"] = cleaned_education
+
+        # Add moved certifications to certifications array
+        if moved_certifications:
+            if "certifications" not in cv_content:
+                cv_content["certifications"] = []
+            elif not isinstance(cv_content["certifications"], list):
+                cv_content["certifications"] = []
+
+            for cert in moved_certifications:
+                cert_obj = {
+                    "name": cert.get("degree", ""),
+                    "issuer": cert.get("school") or cert.get("institution") or "",
+                    "date": cert.get("end_date") or cert.get("start_date") or "",
+                }
+                cv_content["certifications"].append(cert_obj)
+
+        logger.info(
+            f"✅ Education filtering complete: {len(cleaned_education)} education, "
+            f"{len(moved_certifications)} certifications, {skipped_work_experience} work experiences skipped"
+        )
+
+        return cv_content
+
     @ensure_database_connection
     async def rewrite_cv(self, cv_data: Dict[str, Any], user: User) -> Dict[str, Any]:
         """
@@ -785,6 +928,12 @@ class CVRewriteService:
 
             # Extract improved content and quality metrics
             improved_content = quality_result["content"]
+
+            # 🚨 CRITICAL: Filter work experience from education array before returning
+            improved_content = self._filter_work_experience_from_education(
+                improved_content
+            )
+
             quality_report = quality_result["quality_report"]
             approved = quality_result["approved"]
 

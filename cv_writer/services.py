@@ -2379,6 +2379,167 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
 
     # Save education data (if present)
     try:
+        # Helper function to detect if an education entry is actually a certification
+        def is_certification_entry(edu_data):
+            """
+            Determine if an education entry is actually a certification/bootcamp
+            Returns True if it should be in certifications, False if legitimate education
+            """
+            degree = edu_data.get("degree", "").lower()
+            institution = edu_data.get("institution", "").lower()
+            school = edu_data.get("school", "").lower()
+            school_name = edu_data.get("school_name", "").lower()
+            field = edu_data.get("field", "").lower()
+            field_of_study = edu_data.get("field_of_study", "").lower()
+
+            # 🚨 CRITICAL: Check if this is actually work experience misplaced in education
+            # Work experience typically has job titles (Manager, Analyst, Officer, etc.)
+            # without "degree" in the degree field
+            job_title_keywords = [
+                "manager",
+                "analyst",
+                "officer",
+                "director",
+                "coordinator",
+                "specialist",
+                "consultant",
+                "administrator",
+                "executive",
+                "developer",
+                "engineer",
+                "designer",
+                "technician",
+                "supervisor",
+                "assistant",
+                "associate",
+                "lead",
+                "senior",
+                "junior",
+                "principal",
+                "founder",
+                "co-founder",
+                "ceo",
+                "cto",
+                "cfo",
+                "president",
+                "vice president",
+            ]
+
+            # Check if degree field contains job title keywords but not degree keywords
+            is_job_title = any(keyword in degree for keyword in job_title_keywords)
+            has_degree_word = any(
+                word in degree
+                for word in [
+                    "degree",
+                    "diploma",
+                    "bachelor",
+                    "master",
+                    "phd",
+                    "certificate",
+                    "certification",
+                ]
+            )
+
+            if is_job_title and not has_degree_word:
+                logger.warning(
+                    f"⚠️ WORK EXPERIENCE DETECTED in education: '{degree}' - This should NOT be in education!"
+                )
+                # This is work experience, not education or certification
+                # Return False to skip it entirely (it shouldn't be saved as education)
+                return "SKIP_WORK_EXPERIENCE"
+
+            # Combine all institution names
+            all_institutions = f"{institution} {school} {school_name}".lower()
+            all_fields = f"{field} {field_of_study}".lower()
+
+            # Keywords that indicate certification, not formal education
+            cert_keywords = [
+                "bootcamp",
+                "certification",
+                "certificate",
+                "training",
+                "course",
+                "workshop",
+                "program",
+                "diploma level",
+                "l3 diploma",
+                "l4 diploma",
+                "l5 diploma",
+                "nvq",
+            ]
+
+            # Institutions that offer certifications, not degrees
+            cert_institutions = [
+                "code institute",
+                "coursera",
+                "udemy",
+                "linkedin learning",
+                "pluralsight",
+                "udacity",
+                "edx",
+                "codecademy",
+                "freecodecamp",
+                "google",
+                "microsoft",
+                "aws",
+                "ibm",
+                "cisco",
+                "oracle",
+                "waes",
+                "ilx group",
+                "skillsoft",
+                "general assembly",
+            ]
+
+            # Check if degree name contains certification keywords
+            for keyword in cert_keywords:
+                if keyword in degree or keyword in all_fields:
+                    logger.info(
+                        f"🔍 Detected certification (keyword '{keyword}'): {degree}"
+                    )
+                    return True
+
+            # Check if institution is known certification provider
+            for provider in cert_institutions:
+                if provider in all_institutions:
+                    logger.info(
+                        f"🔍 Detected certification (provider '{provider}'): {degree} from {all_institutions}"
+                    )
+                    return True
+
+            # Check if it's a formal degree (these should stay in education)
+            formal_degrees = [
+                "bachelor",
+                "master",
+                "phd",
+                "doctorate",
+                "mba",
+                "bsc",
+                "msc",
+                "ba",
+                "ma",
+                "beng",
+                "meng",
+                "associate of",
+                "doctor of",
+            ]
+
+            for formal in formal_degrees:
+                if formal in degree:
+                    logger.info(f"✅ Confirmed formal education: {degree}")
+                    return False
+
+            # If degree contains educational words, treat as education
+            if any(word in degree for word in ["degree", "diploma"]):
+                logger.info(
+                    f"✅ Contains degree/diploma keyword, treating as education: {degree}"
+                )
+                return False
+
+            # If we can't determine and it's not a job title, treat as certification to be safe
+            logger.info(f"⚠️ Uncertain, treating as certification: {degree}")
+            return True
+
         if "education" in rewritten_cv_data and isinstance(
             rewritten_cv_data["education"], list
         ):
@@ -2386,10 +2547,33 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                 f"Processing {len(rewritten_cv_data['education'])} education items"
             )
 
+            # Track certifications found in education
+            misplaced_certifications = []
+            work_experience_in_education_count = 0
+
             for edu_data in rewritten_cv_data["education"]:
                 # Log the education data for debugging
                 logger.info(f"Processing education data: {edu_data}")
 
+                # Check if this is actually a certification or work experience
+                classification = is_certification_entry(edu_data)
+
+                if classification == "SKIP_WORK_EXPERIENCE":
+                    # This is work experience wrongly placed in education - skip it entirely
+                    work_experience_in_education_count += 1
+                    logger.error(
+                        f"🚨 SKIPPING work experience in education: {edu_data.get('degree')} at {edu_data.get('institution') or edu_data.get('school')}"
+                    )
+                    continue
+                elif classification is True:
+                    # Move to certifications instead
+                    misplaced_certifications.append(edu_data)
+                    logger.info(
+                        f"Moving '{edu_data.get('degree')}' from education to certifications"
+                    )
+                    continue
+
+                # This is legitimate education - process normally
                 # Extract necessary fields with defaults
                 school_name = edu_data.get("school_name", "")
 
@@ -2481,6 +2665,16 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
                     logger.error(
                         f"Error processing education entry: {str(inner_e)}, Data: {edu_data}"
                     )
+
+            # Log summary of what was filtered
+            if work_experience_in_education_count > 0:
+                logger.warning(
+                    f"🚨 FILTERED OUT {work_experience_in_education_count} work experience entries from education section!"
+                )
+            logger.info(
+                f"Education processing complete: Skipped {work_experience_in_education_count} work experiences, "
+                f"moved {len(misplaced_certifications)} certifications"
+            )
     except Exception as e:
         logger.error(f"Error processing education section: {str(e)}")
 
@@ -2694,14 +2888,41 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
     except Exception as e:
         logger.error(f"Error processing languages section: {str(e)}")
 
-    # Save certifications data (if present)
+    # Save certifications data (if present) - including misplaced ones from education
     try:
+        certifications_list = []
+
+        # Get regular certifications
         if "certifications" in rewritten_cv_data and isinstance(
             rewritten_cv_data["certifications"], list
         ):
-            logger.info(f"Processing certifications data")
+            certifications_list.extend(rewritten_cv_data["certifications"])
 
-            for cert_data in rewritten_cv_data["certifications"]:
+        # Add misplaced certifications from education (if any were found)
+        if "misplaced_certifications" in locals() and misplaced_certifications:
+            logger.info(
+                f"Adding {len(misplaced_certifications)} misplaced certifications from education"
+            )
+            for edu_cert in misplaced_certifications:
+                # Convert education format to certification format
+                cert_converted = {
+                    "name": edu_cert.get("degree", "Unknown Certification"),
+                    "issuer": edu_cert.get("institution")
+                    or edu_cert.get("school")
+                    or edu_cert.get("school_name", ""),
+                    "date": edu_cert.get("end_date", None),
+                }
+                certifications_list.append(cert_converted)
+                logger.info(
+                    f"Converted education to certification: {cert_converted['name']} from {cert_converted['issuer']}"
+                )
+
+        if certifications_list:
+            logger.info(
+                f"Processing {len(certifications_list)} total certifications (including {len(misplaced_certifications) if 'misplaced_certifications' in locals() else 0} recovered from education)"
+            )
+
+            for cert_data in certifications_list:
                 # Extract certification details
                 if isinstance(cert_data, dict):
                     cert_name = cert_data.get("name", "") or cert_data.get(

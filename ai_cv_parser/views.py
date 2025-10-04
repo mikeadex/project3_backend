@@ -2917,10 +2917,63 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 """
                 Determine if an education entry is actually a certification/bootcamp
                 Returns True if it should be in certifications, False if legitimate education
+                Returns "SKIP_WORK_EXPERIENCE" if it's work experience wrongly placed
                 """
                 degree = edu_data.get("degree", "").lower()
                 institution = edu_data.get("institution", "").lower()
                 field = edu_data.get("field", "").lower()
+
+                # 🚨 CRITICAL: Check if this is actually work experience misplaced in education
+                job_title_keywords = [
+                    "manager",
+                    "analyst",
+                    "officer",
+                    "director",
+                    "coordinator",
+                    "specialist",
+                    "consultant",
+                    "administrator",
+                    "executive",
+                    "developer",
+                    "engineer",
+                    "designer",
+                    "technician",
+                    "supervisor",
+                    "assistant",
+                    "associate",
+                    "lead",
+                    "senior",
+                    "junior",
+                    "principal",
+                    "founder",
+                    "co-founder",
+                    "ceo",
+                    "cto",
+                    "cfo",
+                    "president",
+                    "vice president",
+                ]
+
+                # Check if degree field contains job title keywords but not degree keywords
+                is_job_title = any(keyword in degree for keyword in job_title_keywords)
+                has_degree_word = any(
+                    word in degree
+                    for word in [
+                        "degree",
+                        "diploma",
+                        "bachelor",
+                        "master",
+                        "phd",
+                        "certificate",
+                        "certification",
+                    ]
+                )
+
+                if is_job_title and not has_degree_word:
+                    logger.warning(
+                        f"⚠️ WORK EXPERIENCE DETECTED in education: '{degree}' - This should NOT be in education!"
+                    )
+                    return "SKIP_WORK_EXPERIENCE"
 
                 # Keywords that indicate certification, not formal education
                 cert_keywords = [
@@ -2999,18 +3052,35 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         logger.info(f"✅ Confirmed formal education: {degree}")
                         return False
 
+                # If degree contains educational words, treat as education
+                if any(word in degree for word in ["degree", "diploma"]):
+                    logger.info(
+                        f"✅ Contains degree/diploma keyword, treating as education: {degree}"
+                    )
+                    return False
+
                 # If we can't determine, assume it's a certification to be safe
                 logger.info(f"⚠️ Uncertain, treating as certification: {degree}")
                 return True
 
-            # Create education entries - but filter out certifications
+            # Create education entries - but filter out certifications and work experience
             education_entries = parsed_data.get("education", [])
             misplaced_certifications = []  # Track certifications found in education
+            work_experience_in_education_count = 0
             actual_education_count = 0
 
             for edu_data in education_entries:
-                # Check if this is actually a certification
-                if is_certification(edu_data):
+                # Check if this is actually a certification or work experience
+                classification = is_certification(edu_data)
+
+                if classification == "SKIP_WORK_EXPERIENCE":
+                    # This is work experience wrongly placed in education - skip it entirely
+                    work_experience_in_education_count += 1
+                    logger.error(
+                        f"🚨 SKIPPING work experience in education: {edu_data.get('degree')} at {edu_data.get('institution')}"
+                    )
+                    continue
+                elif classification is True:
                     # Move to certifications instead
                     misplaced_certifications.append(edu_data)
                     logger.info(
@@ -3075,9 +3145,15 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 )
                 actual_education_count += 1
 
+            # Log summary of what was filtered
+            if work_experience_in_education_count > 0:
+                logger.warning(
+                    f"🚨 FILTERED OUT {work_experience_in_education_count} work experience entries from education section!"
+                )
             logger.info(
                 f"Added {actual_education_count} education entries to CV Writer "
-                f"(filtered out {len(misplaced_certifications)} certifications)"
+                f"(filtered out {len(misplaced_certifications)} certifications, "
+                f"{work_experience_in_education_count} work experiences)"
             )
 
             # Create skills
