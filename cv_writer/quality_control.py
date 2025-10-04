@@ -147,23 +147,27 @@ class WriterAlgorithm:
         try:
             # Try to call the LLM service synchronously
             if hasattr(self.llm_service, "generate_completion_sync"):
+                logger.info("🔧 Using generate_completion_sync method")
                 return self.llm_service.generate_completion_sync(
                     prompt, max_tokens=1000, temperature=0.7
                 )
             elif hasattr(self.llm_service, "generate_with_system_prompt"):
+                logger.info("🔧 Using generate_with_system_prompt method")
                 return self.llm_service.generate_with_system_prompt(prompt)
             elif hasattr(self.llm_service, "generate_response"):
+                logger.info("🔧 Using generate_response method")
                 return self.llm_service.generate_response(prompt)
             else:
                 # Fallback mock response
                 logger.warning(
-                    f"LLM service missing expected methods, using mock response"
+                    f"⚠️ LLM service missing expected methods, using mock response"
                 )
+                logger.warning(f"🔍 Available methods: {dir(self.llm_service)}")
                 return (
                     "Enhanced professional content with industry-specific optimization."
                 )
         except Exception as e:
-            logger.warning(f"LLM service call failed: {str(e)}, using fallback")
+            logger.error(f"❌ LLM service call failed: {str(e)}, using fallback")
             return (
                 "Enhanced professional content with improved formatting and keywords."
             )
@@ -230,6 +234,9 @@ class WriterAlgorithm:
 
     def _generate_summary(self, original_summary: str, industry: str) -> str:
         """Generate professional summary"""
+        logger.info(f"📝 Generating professional summary for {industry} industry")
+        logger.info(f"📄 Original summary: {original_summary[:100]}...")
+
         prompt = f"""
         You are an expert CV writer specializing in ATS-optimized professional summaries. Enhance the following professional summary while STRICTLY preserving the candidate's authentic career field and experience context.
 
@@ -254,7 +261,51 @@ class WriterAlgorithm:
         """
 
         response = self._sync_generate(prompt)
-        return self._clean_response(response)
+        cleaned_response = self._clean_response(response)
+
+        logger.info(f"✨ Generated summary: {cleaned_response[:100]}...")
+
+        # Check if the response is identical to original (AI might return same text)
+        if cleaned_response.strip() == original_summary.strip():
+            logger.warning(
+                "⚠️ Generated summary is identical to original - AI returned unchanged text"
+            )
+
+        return cleaned_response
+
+    def _clean_job_title(self, job_title: str, company_name: str) -> str:
+        """Clean job title by removing company information that might be appended"""
+        if not job_title or not company_name:
+            return job_title
+
+        title_lower = job_title.lower()
+        company_lower = company_name.lower()
+
+        # Common separators that might indicate company is appended to title
+        separators = [" – ", " - ", " at ", " with ", " for ", " in "]
+
+        for sep in separators:
+            if sep in title_lower:
+                parts = title_lower.split(sep)
+                # Check if the part after separator matches company
+                if len(parts) >= 2:
+                    potential_company = parts[-1].strip()
+                    if (
+                        potential_company in company_lower
+                        or company_lower in potential_company
+                    ):
+                        # Remove the company part and preserve original casing
+                        original_parts = job_title.split(sep)
+                        return sep.join(original_parts[:-1]).strip()
+
+        # If no separator found but company appears at end, try to remove it
+        if company_lower in title_lower:
+            # Find the position and remove it
+            idx = title_lower.find(company_lower)
+            if idx > 0:
+                return job_title[:idx].strip()
+
+        return job_title
 
     def _generate_experience(
         self, experiences: List[Dict], industry: str
@@ -589,6 +640,15 @@ class WriterAlgorithm:
         """Clean LLM response and ensure proper bullet point formatting"""
         if not response:
             return ""
+
+        # 🚨 CRITICAL: Remove section headers that LLM adds (e.g., "Professional Summary", "Experience")
+        # This must be done FIRST before other cleaning to preserve content
+        response = re.sub(
+            r"^(Professional Summary|Experience|Skills?|Education):?\s*\n*",
+            "",
+            response,
+            flags=re.IGNORECASE,
+        )
 
         # Remove common LLM response prefixes and unwanted text
         response = re.sub(
