@@ -2912,9 +2912,113 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     )
             logger.info(f"Added {len(experiences)} experiences to CV Writer")
 
-            # Create education entries
+            # Helper function to detect if an education entry is actually a certification
+            def is_certification(edu_data):
+                """
+                Determine if an education entry is actually a certification/bootcamp
+                Returns True if it should be in certifications, False if legitimate education
+                """
+                degree = edu_data.get("degree", "").lower()
+                institution = edu_data.get("institution", "").lower()
+                field = edu_data.get("field", "").lower()
+
+                # Keywords that indicate certification, not formal education
+                cert_keywords = [
+                    "bootcamp",
+                    "certification",
+                    "certificate",
+                    "training",
+                    "course",
+                    "workshop",
+                    "program",
+                    "diploma level",
+                    "l3 diploma",
+                    "l4 diploma",
+                    "l5 diploma",
+                    "nvq",
+                ]
+
+                # Institutions that offer certifications, not degrees
+                cert_institutions = [
+                    "code institute",
+                    "coursera",
+                    "udemy",
+                    "linkedin learning",
+                    "pluralsight",
+                    "udacity",
+                    "edx",
+                    "codecademy",
+                    "freecodecamp",
+                    "google",
+                    "microsoft",
+                    "aws",
+                    "ibm",
+                    "cisco",
+                    "oracle",
+                    "waes",
+                    "ilx group",
+                    "skillsoft",
+                    "general assembly",
+                ]
+
+                # Check if degree name contains certification keywords
+                for keyword in cert_keywords:
+                    if keyword in degree or keyword in field:
+                        logger.info(
+                            f"🔍 Detected certification (keyword '{keyword}'): {degree}"
+                        )
+                        return True
+
+                # Check if institution is known certification provider
+                for provider in cert_institutions:
+                    if provider in institution:
+                        logger.info(
+                            f"🔍 Detected certification (provider '{provider}'): {degree} from {institution}"
+                        )
+                        return True
+
+                # Check if it's a formal degree (these should stay in education)
+                formal_degrees = [
+                    "bachelor",
+                    "master",
+                    "phd",
+                    "doctorate",
+                    "mba",
+                    "bsc",
+                    "msc",
+                    "ba",
+                    "ma",
+                    "beng",
+                    "meng",
+                    "associate of",
+                    "doctor of",
+                ]
+
+                for formal in formal_degrees:
+                    if formal in degree:
+                        logger.info(f"✅ Confirmed formal education: {degree}")
+                        return False
+
+                # If we can't determine, assume it's a certification to be safe
+                logger.info(f"⚠️ Uncertain, treating as certification: {degree}")
+                return True
+
+            # Create education entries - but filter out certifications
             education_entries = parsed_data.get("education", [])
+            misplaced_certifications = []  # Track certifications found in education
+            actual_education_count = 0
+
             for edu_data in education_entries:
+                # Check if this is actually a certification
+                if is_certification(edu_data):
+                    # Move to certifications instead
+                    misplaced_certifications.append(edu_data)
+                    logger.info(
+                        f"Moving '{edu_data.get('degree')}' from education to certifications"
+                    )
+                    continue
+
+                # This is legitimate education - process normally
                 # Parse start/end dates properly - provide better defaults for education
                 start_date = parse_date(edu_data.get("start_date", None))
                 end_date = parse_date(edu_data.get("end_date", None))
@@ -2969,8 +3073,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     end_date=end_date,
                     current=edu_data.get("current", False),
                 )
+                actual_education_count += 1
+
             logger.info(
-                f"Added {len(education_entries)} education entries to CV Writer"
+                f"Added {actual_education_count} education entries to CV Writer "
+                f"(filtered out {len(misplaced_certifications)} certifications)"
             )
 
             # Create skills
@@ -3011,8 +3118,23 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 )
             logger.info(f"Added {len(languages)} languages to CV Writer")
 
-            # Create certifications
+            # Create certifications - include both regular certifications AND misplaced ones from education
             certifications = parsed_data.get("certifications", [])
+
+            # Add misplaced certifications that were filtered out from education
+            for edu_cert in misplaced_certifications:
+                # Convert education format to certification format
+                cert_converted = {
+                    "name": edu_cert.get("degree", "Unknown Certification"),
+                    "issuer": edu_cert.get("institution", ""),
+                    "issue_date": edu_cert.get("end_date", None),
+                    "field": edu_cert.get("field", ""),
+                }
+                certifications.append(cert_converted)
+                logger.info(
+                    f"Added misplaced certification: {cert_converted['name']} from {cert_converted['issuer']}"
+                )
+
             for cert_data in certifications:
                 # Handle both string and object formats
                 if isinstance(cert_data, str):
@@ -3043,7 +3165,10 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     certificate_link=certificate_link,
                     certificate_date=issue_date,
                 )
-            logger.info(f"Added {len(certifications)} certifications to CV Writer")
+            logger.info(
+                f"Added {len(certifications)} certifications to CV Writer "
+                f"(including {len(misplaced_certifications)} recovered from education)"
+            )
 
             return Response(
                 {

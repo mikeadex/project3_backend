@@ -992,9 +992,9 @@ class LlamaAPIService:
         self.api_url = os.environ.get(
             "LLAMA_API_URL", "https://api.llama-api.com/chat/completions"
         )
-        self.model = os.environ.get(
-            "LLAMA_MODEL", "llama3-8b-instruct"
-        )  # Can be configured
+        # Valid models for llama-api.com: llama3.1-8b, llama3.1-70b, llama3.1-405b
+        # Ref: https://www.llama-api.com/docs/models
+        self.model = os.environ.get("LLAMA_MODEL", "llama3.1-8b")  # Can be configured
 
         logger.debug(f"LLaMA API URL: {self.api_url}")
         logger.debug(f"LLaMA Model: {self.model}")
