@@ -3,7 +3,7 @@ services:
     name: ella-backend
     env: python
     plan: free
-    branch: main
+    branch: new-main
     buildCommand: "./bin/custom_build.sh"
     startCommand: "./bin/start_gunicorn.sh"
     healthCheckPath: /api/health/
