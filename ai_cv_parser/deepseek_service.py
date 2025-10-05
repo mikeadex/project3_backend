@@ -945,28 +945,38 @@ class DeepSeekService:
 
         tenures = []
         gap_count = 0
-        
+
         logger.info(f"📊 Calculating tenure for {len(experience)} experience entries")
 
         for idx, exp in enumerate(experience):
             if isinstance(exp, dict):
                 start_date = exp.get("start_date", "")
                 end_date = exp.get("end_date", "")
-                
-                logger.debug(f"📊 Experience {idx + 1}: start_date='{start_date}', end_date='{end_date}'")
+
+                logger.debug(
+                    f"📊 Experience {idx + 1}: start_date='{start_date}', end_date='{end_date}'"
+                )
 
                 if start_date and start_date.lower() not in ["n/a", "unknown", ""]:
                     years = self._calculate_tenure_years(start_date, end_date)
                     if years > 0:
                         tenures.append(years)
-                        logger.debug(f"📊 Calculated {years} years for experience {idx + 1}")
+                        logger.debug(
+                            f"📊 Calculated {years} years for experience {idx + 1}"
+                        )
                     else:
-                        logger.warning(f"📊 Experience {idx + 1} calculated 0 years from '{start_date}' to '{end_date}'")
+                        logger.warning(
+                            f"📊 Experience {idx + 1} calculated 0 years from '{start_date}' to '{end_date}'"
+                        )
                 else:
-                    logger.warning(f"📊 Experience {idx + 1} has invalid start_date: '{start_date}'")
+                    logger.warning(
+                        f"📊 Experience {idx + 1} has invalid start_date: '{start_date}'"
+                    )
 
         if not tenures:
-            logger.warning(f"📊 No valid tenures calculated from {len(experience)} experiences")
+            logger.warning(
+                f"📊 No valid tenures calculated from {len(experience)} experiences"
+            )
             return {
                 "average_tenure": "Unable to calculate",
                 "total_experience": "Unable to calculate",
@@ -980,8 +990,10 @@ class DeepSeekService:
 
         # Detect gaps (simplified - roles with very short tenure might indicate gaps)
         gap_count = sum(1 for t in tenures if t < 0.5)
-        
-        logger.info(f"📊 Tenure calculation complete: {len(tenures)} valid roles, avg={avg_tenure:.1f}y, total={total_experience:.1f}y, gaps={gap_count}")
+
+        logger.info(
+            f"📊 Tenure calculation complete: {len(tenures)} valid roles, avg={avg_tenure:.1f}y, total={total_experience:.1f}y, gaps={gap_count}"
+        )
 
         return {
             "average_tenure": f"{avg_tenure:.1f} years",
