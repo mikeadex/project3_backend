@@ -847,3 +847,394 @@ class DeepSeekService:
                     "languages": [],
                 },
             }
+
+    def _calculate_tenure_years(self, start_date: str, end_date: str) -> float:
+        """Calculate years between two dates."""
+        import re
+        from datetime import datetime
+
+        current_year = 2025
+
+        try:
+            # Handle "Present" or "Current" as end date
+            if end_date and any(
+                word in end_date.lower() for word in ["present", "current", "now"]
+            ):
+                end_date_str = str(current_year)
+            else:
+                end_date_str = end_date
+
+            # Extract years from dates
+            start_years = re.findall(r"\b(20\d{2}|19\d{2})\b", str(start_date))
+            end_years = re.findall(r"\b(20\d{2}|19\d{2})\b", str(end_date_str))
+
+            if start_years and end_years:
+                start_year = int(start_years[0])
+                end_year = int(end_years[-1])
+
+                # Extract months if available for more precision
+                months = {
+                    "jan": 1,
+                    "feb": 2,
+                    "mar": 3,
+                    "apr": 4,
+                    "may": 5,
+                    "jun": 6,
+                    "jul": 7,
+                    "aug": 8,
+                    "sep": 9,
+                    "oct": 10,
+                    "nov": 11,
+                    "dec": 12,
+                    "january": 1,
+                    "february": 2,
+                    "march": 3,
+                    "april": 4,
+                    "june": 6,
+                    "july": 7,
+                    "august": 8,
+                    "september": 9,
+                    "october": 10,
+                    "november": 11,
+                    "december": 12,
+                }
+
+                start_month = 6  # Default to middle of year
+                end_month = 6
+
+                for month_name, month_num in months.items():
+                    if month_name in str(start_date).lower():
+                        start_month = month_num
+                        break
+
+                for month_name, month_num in months.items():
+                    if month_name in str(end_date_str).lower():
+                        end_month = month_num
+                        break
+
+                # Calculate years with month precision
+                years_diff = end_year - start_year
+                months_diff = end_month - start_month
+                total_years = years_diff + (months_diff / 12.0)
+
+                return max(0, round(total_years, 1))
+
+            elif start_years:
+                # Only start date available, assume till now
+                start_year = int(start_years[0])
+                return max(0, round(current_year - start_year, 1))
+
+            return 0
+
+        except Exception as e:
+            logger.warning(
+                f"Error calculating tenure from '{start_date}' to '{end_date}': {e}"
+            )
+            return 0
+
+    def _calculate_average_tenure_and_gaps(self, experience: list) -> dict:
+        """Calculate average tenure per role and count employment gaps."""
+        if not experience:
+            return {
+                "average_tenure": "0 years",
+                "total_experience": "0 years",
+                "employment_gaps": 0,
+                "tenure_list": [],
+            }
+
+        tenures = []
+        gap_count = 0
+
+        for exp in experience:
+            if isinstance(exp, dict):
+                start_date = exp.get("start_date", "")
+                end_date = exp.get("end_date", "")
+
+                if start_date and start_date.lower() not in ["n/a", "unknown", ""]:
+                    years = self._calculate_tenure_years(start_date, end_date)
+                    if years > 0:
+                        tenures.append(years)
+
+        if not tenures:
+            return {
+                "average_tenure": "Unable to calculate",
+                "total_experience": "Unable to calculate",
+                "employment_gaps": 0,
+                "tenure_list": [],
+            }
+
+        # Calculate average tenure
+        avg_tenure = sum(tenures) / len(tenures)
+        total_experience = sum(tenures)
+
+        # Detect gaps (simplified - roles with very short tenure might indicate gaps)
+        gap_count = sum(1 for t in tenures if t < 0.5)
+
+        return {
+            "average_tenure": f"{avg_tenure:.1f} years",
+            "total_experience": f"{total_experience:.1f} years",
+            "employment_gaps": gap_count,
+            "tenure_list": [f"{t:.1f} years" for t in tenures],
+        }
+
+    async def analyze_career_trajectory(self, cv_data: dict) -> dict:
+        """
+        Analyze career consistency, role stability, and potential career changes.
+
+        Args:
+            cv_data: Parsed CV data containing experience, education, certifications
+
+        Returns:
+            Dictionary containing career trajectory analysis with scores and insights
+        """
+        try:
+            experience = cv_data.get("experience", [])
+            education = cv_data.get("education", [])
+            certifications = cv_data.get("certifications", [])
+            skills = cv_data.get("skills", [])
+
+            if not experience:
+                return {
+                    "job_consistency": {
+                        "score": 0,
+                        "level": "Insufficient Data",
+                        "insights": ["No work experience provided for analysis"],
+                        "recommendations": [],
+                    },
+                    "role_stability": {
+                        "score": 0,
+                        "level": "Insufficient Data",
+                        "average_tenure": "0 years",
+                        "employment_gaps": 0,
+                        "insights": ["No work experience provided for analysis"],
+                        "flags": [],
+                    },
+                    "career_change_potential": {
+                        "assessment": "Unknown",
+                        "confidence": "Low",
+                        "indicators": [],
+                        "potential_directions": [],
+                        "recommendations": [],
+                    },
+                }
+
+            # Calculate tenure statistics BEFORE sending to AI
+            tenure_stats = self._calculate_average_tenure_and_gaps(experience)
+            logger.info(f"📊 Calculated tenure statistics: {tenure_stats}")
+
+            # Prepare data for AI analysis
+            experience_summary = []
+            for exp in experience:
+                start_date = exp.get("start_date", "Unknown")
+                end_date = exp.get("end_date", "Unknown")
+                tenure = self._calculate_tenure_years(start_date, end_date)
+                tenure_text = f" [{tenure:.1f} years]" if tenure > 0 else ""
+                exp_text = f"- {exp.get('job_title', 'Unknown')} at {exp.get('company', 'Unknown')} ({start_date} - {end_date}){tenure_text}"
+                experience_summary.append(exp_text)
+
+            education_summary = []
+            for edu in education:
+                edu_text = f"- {edu.get('degree', 'Unknown')} in {edu.get('field', 'Unknown')} from {edu.get('school', 'Unknown')} ({edu.get('start_date', '')} - {edu.get('end_date', '')})"
+                education_summary.append(edu_text)
+
+            cert_summary = []
+            for cert in certifications:
+                cert_text = f"- {cert.get('name', 'Unknown')} from {cert.get('issuer', 'Unknown')} ({cert.get('date', 'Unknown')})"
+                cert_summary.append(cert_text)
+
+            skills_text = ", ".join(
+                [
+                    s.get("name", s) if isinstance(s, dict) else str(s)
+                    for s in skills[:20]
+                ]
+            )
+
+            prompt = f"""Analyze this candidate's career trajectory and provide insights on job consistency, role stability, and potential career changes.
+
+WORK EXPERIENCE (with calculated tenure):
+{chr(10).join(experience_summary)}
+
+CALCULATED STATISTICS:
+- Total Experience: {tenure_stats['total_experience']}
+- Average Tenure per Role: {tenure_stats['average_tenure']}
+- Number of Roles: {len(experience)}
+- Employment Gaps/Short Stints: {tenure_stats['employment_gaps']}
+
+EDUCATION:
+{chr(10).join(education_summary) if education_summary else "Not provided"}
+
+CERTIFICATIONS:
+{chr(10).join(cert_summary) if cert_summary else "Not provided"}
+
+SKILLS:
+{skills_text}
+
+IMPORTANT: Use the pre-calculated statistics above for role stability metrics. Do NOT recalculate tenure.
+
+Provide a comprehensive career trajectory analysis in the following JSON format:
+
+{{
+  "job_consistency": {{
+    "score": <number 1-10>,
+    "level": "<High/Moderate/Low>",
+    "insights": [
+      "<specific observation about career path>",
+      "<pattern in industry/role alignment>",
+      "<skill continuity assessment>"
+    ],
+    "recommendations": [
+      "<actionable suggestion for CV presentation>",
+      "<advice for highlighting career progression>"
+    ]
+  }},
+  "role_stability": {{
+    "score": <number 1-10>,
+    "level": "<Stable/Moderate/Unstable>",
+    "average_tenure": "<calculated average time per role>",
+    "employment_gaps": <number>,
+    "insights": [
+      "<observation about tenure lengths>",
+      "<pattern in job changes>",
+      "<assessment of commitment>"
+    ],
+    "flags": [
+      "<potential concern if any, otherwise empty array>"
+    ]
+  }},
+  "career_change_potential": {{
+    "assessment": "<Active Career Change/Career Exploration/Career Growth/Career Stability>",
+    "confidence": "<High/Medium/Low>",
+    "indicators": [
+      "<evidence of career pivot>",
+      "<new skills or certifications>",
+      "<educational shifts>"
+    ],
+    "potential_directions": [
+      "<possible new career path based on skills/education>",
+      "<related field opportunities>"
+    ],
+    "recommendations": [
+      "<advice for career transition if applicable>",
+      "<suggestions for skill development>",
+      "<CV positioning recommendations>"
+    ]
+  }}
+}}
+
+ANALYSIS GUIDELINES:
+1. Job Consistency Score (1-10):
+   - 8-10: Clear progression in same field with aligned skills
+   - 5-7: Related fields with transferable skills
+   - 1-4: Multiple unrelated career changes
+
+2. Role Stability Score (1-10):
+   - 8-10: 2-5 years per role, minimal gaps
+   - 5-7: 1-2 years per role, some gaps
+   - 1-4: Less than 1 year per role, frequent gaps
+
+3. Career Change Assessment:
+   - Active Career Change: Recent certifications + new skills + education in different field
+   - Career Exploration: Some new skills, exploratory certifications
+   - Career Growth: New skills within same industry
+   - Career Stability: Consistent skill development in current field
+
+Return ONLY the JSON object, no additional text."""
+
+            logger.info("🔍 Analyzing career trajectory with DeepSeek")
+
+            response = await self.generate(
+                prompt,
+                max_tokens=2000,
+                temperature=0.3,  # Lower temperature for more consistent analysis
+            )
+
+            # Parse the JSON response
+            try:
+                # Clean the response - remove markdown code blocks if present
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
+                cleaned_response = cleaned_response.strip()
+
+                analysis = json.loads(cleaned_response)
+
+                # Override AI's average_tenure calculation with our accurate calculation
+                if "role_stability" in analysis:
+                    analysis["role_stability"]["average_tenure"] = tenure_stats[
+                        "average_tenure"
+                    ]
+                    analysis["role_stability"]["employment_gaps"] = tenure_stats[
+                        "employment_gaps"
+                    ]
+                    # Add total experience as additional info
+                    analysis["role_stability"]["total_experience"] = tenure_stats[
+                        "total_experience"
+                    ]
+
+                logger.info("✅ Career trajectory analysis completed successfully")
+                logger.info(
+                    f"📊 Final tenure data: avg={tenure_stats['average_tenure']}, total={tenure_stats['total_experience']}"
+                )
+                return analysis
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse career trajectory JSON: {str(e)}")
+                logger.error(f"Response was: {response[:500]}")
+
+                # Return a fallback structure with our calculated values
+                return {
+                    "job_consistency": {
+                        "score": 5,
+                        "level": "Moderate",
+                        "insights": [
+                            "Analysis completed but formatting issue occurred"
+                        ],
+                        "recommendations": ["Review your career progression manually"],
+                    },
+                    "role_stability": {
+                        "score": 5,
+                        "level": "Moderate",
+                        "average_tenure": tenure_stats["average_tenure"],
+                        "total_experience": tenure_stats["total_experience"],
+                        "employment_gaps": tenure_stats["employment_gaps"],
+                        "insights": ["Unable to fully analyze role stability"],
+                        "flags": [],
+                    },
+                    "career_change_potential": {
+                        "assessment": "Unknown",
+                        "confidence": "Low",
+                        "indicators": ["Analysis formatting issue"],
+                        "potential_directions": [],
+                        "recommendations": ["Manual review recommended"],
+                    },
+                }
+
+        except Exception as e:
+            logger.error(f"Error analyzing career trajectory: {str(e)}")
+            logger.error(traceback.format_exc())
+            return {
+                "error": str(e),
+                "job_consistency": {
+                    "score": 0,
+                    "level": "Error",
+                    "insights": [],
+                    "recommendations": [],
+                },
+                "role_stability": {
+                    "score": 0,
+                    "level": "Error",
+                    "insights": [],
+                    "flags": [],
+                },
+                "career_change_potential": {
+                    "assessment": "Error",
+                    "confidence": "Low",
+                    "indicators": [],
+                    "potential_directions": [],
+                    "recommendations": [],
+                },
+            }

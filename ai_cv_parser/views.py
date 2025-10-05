@@ -1105,10 +1105,21 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
         for exp in experience:
             if isinstance(exp, dict):
+                # Try both 'dates' field and 'start_date'/'end_date' fields
                 dates = exp.get("dates", "")
+                start_date = exp.get("start_date", "")
+                end_date = exp.get("end_date", "")
+
                 if dates:
                     # Try to extract years from date ranges
                     years = self._extract_years_from_dates(dates, current_year)
+                    total_years += years
+                elif start_date:
+                    # Use start_date and end_date if available
+                    combined_dates = (
+                        f"{start_date} - {end_date if end_date else 'Present'}"
+                    )
+                    years = self._extract_years_from_dates(combined_dates, current_year)
                     total_years += years
 
         return min(total_years, 50)  # Cap at 50 years
@@ -1236,29 +1247,36 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
         # If years_experience is 0 but we have experience data, try to estimate
         if years_experience == 0 and experience:
-            # Check for current roles (present/current in dates)
+            # Check for current roles (present/current in dates or end_date)
             current_roles = 0
             for exp in experience[:3]:  # Check first 3 experiences
                 if isinstance(exp, dict):
                     dates = exp.get("dates", "").lower()
+                    end_date = exp.get("end_date", "").lower()
+
+                    # Check both 'dates' field and 'end_date' field
+                    check_string = f"{dates} {end_date}".lower()
                     if (
-                        "present" in dates
-                        or "current" in dates
-                        or "n/a - present" in dates
+                        "present" in check_string
+                        or "current" in check_string
+                        or "n/a - present" in check_string
+                        or "now" in check_string
                     ):
                         current_roles += 1
 
             # Estimate experience based on number of roles and titles
             if current_roles > 0:
                 years_experience = max(
-                    2, len(experience) * 1.5
-                )  # Estimate 1.5 years per role
+                    2, len(experience) * 2.0
+                )  # Estimate 2 years per role minimum
             elif len(experience) >= 3:
-                years_experience = 5  # Assume at least 5 years with multiple roles
+                years_experience = max(
+                    6, len(experience) * 2.0
+                )  # At least 6 years with multiple roles
             elif len(experience) >= 2:
-                years_experience = 3  # Assume at least 3 years with multiple roles
+                years_experience = 4  # At least 4 years with 2 roles
             else:
-                years_experience = 1  # Assume at least 1 year
+                years_experience = 2  # At least 2 years with 1 role
 
         # Determine level based on years and titles
         if years_experience >= 15 or any(
@@ -2576,6 +2594,65 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 logger.info(
                     f"ParsedCV {cv_id} processing completed successfully in {parsed_cv.processing_time:.2f} seconds"
                 )
+
+                # Add career trajectory analysis
+                try:
+                    logger.info(
+                        f"🔍 Starting career trajectory analysis for CV {cv_id}"
+                    )
+                    deepseek_service = DeepSeekService()
+
+                    # Run career analysis asynchronously
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        career_analysis = loop.run_until_complete(
+                            deepseek_service.analyze_career_trajectory(parsed_data)
+                        )
+
+                        # Add career analysis to parsed_data
+                        if "error" not in career_analysis:
+                            parsed_cv.parsed_data["career_trajectory"] = career_analysis
+
+                            # Update experience_level with accurate total_experience from career trajectory
+                            if career_analysis.get("role_stability", {}).get(
+                                "total_experience"
+                            ):
+                                total_exp_str = career_analysis["role_stability"][
+                                    "total_experience"
+                                ]
+                                # Extract number from string like "16.9 years"
+                                import re
+
+                                exp_match = re.search(r"(\d+\.?\d*)", total_exp_str)
+                                if exp_match:
+                                    accurate_years = float(exp_match.group(1))
+                                    # Update the years_experience in parsed_data
+                                    if "experience_level" in parsed_cv.parsed_data:
+                                        parsed_cv.parsed_data["experience_level"][
+                                            "years_experience"
+                                        ] = int(round(accurate_years))
+                                        logger.info(
+                                            f"✅ Updated years_experience to {int(round(accurate_years))} from career trajectory"
+                                        )
+
+                            safe_save(parsed_cv, update_fields=["parsed_data"])
+                            logger.info(
+                                f"✅ Career trajectory analysis completed for CV {cv_id}"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ Career analysis returned error: {career_analysis.get('error')}"
+                            )
+                    finally:
+                        loop.close()
+
+                except Exception as career_error:
+                    logger.error(
+                        f"❌ Error in career trajectory analysis: {str(career_error)}"
+                    )
+                    logger.error(traceback.format_exc())
+                    # Don't fail the entire parsing if career analysis fails
             except Exception as parse_error:
                 logger.error(f"Error parsing CV: {str(parse_error)}")
                 parsed_cv.status = "failed"
@@ -2632,6 +2709,56 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 logger.info(
                     f"Successfully parsed CV with DeepSeek for ParsedCV ID {parsed_cv_id}"
                 )
+
+                # Add career trajectory analysis
+                try:
+                    logger.info(
+                        f"🔍 Starting career trajectory analysis for ParsedCV {parsed_cv_id}"
+                    )
+                    career_analysis = loop.run_until_complete(
+                        parser.analyze_career_trajectory(parsed_data)
+                    )
+
+                    # Add career analysis to parsed_data
+                    if "error" not in career_analysis:
+                        parsed_data["career_trajectory"] = career_analysis
+
+                        # Update experience_level with accurate total_experience from career trajectory
+                        if career_analysis.get("role_stability", {}).get(
+                            "total_experience"
+                        ):
+                            total_exp_str = career_analysis["role_stability"][
+                                "total_experience"
+                            ]
+                            # Extract number from string like "16.9 years"
+                            import re
+
+                            exp_match = re.search(r"(\d+\.?\d*)", total_exp_str)
+                            if exp_match:
+                                accurate_years = float(exp_match.group(1))
+                                # Update the years_experience in parsed_data
+                                if "experience_level" in parsed_data:
+                                    parsed_data["experience_level"][
+                                        "years_experience"
+                                    ] = int(round(accurate_years))
+                                    logger.info(
+                                        f"✅ Updated years_experience to {int(round(accurate_years))} from career trajectory"
+                                    )
+
+                        logger.info(
+                            f"✅ Career trajectory analysis completed for ParsedCV {parsed_cv_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ Career analysis returned error: {career_analysis.get('error')}"
+                        )
+
+                except Exception as career_error:
+                    logger.error(
+                        f"❌ Error in career trajectory analysis: {str(career_error)}"
+                    )
+                    logger.error(traceback.format_exc())
+                    # Don't fail the entire parsing if career analysis fails
 
                 # Update ParsedCV with parsed data
                 parsed_cv.parsed_data = parsed_data
