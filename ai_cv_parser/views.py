@@ -1313,10 +1313,10 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
     def _generate_potential_roles(self, cv_data, hard_skills, experience_level):
         """Generate realistic potential roles based on CV data, skills, and experience level."""
+
         roles = []
         classification = experience_level.get("classification", "mid-level")
         years_experience = experience_level.get("years_experience", 5)
-        roles = []
 
         # Get experience data
         experience = cv_data.get("experience", [])
@@ -1324,6 +1324,56 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             # Use the most recent job title as a base
             recent_job = experience[0] if isinstance(experience[0], dict) else {}
             job_title = recent_job.get("title", recent_job.get("position", "")).lower()
+        else:
+            job_title = ""
+
+        # --- CAREER CHANGER LOGIC ---
+        # If most experience is in a non-software/IT field, but hard_skills include software/IT, restrict to junior/entry-level
+        software_keywords = [
+            "software",
+            "developer",
+            "engineer",
+            "programmer",
+            "web",
+            "python",
+            "javascript",
+            "react",
+            "django",
+            "html",
+            "css",
+            "full stack",
+            "backend",
+            "frontend",
+            "it",
+            "technology",
+        ]
+        # Count number of experiences in software/IT
+        software_exp_count = 0
+        for exp in experience:
+            exp_title = (exp.get("title") or exp.get("position") or "").lower()
+            if any(kw in exp_title for kw in software_keywords):
+                software_exp_count += 1
+        # If less than half of roles are software/IT, but hard_skills include software/IT, treat as career changer
+        is_career_changer = False
+        if experience and software_exp_count < max(1, len(experience) // 2):
+            # Check if hard_skills include software/IT
+            for skill_obj in hard_skills:
+                skill_name = (
+                    skill_obj.get("skill", "")
+                    if isinstance(skill_obj, dict)
+                    else str(skill_obj)
+                ).lower()
+                if any(kw in skill_name for kw in software_keywords):
+                    is_career_changer = True
+                    break
+
+        # If career changer, force classification to entry-level for software/IT
+        if is_career_changer:
+            logger.info(
+                f"🔄 Career changer detected: {software_exp_count}/{len(experience)} software roles. "
+                f"Adjusting classification from '{experience_level.get('classification')}' to 'entry-level' for accurate role suggestions."
+            )
+            classification = "entry-level"
 
         # Map job titles to potential career progression based on experience level
         role_mappings = {
