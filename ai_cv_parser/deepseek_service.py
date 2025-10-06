@@ -950,12 +950,25 @@ class DeepSeekService:
 
         for idx, exp in enumerate(experience):
             if isinstance(exp, dict):
+                # Try both field formats: start_date/end_date AND dates
                 start_date = exp.get("start_date", "")
                 end_date = exp.get("end_date", "")
-
+                dates = exp.get("dates", "")
+                
+                # Log all available fields for debugging
                 logger.debug(
-                    f"📊 Experience {idx + 1}: start_date='{start_date}', end_date='{end_date}'"
+                    f"📊 Experience {idx + 1}: start_date='{start_date}', end_date='{end_date}', dates='{dates}'"
                 )
+
+                # Use dates field if start_date is empty
+                if not start_date and dates:
+                    logger.info(f"📊 Using 'dates' field for experience {idx + 1}: '{dates}'")
+                    # Split dates field (format: "2020 - 2023" or "2020 - Present")
+                    date_parts = dates.split("-")
+                    if len(date_parts) >= 2:
+                        start_date = date_parts[0].strip()
+                        end_date = date_parts[1].strip()
+                        logger.info(f"📊 Extracted: start='{start_date}', end='{end_date}'")
 
                 if start_date and start_date.lower() not in ["n/a", "unknown", ""]:
                     years = self._calculate_tenure_years(start_date, end_date)
@@ -972,6 +985,7 @@ class DeepSeekService:
                     logger.warning(
                         f"📊 Experience {idx + 1} has invalid start_date: '{start_date}'"
                     )
+
 
         if not tenures:
             logger.warning(
