@@ -5,15 +5,29 @@ from datetime import datetime
 
 from .models import ParsedCV
 
-logger = logging.getLogger('ai_cv_parser')
+logger = logging.getLogger("ai_cv_parser")
+
 
 @receiver(post_save, sender=ParsedCV)
 def log_cv_saved(sender, instance, created, **kwargs):
     """Log when a ParsedCV record is created or updated"""
     action = "created" if created else "updated"
-    logger.info(f"ParsedCV record {instance.id} {action} for user {instance.user.username} - Status: {instance.status}")
+    user_info = (
+        f"guest session {instance.session_id}"
+        if instance.is_guest
+        else f"user {instance.user.username}"
+    )
+    logger.info(
+        f"ParsedCV record {instance.id} {action} for {user_info} - Status: {instance.status}"
+    )
+
 
 @receiver(post_delete, sender=ParsedCV)
 def log_cv_deleted(sender, instance, **kwargs):
     """Log when a ParsedCV record is deleted"""
-    logger.info(f"ParsedCV record {instance.id} deleted for user {instance.user.username}") 
+    user_info = (
+        f"guest session {instance.session_id}"
+        if instance.is_guest
+        else f"user {instance.user.username}"
+    )
+    logger.info(f"ParsedCV record {instance.id} deleted for {user_info}")
