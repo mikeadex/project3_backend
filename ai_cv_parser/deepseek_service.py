@@ -515,49 +515,146 @@ class DeepSeekService:
         parsed_data_str = json.dumps(parsed_data, indent=2)
 
         analysis_prompt = f"""
-        Analyze the following parsed CV data and provide a detailed assessment. 
+        Analyze the following parsed CV data and provide a detailed, SPECIFIC assessment like a professional CV reviewer would.
         
-        Your task is to evaluate this CV and provide structured feedback in the following JSON format:
+        🎯 CRITICAL INSTRUCTIONS - READ CAREFULLY:
+        
+        1. **BE SPECIFIC & REFERENCE ACTUAL CV CONTENT**
+           - Use actual job titles, company names, skills, and achievements from the CV
+           - Example GOOD: "Your role as Senior Developer at TechCorp shows strong leadership with 15+ team management"
+           - Example BAD: "Contains work experience" ❌
+        
+        2. **MATCH ROLE SUGGESTIONS TO EXPERIENCE LEVEL** ⚠️ CRITICAL
+           - Calculate total years of experience from work history dates
+           - Suggest roles appropriate to that experience level:
+             * 0-2 years → Entry-Level: Junior, Associate, Coordinator roles
+             * 3-7 years → Mid-Level: Specialist, Manager, Team Lead, Supervisor roles
+             * 8-15 years → Senior: Senior Manager, Director, Principal, Head of roles
+             * 16+ years → Executive: VP, C-Level, Chief, Executive Director roles
+           - Example: 22 years experience = "VP of Operations", "Director of Supply Chain"
+           - NEVER suggest "Junior", "Trainee", "Supervisor", or "Specialist" for 16+ years
+           - NEVER suggest "Coordinator" or "Assistant" for 8+ years experience
+        
+        3. **ANALYZE QUANTIFIABLE ACHIEVEMENTS**
+           - Count how many achievements include numbers, percentages, or metrics
+           - Identify which experiences have strong impact statements vs weak descriptions
+           - Note specific achievements that stand out
+        
+        4. **CHECK FOR WORD REPETITION**
+           - Identify words used 3+ times (excluding common words like "the", "and", "to")
+           - Focus on action verbs and key skills
+           - Suggest specific synonym replacements
+        
+        5. **EVALUATE ATS COMPATIBILITY**
+           - Check for industry-standard keywords based on the roles shown
+           - Identify missing technical terms for the candidate's field
+           - Assess formatting for ATS parsing (headers, bullets, dates)
+        
+        Your response must be in this EXACT JSON format:
         
         {{
-            "overall_score": <score from 1-10>,
+            "overall_score": <score from 1-10 based on overall quality>,
+            
             "section_scores": {{
-                "professional_summary": <score from 1-10>,
-                "experience": <score from 1-10>,
-                "education": <score from 1-10>,
-                "skills": <score from 1-10>
+                "content_completeness": <1-10: Are all major sections present with sufficient detail?>,
+                "format_structure": <1-10: Is formatting clean, consistent, and ATS-friendly?>,
+                "skills_relevance": <1-10: Are skills relevant and well-demonstrated?>,
+                "job_history": <1-10: Quality of experience descriptions and achievements>,
+                "education": <1-10: Education section completeness and relevance>,
+                "overall_impact": <1-10: Does CV make strong impression and tell compelling story?>
             }},
-            "strengths": [<list of CV strengths>],
-            "weaknesses": [<list of CV weaknesses>],
-            "improvement_suggestions": [<list of specific suggestions>],
-            "ats_readiness": {{
-                "score": <score from 1-10>,
-                "issues": [<list of ATS issues>],
-                "recommendations": [<list of recommendations>]
-            }},
-            "experience_level": {{
-                "years_experience": <estimated years>,
-                "classification": <"Entry-Level", "Mid-Level", "Senior", or "Executive">
-            }},
-            "skills_assessment": {{
-                "technical_skills": [
-                    {{"skill": <skill name>, "level": <score from 1-10>}}
+            
+            "strengths": [
+                "Example: 'Strong quantified achievement: [Actual achievement from CV with specific numbers]'",
+                "Example: 'Demonstrated [specific skill] expertise through [specific project/role from CV]'",
+                "Example: 'Clear career progression: [actual role 1] → [actual role 2] showing growth in [specific area]'",
+                "Example: '[X]% of your experience bullets include quantifiable metrics - excellent for impact'",
+                "Include 4-6 specific strengths referencing actual CV content"
+            ],
+            
+            "weaknesses": [
+                "Example: 'Your [specific role] at [company] lacks measurable outcomes - what results did you achieve?'",
+                "Example: '[Skill] is listed but not demonstrated in any project or achievement'",
+                "Example: 'Missing industry keywords: [specific missing keywords] for [their field/role]'",
+                "Example: 'Repeated word: \"[word]\" used [X] times - consider varying with: [synonyms]'",
+                "Include 2-4 specific issues found in the CV"
+            ],
+            
+            "improvement_suggestions": [
+                "Example: 'Add metrics to [specific role/project]: What was the ROI? Team size? Budget managed?'",
+                "Example: 'Strengthen [specific achievement] by adding: timeframe, scope, technologies used'",
+                "Example: 'Replace repeated \"[word]\" with alternatives: [specific synonyms] for variety'",
+                "Example: 'Add [specific keyword/certification] to match [target role/industry] requirements'",
+                "Include 4-6 actionable improvements with specific examples"
+            ],
+            
+            "ats_analysis": {{
+                "parse_rate": <percentage 0-100: estimated ATS parsing success>,
+                "keyword_match": <percentage 0-100: keyword optimization for their field>,
+                "format_score": <percentage 0-100: ATS-friendly formatting>,
+                "missing_keywords": ["[specific keyword 1]", "[specific keyword 2]"],
+                "repeated_words": [
+                    {{"word": "[actual repeated word]", "count": <number>, "suggestions": ["synonym1", "synonym2"]}}
                 ],
-                "soft_skills": [
-                    {{"skill": <skill name>, "level": <score from 1-10>}}
+                "recommendations": [
+                    "Specific ATS improvement based on actual CV structure"
                 ]
             }},
+            
+            "quantifiable_achievements": {{
+                "total_bullets": <count of all experience bullet points>,
+                "quantified_bullets": <count with numbers/metrics>,
+                "percentage": <quantified/total * 100>,
+                "strong_examples": ["[actual achievement 1 with metrics]", "[actual achievement 2 with metrics]"],
+                "needs_metrics": ["[actual bullet point that needs numbers]"]
+            }},
+            
+            "experience_level": {{
+                "years_experience": <calculate from actual work history dates>,
+                "classification": "<Entry-Level (0-2) | Mid-Level (3-7) | Senior (8-15) | Executive (16+) based on years AND roles>",
+                "career_trajectory": "<Describe actual progression shown in CV>"
+            }},
+            
+            "skills_assessment": {{
+                "technical_skills": [
+                    {{"skill": "<actual skill from CV>", "proficiency_evidence": "<where it's demonstrated>", "level": <1-10>}}
+                ],
+                "soft_skills_demonstrated": [
+                    {{"skill": "<inferred from achievements>", "evidence": "<specific achievement showing it>", "level": <1-10>}}
+                ],
+                "missing_skills": ["<industry-standard skills not present>"]
+            }},
+            
             "potential_roles": {{
-                "best_matches": [<list of suitable job roles>],
-                "match_reasons": [<list of reasons why these roles match>],
-                "suggested_industries": [<list of suitable industries>]
+                "best_matches": [
+                    "<IMPORTANT: Suggest roles appropriate to experience level>",
+                    "<Entry-Level (0-2 yrs): Junior/Associate/Coordinator roles>",
+                    "<Mid-Level (3-7 yrs): Specialist/Manager/Supervisor roles>", 
+                    "<Senior (8-15 yrs): Senior Manager/Lead/Director roles>",
+                    "<Executive (16+ yrs): VP/Head of/C-Level/Executive Director roles>",
+                    "<NEVER suggest Supervisor, Specialist, or Analyst for 16+ years>",
+                    "<Example: 22 years = 'VP of Operations', 'Director of Supply Chain', NOT 'Supervisor'>"
+                ],
+                "match_reasons": ["Based on [specific experience/skill from CV]"],
+                "suggested_industries": ["<based on actual work history>"],
+                "skill_gaps": ["What skills to add for target roles"]
             }}
         }}
         
-        Focus on providing actionable insights and specific suggestions for improvement.
-        Evaluate whether keywords are effectively used for ATS systems.
-        Analyze the clarity, impact, and quantification of achievements.
-        Assess whether the CV effectively showcases relevant skills and experience.
+        📋 QUALITY CHECKLIST - Every item must be specific to THIS CV:
+        ✅ Reference actual job titles, companies, and achievements
+        ✅ Include real numbers and metrics from the CV
+        ✅ Point to specific sections that need improvement
+        ✅ Calculate actual percentages for quantified achievements
+        ✅ Identify real repeated words with counts
+        ✅ Suggest specific keywords for their industry
+        ✅ Provide actionable improvements with examples
+        
+        ❌ NEVER say generic things like:
+        - "Contains contact information" 
+        - "Has work experience section"
+        - "Includes education"
+        - "Professional summary is present"
         
         PARSED CV DATA:
         {parsed_data_str}

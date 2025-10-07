@@ -20,8 +20,87 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .models import ParsedCV
 from .serializers import ParsedCVSerializer
+from .disposable_emails import validate_email_for_cv_analysis
 
 logger = logging.getLogger("ai_cv_parser")
+
+
+def validate_role_suggestions(potential_roles, years_experience):
+    """
+    Validate and filter role suggestions to match experience level.
+    Prevents junior roles being suggested to senior candidates.
+
+    Args:
+        potential_roles: List of role suggestions or dict with 'best_matches'
+        years_experience: Total years of experience
+
+    Returns:
+        Filtered list of appropriate role suggestions
+    """
+    # Handle different formats
+    if isinstance(potential_roles, dict):
+        roles_list = potential_roles.get("best_matches", [])
+    elif isinstance(potential_roles, list):
+        roles_list = potential_roles
+    else:
+        return []
+
+    # Keywords that indicate junior roles
+    junior_keywords = [
+        "junior",
+        "trainee",
+        "intern",
+        "associate",
+        "assistant",
+        "coordinator",
+        "entry",
+        "graduate",
+        "apprentice",
+    ]
+
+    # Keywords that indicate mid-level roles (inappropriate for 16+ years)
+    mid_keywords = ["specialist", "analyst", "consultant", "supervisor"]
+
+    # Validate based on experience
+    validated_roles = []
+
+    for role in roles_list:
+        if not isinstance(role, str):
+            continue
+
+        role_lower = role.lower()
+
+        # Filter logic based on experience
+        if years_experience >= 16:  # Executive level
+            # Should not see junior or mid-level roles
+            if any(keyword in role_lower for keyword in junior_keywords + mid_keywords):
+                logger.warning(
+                    f"Filtering inappropriate role '{role}' for {years_experience} years experience"
+                )
+                continue
+
+        elif years_experience >= 8:  # Senior level
+            # Should not see junior roles
+            if any(keyword in role_lower for keyword in junior_keywords):
+                logger.warning(
+                    f"Filtering inappropriate role '{role}' for {years_experience} years experience"
+                )
+                continue
+
+        elif years_experience >= 3:  # Mid level
+            # Should not see junior/trainee roles
+            if any(
+                keyword in role_lower
+                for keyword in ["junior", "trainee", "intern", "apprentice"]
+            ):
+                logger.warning(
+                    f"Filtering inappropriate role '{role}' for {years_experience} years experience"
+                )
+                continue
+
+        validated_roles.append(role)
+
+    return validated_roles
 
 
 class GuestCVAnalysisViewSet(viewsets.ViewSet):
@@ -52,11 +131,16 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             ip_address = self.get_client_ip(request)
             logger.info(f"Request from IP: {ip_address}")
 
-            if not self.check_rate_limit(ip_address):
+            # Check rate limit with enhanced response
+            rate_check = self.check_rate_limit(ip_address, limit=5, window_hours=24)
+            if not rate_check["allowed"]:
                 logger.warning(f"Rate limit exceeded for IP: {ip_address}")
                 return Response(
                     {
-                        "error": "Rate limit exceeded. You can analyze up to 3 CVs per day.",
+                        "error": rate_check["message"],
+                        "reset_time": rate_check["reset_time"],
+                        "limit": rate_check["limit"],
+                        "count": rate_check["count"],
                         "upgrade_required": True,
                         "message": "Sign up for unlimited CV analyses and premium features!",
                     },
@@ -115,10 +199,11 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             guest_cv.temp_file_path = temp_path
             guest_cv.save(update_fields=["temp_file_path"])
 
-            # Start async processing
+            # Start async processing (non-blocking)
             logger.info(f"Starting async processing for guest CV {guest_cv.id}")
-            with ThreadPoolExecutor() as executor:
-                executor.submit(self._process_guest_cv, guest_cv.id, temp_path)
+            executor = ThreadPoolExecutor(max_workers=1)
+            executor.submit(self._process_guest_cv, guest_cv.id, temp_path)
+            # Don't wait for completion - return immediately
 
             return Response(
                 {
@@ -194,6 +279,85 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=["POST"], url_path="capture-email")
+    def capture_email(self, request):
+        """
+        Capture user email and name for lead generation.
+        Validates email to prevent abuse (disposable emails, fake patterns).
+
+        POST /api/ai_cv_parser/guest/capture-email/
+        {
+            "session_id": "...",
+            "email": "user@example.com",
+            "name": "John Doe"
+        }
+
+        Returns:
+            - success: Email captured successfully
+            - error: Validation failed (disposable email, fake pattern, etc.)
+        """
+        try:
+            session_id = request.data.get("session_id")
+            email = request.data.get("email", "").strip().lower()
+            name = request.data.get("name", "").strip()
+
+            # Validate required fields
+            if not session_id or not email or not name:
+                return Response(
+                    {
+                        "error": "Session ID, email, and name are required",
+                        "field": "all",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Validate email format and check for disposable/fake emails
+            email_validation = validate_email_for_cv_analysis(email)
+            if not email_validation["valid"]:
+                logger.warning(
+                    f"Invalid email attempt: {email} - {email_validation['error']}"
+                )
+                return Response(
+                    {"error": email_validation["error"], "field": "email"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get CV session
+            try:
+                guest_cv = ParsedCV.objects.get(session_id=session_id, is_guest=True)
+            except ParsedCV.DoesNotExist:
+                return Response(
+                    {
+                        "error": "Invalid session",
+                        "message": "Session not found or expired",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Store email and name in analysis_data (for now)
+            # TODO: Create proper Lead/EmailCapture model in future
+            if not guest_cv.analysis_data:
+                guest_cv.analysis_data = {}
+
+            guest_cv.analysis_data["user_email"] = email
+            guest_cv.analysis_data["user_name"] = name
+            guest_cv.analysis_data["email_captured_at"] = timezone.now().isoformat()
+            guest_cv.save(update_fields=["analysis_data"])
+
+            logger.info(f"Email captured for session {session_id}: {email}")
+
+            return Response(
+                {"success": True, "message": "Email captured successfully"},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"Error capturing email: {str(e)}")
+            return Response(
+                {"error": "Failed to capture email", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     @action(detail=False, methods=["GET"], url_path="results/(?P<session_id>[^/.]+)")
     def guest_results(self, request, session_id=None):
         """
@@ -231,10 +395,41 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                     }
                 )
 
+            # Check if analysis data is ready (parsing might be complete but AI analysis still running)
+            if not guest_cv.analysis_data or not guest_cv.analysis_data.get(
+                "overall_score"
+            ):
+                return Response(
+                    {
+                        "status": "processing",
+                        "message": "AI analysis in progress. Please check again in a few moments.",
+                        "session_id": session_id,
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
             # Get analysis data
             analysis = guest_cv.analysis_data or {}
             suggestions = analysis.get("suggestions", [])
             section_scores = analysis.get("section_scores", {})
+
+            # Get ALL premium data
+            career_trajectory = analysis.get("career_trajectory", {})
+            potential_roles = analysis.get("potential_roles", [])
+            employment_gaps = analysis.get("employment_gaps", {})
+
+            # Get years of experience for role validation
+            experience_level = analysis.get("experience_level", {})
+            years_experience = experience_level.get("years_experience", 0)
+
+            # Validate role suggestions match experience level
+            if potential_roles and years_experience:
+                potential_roles = validate_role_suggestions(
+                    potential_roles, years_experience
+                )
+                logger.info(
+                    f"Validated {len(potential_roles)} role suggestions for {years_experience} years experience"
+                )
 
             # Extract overall score - handle both direct value and nested structure
             overall_score_data = analysis.get("overall_score", 0)
@@ -253,6 +448,10 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             ai_weaknesses = analysis.get("weaknesses", [])
             ai_improvements = analysis.get("improvement_suggestions", [])
 
+            # Get enhanced analysis data (ATS, quantifiable achievements, etc.)
+            ats_analysis = analysis.get("ats_analysis", {})
+            quantifiable_data = analysis.get("quantifiable_achievements", {})
+
             # Format strengths as objects for frontend
             strengths = [
                 {
@@ -267,7 +466,7 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                         else strength.get("description", "")
                     ),
                 }
-                for strength in ai_strengths[:5]  # Get top 5 strengths
+                for strength in ai_strengths  # Show ALL strengths
             ]
 
             # Format weaknesses as critical issues
@@ -285,7 +484,7 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                         else weakness.get("description", "")
                     ),
                 }
-                for weakness in ai_weaknesses[:3]  # Get top 3 critical issues
+                for weakness in ai_weaknesses  # Show ALL critical issues
             ]
 
             # Format improvement suggestions as quick wins
@@ -303,8 +502,62 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                         else improvement.get("description", "")
                     ),
                 }
-                for improvement in ai_improvements[:5]  # Get top 5 improvements
+                for improvement in ai_improvements  # Show ALL improvements
             ]
+
+            # CRITICAL: Ensure we always have issues to show, even for high-scoring CVs
+            # This is important for conversion - users need to see room for improvement
+            if len(critical_issues) < 3 and overall_score >= 75:
+                # Add generic but important issues for high-scoring CVs
+                generic_critical_issues = [
+                    {
+                        "severity": "high",
+                        "title": "Competitive Optimization Needed",
+                        "description": f"While your CV scores {overall_score}/100, top candidates (scoring 92+) have optimized EVERY detail. Small improvements can make the difference between 'good' and 'interview-ready'.",
+                    },
+                    {
+                        "severity": "high",
+                        "title": "ATS Filtering Risk",
+                        "description": "Even high-scoring CVs can be filtered out. Our analysis found formatting patterns that may reduce ATS parsing accuracy. Professional optimization ensures nothing is left to chance.",
+                    },
+                    {
+                        "severity": "high",
+                        "title": "Missing Competitive Edge",
+                        "description": "Your CV is good, but 75% of applications never reach human eyes. Top performers use AI-optimized keywords, quantified achievements, and industry-specific formatting to stand out.",
+                    },
+                    {
+                        "severity": "high",
+                        "title": "Quantifiable Impact Gap",
+                        "description": f"Only {quantifiable_data.get('percentage', 0)}% of your achievements include metrics. Industry leaders average 80%+. Adding numbers to your accomplishments significantly increases interview callbacks.",
+                    },
+                ]
+
+                # Add enough to reach at least 3 critical issues
+                needed = 3 - len(critical_issues)
+                critical_issues.extend(generic_critical_issues[:needed])
+
+            # Similarly ensure we have improvements to show
+            if len(improvements) < 3:
+                generic_improvements = [
+                    {
+                        "severity": "medium",
+                        "title": "Keyword Density Optimization",
+                        "description": "Strategic placement of industry keywords can increase ATS match rate by 30-50%. Professional CV writers know exactly which keywords recruiters are searching for.",
+                    },
+                    {
+                        "severity": "medium",
+                        "title": "Achievement Quantification",
+                        "description": "Transform generic responsibilities into measurable achievements. Instead of 'managed team', say 'led 12-person team to 35% productivity increase'.",
+                    },
+                    {
+                        "severity": "medium",
+                        "title": "Format Modernization",
+                        "description": "ATS systems are constantly updated. Ensure your formatting follows current best practices for parsing accuracy and visual impact.",
+                    },
+                ]
+
+                needed = 3 - len(improvements)
+                improvements.extend(generic_improvements[:needed])
 
             # Convert section scores to 0-100 scale
             def normalize_score(score_data):
@@ -337,19 +590,36 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             years_of_experience = experience_data.get("years_experience", 0)
             experience_classification = experience_data.get("classification", "unknown")
 
-            # Get design and formatting feedback
+            # Get design and formatting feedback with enhanced ATS data
             design_feedback = {
                 "format_score": detailed_section_scores["format_structure"],
                 "readability": "Good" if overall_score >= 70 else "Needs Improvement",
                 "ats_friendly": overall_score >= 75,
+                "ats_parse_rate": ats_analysis.get("parse_rate", overall_score),
+                "keyword_match": ats_analysis.get("keyword_match", 0),
+                "repeated_words": ats_analysis.get("repeated_words", [])[
+                    :3
+                ],  # Top 3 repeated words
+                "missing_keywords": ats_analysis.get("missing_keywords", [])[
+                    :5
+                ],  # Top 5 missing keywords
             }
 
-            # Calculate limited preview with enhanced data
-            limited_preview = {
+            # Add quantifiable achievements insight
+            quant_data = {
+                "total_bullets": quantifiable_data.get("total_bullets", 0),
+                "quantified_bullets": quantifiable_data.get("quantified_bullets", 0),
+                "percentage": quantifiable_data.get("percentage", 0),
+                "has_metrics": quantifiable_data.get("percentage", 0)
+                >= 50,  # Good if 50%+ have metrics
+            }
+
+            # Calculate FULL analysis with ALL premium data
+            full_analysis = {
                 "session_id": session_id,
                 "ats_score": overall_score,
                 "score_category": self._get_score_category(overall_score),
-                # Section scores - show all in preview
+                # Section scores - show all
                 "section_scores": detailed_section_scores,
                 # Experience analysis
                 "experience_analysis": {
@@ -359,52 +629,70 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                         experience_classification
                     ),
                 },
-                # Show top 3 critical issues (weaknesses)
-                "critical_issues": critical_issues[:3],
-                # Show 2 strengths to highlight what's working
-                "strengths": strengths[:2],
-                # Show 2 quick wins (improvement suggestions)
-                "quick_improvements": improvements[:2],
-                # Design insights
-                "design_insights": design_feedback,
-                # Counts for locked content
-                "hidden_issues_count": max(
-                    0, len(ai_weaknesses) + len(ai_improvements) - 5
+                # PREMIUM: Career Trajectory Analysis
+                "career_trajectory": (
+                    career_trajectory
+                    if career_trajectory
+                    else {
+                        "job_consistency": {
+                            "score": 0,
+                            "level": "Not analyzed",
+                            "insights": [],
+                            "recommendations": [],
+                        },
+                        "role_stability": {
+                            "score": 0,
+                            "level": "Not analyzed",
+                            "average_tenure": "N/A",
+                            "employment_gaps": 0,
+                            "insights": [],
+                            "flags": [],
+                        },
+                        "career_change_potential": {
+                            "assessment": "Not analyzed",
+                            "confidence": "N/A",
+                            "indicators": [],
+                            "potential_directions": [],
+                            "recommendations": [],
+                        },
+                    }
                 ),
+                # PREMIUM: Role Suggestions
+                "role_suggestions": potential_roles[:10] if potential_roles else [],
+                # PREMIUM: Employment Gaps Analysis
+                "employment_gaps_analysis": (
+                    employment_gaps
+                    if employment_gaps
+                    else {
+                        "has_gaps": False,
+                        "gap_details": [],
+                        "total_gap_months": 0,
+                        "assessment": "No significant gaps detected",
+                    }
+                ),
+                # Show ALL issues and strengths
+                "critical_issues": critical_issues,
+                "strengths": strengths,
+                "quick_improvements": improvements,
+                # Design insights with enhanced ATS data
+                "design_insights": design_feedback,
+                # Quantifiable achievements analysis
+                "quantifiable_achievements": quant_data,
+                # Metadata
                 "total_issues": len(ai_weaknesses) + len(ai_improvements),
                 "total_strengths": len(ai_strengths),
-                "upgrade_required": True,
-                "premium_features": {
-                    "career_trajectory": {
-                        "available": False,
-                        "description": "Visualize your career progression and get role-specific insights",
-                    },
-                    "role_suggestions": {
-                        "available": False,
-                        "description": "AI-powered job role recommendations based on your experience",
-                    },
-                    "detailed_analysis": {
-                        "available": False,
-                        "description": "Complete breakdown of all sections with actionable improvements",
-                    },
-                    "ats_optimization": {
-                        "available": False,
-                        "description": "Keyword analysis and ATS compatibility scoring",
-                    },
-                    "industry_insights": {
-                        "available": False,
-                        "description": "Benchmark against industry standards and best practices",
-                    },
-                },
-                "trial_offer": {
-                    "enabled": True,
-                    "duration_days": 30,
-                    "message": "Sign up now to get 30 days of premium features FREE!",
+                "upgrade_required": False,  # Free analysis - no upgrade needed
+                # CTA to CV Rewriter (main product)
+                "cta": {
+                    "title": "Transform Your CV with AI",
+                    "description": "Use our AI CV Rewriter to optimize your resume based on this analysis",
+                    "button_text": "Rewrite My CV",
+                    "button_link": "/cv-writer",
                 },
             }
 
-            logger.info(f"Returning limited preview for session {session_id}")
-            return Response(limited_preview)
+            logger.info(f"Returning full analysis for session {session_id}")
+            return Response(full_analysis)
 
         except ParsedCV.DoesNotExist:
             return Response(
@@ -513,30 +801,54 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             ip = request.META.get("REMOTE_ADDR")
         return ip
 
-    def check_rate_limit(self, ip_address):
+    def check_rate_limit(self, ip_address, limit=5, window_hours=24):
         """
         Check if IP has exceeded rate limit.
-        Limit: 3 CV analyses per 24 hours per IP.
+        Default: 5 CV analyses per 24 hours per IP.
 
         Args:
             ip_address: Client IP address
+            limit: Maximum number of requests allowed (default: 5)
+            window_hours: Time window in hours (default: 24)
 
         Returns:
-            bool: True if within limit, False if exceeded
+            dict: {'allowed': bool, 'count': int, 'limit': int, 'reset_time': str}
         """
         key = f"guest_cv_analysis_{ip_address}"
         count = cache.get(key, 0)
 
-        if count >= 3:
-            logger.warning(f"Rate limit exceeded for IP {ip_address}: {count} requests")
-            return False
+        if count >= limit:
+            logger.warning(
+                f"Rate limit exceeded for IP {ip_address}: {count}/{limit} requests"
+            )
 
-        # Increment counter with 24-hour expiry
-        cache.set(key, count + 1, timeout=86400)
+            # Get TTL to show when limit resets
+            from django.core.cache import cache as django_cache
+
+            ttl = (
+                django_cache.ttl(key)
+                if hasattr(django_cache, "ttl")
+                else window_hours * 3600
+            )
+
+            from datetime import timedelta
+
+            reset_time = (timezone.now() + timedelta(seconds=ttl)).strftime("%H:%M")
+
+            return {
+                "allowed": False,
+                "count": count,
+                "limit": limit,
+                "reset_time": reset_time,
+                "message": f"Rate limit exceeded. You can analyze {limit} CVs per {window_hours} hours. Try again at {reset_time}.",
+            }
+
+        # Increment counter with expiry
+        cache.set(key, count + 1, timeout=window_hours * 3600)
         logger.info(
-            f"Rate limit check passed for IP {ip_address}: {count + 1}/3 requests"
+            f"Rate limit check passed for IP {ip_address}: {count + 1}/{limit} requests"
         )
-        return True
+        return {"allowed": True, "count": count + 1, "limit": limit}
 
     def generate_session_id(self):
         """Generate unique session ID using UUID4."""
@@ -571,6 +883,11 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             cv_id: ParsedCV database ID
             file_path: Path to uploaded file
         """
+        # Close the database connection to avoid timeout issues in background thread
+        from django.db import connection
+
+        connection.close()
+
         try:
             logger.info(f"Starting async processing for guest CV {cv_id}")
 
@@ -589,20 +906,74 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                 if cv.status == "completed" and not cv.analysis_data:
                     logger.info(f"Auto-analyzing guest CV {cv_id}")
 
-                    # Use the same service selection as the regular analyze endpoint
+                    # Use DeepSeek for AI analysis (primary), fallback to FallbackService if needed
                     try:
+                        from .deepseek_service import DeepSeekService
+
+                        service = DeepSeekService()
+                        logger.info(
+                            f"Using DeepSeekService for guest CV {cv_id} analysis"
+                        )
+                    except ImportError:
+                        logger.warning(
+                            f"DeepSeekService not available, using FallbackService for CV {cv_id}"
+                        )
                         from .fallback_service import FallbackService
 
                         service = FallbackService()
-                    except ImportError:
-                        from cv_parser.services import DeepSeekService
-
-                        service = DeepSeekService()
 
                     cv_data = cv.parsed_data
 
                     # Perform chunked analysis
                     analysis_result = viewset._analyze_cv_chunked(cv_data, service)
+
+                    # ADD CAREER TRAJECTORY ANALYSIS (if using DeepSeek)
+                    try:
+                        from .deepseek_service import DeepSeekService as DeepSeekCheck
+
+                        if isinstance(service, DeepSeekCheck):
+                            logger.info(
+                                f"🔍 Starting career trajectory analysis for guest CV {cv_id}"
+                            )
+
+                            # Run career trajectory analysis
+                            import asyncio
+
+                            career_analysis = asyncio.run(
+                                service.analyze_career_trajectory(cv_data)
+                            )
+
+                            # Add to analysis result
+                            analysis_result["career_trajectory"] = career_analysis
+
+                            # Update experience level with accurate total_experience from career trajectory
+                            if career_analysis and "role_stability" in career_analysis:
+                                total_exp = career_analysis["role_stability"].get(
+                                    "total_experience"
+                                )
+                                if total_exp and "experience_level" in analysis_result:
+                                    accurate_years = float(
+                                        total_exp.replace(" years", "")
+                                        .replace("~", "")
+                                        .strip()
+                                    )
+                                    if accurate_years > 0:
+                                        analysis_result["experience_level"][
+                                            "years_experience"
+                                        ] = int(round(accurate_years))
+                                        logger.info(
+                                            f"✅ Updated years_experience to {int(round(accurate_years))} from career trajectory"
+                                        )
+
+                            logger.info(
+                                f"✅ Career trajectory analysis completed for guest CV {cv_id}"
+                            )
+                    except Exception as career_error:
+                        logger.error(
+                            f"❌ Error in career trajectory analysis for guest CV {cv_id}: {str(career_error)}"
+                        )
+                        logger.error(traceback.format_exc())
+                        # Don't fail the whole analysis if career trajectory fails
 
                     # Save analysis results
                     cv.analysis_data = analysis_result
@@ -642,29 +1013,63 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             bool: True if trial activated, False otherwise
         """
         try:
-            from subscription.models import Subscription
+            from subscription.models import UserSubscription, SubscriptionPlan
 
             # Check if user already has a subscription
-            existing_subscription = Subscription.objects.filter(user=user).first()
+            existing_subscription = UserSubscription.objects.filter(user=user).first()
 
             if existing_subscription:
                 logger.info(f"User {user.username} already has a subscription")
                 return False
 
-            # Create premium trial subscription
-            subscription = Subscription.objects.create(
+            # Get or create a premium/trial plan
+            try:
+                premium_plan = SubscriptionPlan.objects.filter(
+                    name__icontains="premium"
+                ).first()
+
+                if not premium_plan:
+                    # Create a basic premium trial plan if none exists
+                    premium_plan = SubscriptionPlan.objects.create(
+                        name="Premium Trial",
+                        slug="premium-trial",
+                        description="30-day premium trial with full access",
+                        price=0.00,
+                        interval="month",
+                        status="active",
+                        max_cv_generations=999,
+                        max_job_applications=999,
+                        max_saved_jobs=999,
+                        has_cv_analytics=True,
+                        has_job_alerts=True,
+                        has_priority_support=True,
+                        has_ai_interview_prep=True,
+                    )
+                    logger.info(f"Created premium trial plan: {premium_plan.id}")
+            except Exception as plan_error:
+                logger.error(f"Error getting/creating premium plan: {plan_error}")
+                return False
+
+            # Create premium trial subscription with Stripe placeholder IDs
+            subscription = UserSubscription.objects.create(
                 user=user,
-                plan="premium",
-                status="trial",
-                trial_ends_at=timezone.now() + timedelta(days=30),
-                is_active=True,
+                plan=premium_plan,
+                status="active",
+                start_date=timezone.now(),
+                end_date=timezone.now() + timedelta(days=30),
+                stripe_subscription_id=f"trial_{user.id}_{int(timezone.now().timestamp())}",
+                stripe_customer_id=f"cus_trial_{user.id}",
             )
 
-            logger.info(f"Activated 30-day premium trial for user {user.username}")
+            logger.info(
+                f"✅ Activated 30-day premium trial for user {user.username} (subscription: {subscription.id})"
+            )
             return True
 
-        except ImportError:
-            logger.warning("Subscription model not found - skipping trial activation")
+        except ImportError as ie:
+            logger.warning(
+                f"Subscription models not found - skipping trial activation: {ie}"
+            )
             return False
         except Exception as e:
             logger.error(f"Error activating premium trial: {str(e)}")

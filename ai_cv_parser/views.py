@@ -333,12 +333,25 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
             for attempt in range(max_retries + 1):
                 try:
-                    # Import service for analysis
-                    from .fallback_service import FallbackService
+                    # Import service for analysis - use DeepSeek as primary
+                    try:
+                        from .deepseek_service import DeepSeekService
+
+                        service = DeepSeekService()
+                        logger.info(
+                            f"Using DeepSeekService for auto-analysis (attempt {attempt + 1})"
+                        )
+                    except ImportError:
+                        logger.warning(
+                            "DeepSeekService not available, using FallbackService"
+                        )
+                        from .fallback_service import FallbackService
+
+                        service = FallbackService()
 
                     # Generate analysis directly from parsed data
                     analysis_result = self._analyze_cv_chunked(
-                        instance.parsed_data, FallbackService()
+                        instance.parsed_data, service
                     )
 
                     # Ensure overall score is properly calculated
@@ -448,10 +461,24 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
                 for attempt in range(max_retries + 1):
                     try:
-                        from .fallback_service import FallbackService
+                        # Use DeepSeek as primary service
+                        try:
+                            from .deepseek_service import DeepSeekService
+
+                            service = DeepSeekService()
+                            logger.info(
+                                f"Using DeepSeekService for analysis regeneration (attempt {attempt + 1})"
+                            )
+                        except ImportError:
+                            logger.warning(
+                                "DeepSeekService not available, using FallbackService"
+                            )
+                            from .fallback_service import FallbackService
+
+                            service = FallbackService()
 
                         new_analysis = self._analyze_cv_chunked(
-                            instance.parsed_data, FallbackService()
+                            instance.parsed_data, service
                         )
 
                         # Validate the new analysis is better than the old one
@@ -653,8 +680,12 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
         response = service.make_custom_request(prompt, max_tokens=2000)
 
-        # Clean and parse response
-        if isinstance(response, str):
+        # Handle response - could be dict (already parsed) or string
+        if isinstance(response, dict):
+            # Already parsed - return as is
+            return response
+        elif isinstance(response, str):
+            # String response - needs parsing
             response = response.strip()
             if response.startswith("```json"):
                 response = response[7:]
@@ -662,17 +693,27 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 response = response[:-3]
             response = response.strip()
 
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.warning(
-                f"Failed to parse {section_name} analysis response: {response[:200]}..."
-            )
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"Failed to parse {section_name} analysis response: {response[:200]}..."
+                )
+                return {
+                    "assessment": f"Analysis of {section_name} section",
+                    "score": 7,
+                    "strengths": [f"Contains {section_name} information"],
+                    "issues": ["Analysis response parsing failed"],
+                    "suggestions": ["Review section manually"],
+                }
+        else:
+            # Unexpected type
+            logger.error(f"Unexpected response type from service: {type(response)}")
             return {
                 "assessment": f"Analysis of {section_name} section",
                 "score": 7,
                 "strengths": [f"Contains {section_name} information"],
-                "issues": ["Analysis response parsing failed"],
+                "issues": ["Unexpected response format"],
                 "suggestions": ["Review section manually"],
             }
 
@@ -3636,14 +3677,18 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     {"error": "No CV data found"}, status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Prepare the prompt for analysis - use intelligent service selection
+            # Prepare the prompt for analysis - use DeepSeek as primary service
             try:
+                from .deepseek_service import DeepSeekService
+
+                service = DeepSeekService()
+                logger.info("Using DeepSeekService for CV analysis")
+            except ImportError:
+                # Fallback to FallbackService if DeepSeek not available
+                logger.warning("DeepSeekService not available, using FallbackService")
                 from .fallback_service import FallbackService
 
                 service = FallbackService()
-            except ImportError:
-                # Fallback to DeepSeek if FallbackService not available
-                service = DeepSeekService()
 
             # Continue with existing prompt preparation - optimized for concise responses
             # Debug: Log what CV data is being analyzed
@@ -3762,12 +3807,25 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 if not cv.analysis_data and cv.parsed_data:
                     logger.info(f"Auto-generating analysis for CV {cv.id}")
                     try:
-                        # Import service for analysis
-                        from .fallback_service import FallbackService
+                        # Import service for analysis - use DeepSeek as primary
+                        try:
+                            from .deepseek_service import DeepSeekService
+
+                            service = DeepSeekService()
+                            logger.info(
+                                f"Using DeepSeekService for CV {cv.id} analysis"
+                            )
+                        except ImportError:
+                            logger.warning(
+                                f"DeepSeekService not available for CV {cv.id}, using FallbackService"
+                            )
+                            from .fallback_service import FallbackService
+
+                            service = FallbackService()
 
                         # Generate analysis directly from parsed data
                         analysis_result = self._analyze_cv_chunked(
-                            cv.parsed_data, FallbackService()
+                            cv.parsed_data, service
                         )
 
                         # Ensure overall score is properly calculated
