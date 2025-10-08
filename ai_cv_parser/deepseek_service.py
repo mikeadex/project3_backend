@@ -1127,6 +1127,41 @@ class DeepSeekService:
             Dictionary containing career trajectory analysis with scores and insights
         """
         try:
+            # Check if API key is available
+            if not self.api_key:
+                logger.warning("DeepSeek API key not available, returning basic career analysis")
+                experience = cv_data.get("experience", [])
+                tenure_stats = self._calculate_average_tenure_and_gaps(experience) if experience else {
+                    "total_experience": "0 years",
+                    "average_tenure": "N/A",
+                    "employment_gaps": 0
+                }
+                
+                return {
+                    "job_consistency": {
+                        "score": 0,
+                        "level": "Not Available",
+                        "insights": ["AI analysis requires API configuration"],
+                        "recommendations": ["Contact support to enable AI features"],
+                    },
+                    "role_stability": {
+                        "score": 0,
+                        "level": "Not Available",
+                        "average_tenure": tenure_stats["average_tenure"],
+                        "total_experience": tenure_stats["total_experience"],
+                        "employment_gaps": tenure_stats["employment_gaps"],
+                        "insights": ["AI analysis requires API configuration"],
+                        "flags": [],
+                    },
+                    "career_change_potential": {
+                        "assessment": "Not Available",
+                        "confidence": "Low",
+                        "indicators": ["AI analysis requires API configuration"],
+                        "potential_directions": [],
+                        "recommendations": [],
+                    },
+                }
+            
             experience = cv_data.get("experience", [])
             education = cv_data.get("education", [])
             certifications = cv_data.get("certifications", [])
@@ -1355,24 +1390,36 @@ Return ONLY the JSON object, no additional text."""
         except Exception as e:
             logger.error(f"Error analyzing career trajectory: {str(e)}")
             logger.error(traceback.format_exc())
+            
+            # Try to calculate basic stats even on error
+            experience = cv_data.get("experience", [])
+            tenure_stats = self._calculate_average_tenure_and_gaps(experience) if experience else {
+                "total_experience": "0 years",
+                "average_tenure": "N/A",
+                "employment_gaps": 0
+            }
+            
             return {
                 "error": str(e),
                 "job_consistency": {
                     "score": 0,
                     "level": "Error",
-                    "insights": [],
-                    "recommendations": [],
+                    "insights": [f"Analysis failed: {str(e)}"],
+                    "recommendations": ["Please contact support"],
                 },
                 "role_stability": {
                     "score": 0,
                     "level": "Error",
-                    "insights": [],
+                    "average_tenure": tenure_stats["average_tenure"],
+                    "total_experience": tenure_stats["total_experience"],
+                    "employment_gaps": tenure_stats["employment_gaps"],
+                    "insights": [f"Analysis failed: {str(e)}"],
                     "flags": [],
                 },
                 "career_change_potential": {
                     "assessment": "Error",
                     "confidence": "Low",
-                    "indicators": [],
+                    "indicators": [f"Analysis failed: {str(e)}"],
                     "potential_directions": [],
                     "recommendations": [],
                 },

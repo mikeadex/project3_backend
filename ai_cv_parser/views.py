@@ -2692,51 +2692,83 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         f"🔍 Starting career trajectory analysis for CV {cv_id}"
                     )
                     deepseek_service = DeepSeekService()
+                    
+                    # Check if DeepSeek is available
+                    if not deepseek_service.api_key:
+                        logger.warning(f"⚠️ DeepSeek API key not configured - skipping career trajectory analysis for CV {cv_id}")
+                        # Don't fail, just skip the analysis
+                        parsed_cv.parsed_data["career_trajectory"] = {
+                            "job_consistency": {
+                                "score": 0,
+                                "level": "Not Available",
+                                "insights": ["AI analysis requires API key configuration"],
+                                "recommendations": [],
+                            },
+                            "role_stability": {
+                                "score": 0,
+                                "level": "Not Available",
+                                "average_tenure": "N/A",
+                                "employment_gaps": 0,
+                                "insights": ["AI analysis requires API key configuration"],
+                                "flags": [],
+                            },
+                            "career_change_potential": {
+                                "assessment": "Not Available",
+                                "confidence": "Low",
+                                "indicators": [],
+                                "potential_directions": [],
+                                "recommendations": [],
+                            },
+                        }
+                        safe_save(parsed_cv, update_fields=["parsed_data"])
+                    else:
+                        # Run career analysis asynchronously
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            career_analysis = loop.run_until_complete(
+                                deepseek_service.analyze_career_trajectory(parsed_data)
+                            )
 
-                    # Run career analysis asynchronously
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        career_analysis = loop.run_until_complete(
-                            deepseek_service.analyze_career_trajectory(parsed_data)
-                        )
+                            # Add career analysis to parsed_data
+                            if "error" not in career_analysis:
+                                parsed_cv.parsed_data["career_trajectory"] = career_analysis
 
-                        # Add career analysis to parsed_data
-                        if "error" not in career_analysis:
-                            parsed_cv.parsed_data["career_trajectory"] = career_analysis
-
-                            # Update experience_level with accurate total_experience from career trajectory
-                            if career_analysis.get("role_stability", {}).get(
-                                "total_experience"
-                            ):
-                                total_exp_str = career_analysis["role_stability"][
+                                # Update experience_level with accurate total_experience from career trajectory
+                                if career_analysis.get("role_stability", {}).get(
                                     "total_experience"
-                                ]
-                                # Extract number from string like "16.9 years"
-                                import re
+                                ):
+                                    total_exp_str = career_analysis["role_stability"][
+                                        "total_experience"
+                                    ]
+                                    # Extract number from string like "16.9 years"
+                                    import re
 
-                                exp_match = re.search(r"(\d+\.?\d*)", total_exp_str)
-                                if exp_match:
-                                    accurate_years = float(exp_match.group(1))
-                                    # Update the years_experience in parsed_data
-                                    if "experience_level" in parsed_cv.parsed_data:
-                                        parsed_cv.parsed_data["experience_level"][
-                                            "years_experience"
-                                        ] = int(round(accurate_years))
-                                        logger.info(
-                                            f"✅ Updated years_experience to {int(round(accurate_years))} from career trajectory"
-                                        )
+                                    exp_match = re.search(r"(\d+\.?\d*)", total_exp_str)
+                                    if exp_match:
+                                        accurate_years = float(exp_match.group(1))
+                                        # Update the years_experience in parsed_data
+                                        if "experience_level" in parsed_cv.parsed_data:
+                                            parsed_cv.parsed_data["experience_level"][
+                                                "years_experience"
+                                            ] = int(round(accurate_years))
+                                            logger.info(
+                                                f"✅ Updated years_experience to {int(round(accurate_years))} from career trajectory"
+                                            )
 
-                            safe_save(parsed_cv, update_fields=["parsed_data"])
-                            logger.info(
-                                f"✅ Career trajectory analysis completed for CV {cv_id}"
-                            )
-                        else:
-                            logger.warning(
-                                f"⚠️ Career analysis returned error: {career_analysis.get('error')}"
-                            )
-                    finally:
-                        loop.close()
+                                safe_save(parsed_cv, update_fields=["parsed_data"])
+                                logger.info(
+                                    f"✅ Career trajectory analysis completed for CV {cv_id}"
+                                )
+                            else:
+                                logger.error(
+                                    f"❌ Career analysis returned error: {career_analysis.get('error')}"
+                                )
+                                # Still save it so we can see the error message
+                                parsed_cv.parsed_data["career_trajectory"] = career_analysis
+                                safe_save(parsed_cv, update_fields=["parsed_data"])
+                        finally:
+                            loop.close()
 
                 except Exception as career_error:
                     logger.error(
