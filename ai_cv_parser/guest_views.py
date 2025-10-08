@@ -18,9 +18,10 @@ import uuid
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
-from .models import ParsedCV
+from .models import ParsedCV, EmailVerification
 from .serializers import ParsedCVSerializer
 from .disposable_emails import validate_email_for_cv_analysis
+from .email_service import VerificationEmailService
 
 logger = logging.getLogger("ai_cv_parser")
 
@@ -358,6 +359,226 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @action(detail=False, methods=["POST"], url_path="request-verification")
+    def request_verification(self, request):
+        """
+        Request email verification to access premium CV analysis features.
+        Phase 2: Email verification for premium features.
+
+        POST /api/ai_cv_parser/guest/request-verification/
+        {
+            "session_id": "...",
+            "email": "user@example.com",
+            "name": "John Doe"
+        }
+
+        Returns:
+            200: Verification email sent
+            400: Invalid email (disposable, fake, etc.)
+            404: Session not found
+            409: Email already verified for another CV
+        """
+        try:
+            session_id = request.data.get("session_id")
+            email = request.data.get("email", "").strip().lower()
+            name = request.data.get("name", "").strip()
+
+            # Validate required fields
+            if not session_id or not email:
+                return Response(
+                    {"error": "Session ID and email are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Validate email format and check for disposable/fake emails (Phase 1)
+            email_validation = validate_email_for_cv_analysis(email)
+            if not email_validation["valid"]:
+                logger.warning(
+                    f"Invalid email in verification request: {email} - {email_validation['error']}"
+                )
+                return Response(
+                    {"error": email_validation["error"], "field": "email"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get CV session
+            try:
+                guest_cv = ParsedCV.objects.get(session_id=session_id, is_guest=True)
+            except ParsedCV.DoesNotExist:
+                return Response(
+                    {
+                        "error": "Invalid session",
+                        "message": "Session not found or expired",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Check if this email has already been verified for a different CV
+            existing_verification = (
+                EmailVerification.objects.filter(email=email, is_verified=True)
+                .exclude(parsed_cv=guest_cv)
+                .first()
+            )
+
+            if existing_verification:
+                logger.warning(f"Email {email} already used for CV analysis")
+                return Response(
+                    {
+                        "error": "This email has already been used for CV analysis",
+                        "message": "Each email can only be used once. Please use a different email address.",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            # Check if verification already exists for this CV
+            existing_for_cv = EmailVerification.objects.filter(
+                parsed_cv=guest_cv, is_verified=False
+            ).first()
+
+            # If exists and not expired, resend email
+            if existing_for_cv and not existing_for_cv.is_expired():
+                logger.info(f"Resending verification email for {email}")
+                verification = existing_for_cv
+                verification.email = email
+                verification.name = name
+                verification.save(update_fields=["email", "name"])
+            else:
+                # Create new verification
+                ip_address = self.get_client_ip(request)
+                user_agent = request.META.get("HTTP_USER_AGENT", "")
+
+                verification = EmailVerification.create_verification(
+                    email=email,
+                    parsed_cv=guest_cv,
+                    name=name,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+                logger.info(f"Created verification for {email}, CV {guest_cv.id}")
+
+            # Send verification email
+            ats_score = None
+            if guest_cv.analysis_data:
+                ats_score = guest_cv.analysis_data.get("overall_score")
+
+            email_sent = VerificationEmailService.send_verification_email(
+                verification, ats_score=ats_score
+            )
+
+            if not email_sent:
+                return Response(
+                    {
+                        "error": "Failed to send verification email",
+                        "message": "Please try again in a few moments",
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Verification email sent to {email}",
+                    "verification_id": verification.id,
+                    "expires_in_hours": 24,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"Error requesting verification: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {"error": "Failed to request verification", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=False, methods=["GET"], url_path="verify-email/(?P<token>[^/.]+)")
+    def verify_email(self, request, token=None):
+        """
+        Verify email using verification token from email link.
+        Phase 2: Email verification for premium features.
+
+        GET /api/ai_cv_parser/guest/verify-email/<token>/
+
+        Returns:
+            200: Email verified successfully
+            404: Invalid token
+            410: Token expired
+            409: Already verified
+        """
+        try:
+            # Find verification by token
+            try:
+                verification = EmailVerification.objects.select_related(
+                    "parsed_cv"
+                ).get(verification_token=token)
+            except EmailVerification.DoesNotExist:
+                logger.warning(f"Invalid verification token: {token}")
+                return Response(
+                    {
+                        "error": "Invalid verification link",
+                        "message": "This verification link is invalid or has expired",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Check if already verified
+            if verification.is_verified:
+                logger.info(f"Verification already completed for {verification.email}")
+                # Still return success with session_id for redirect
+                return Response(
+                    {
+                        "success": True,
+                        "message": "Email already verified",
+                        "session_id": verification.parsed_cv.session_id,
+                        "already_verified": True,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Check if expired
+            if verification.is_expired():
+                logger.warning(f"Expired verification token for {verification.email}")
+                return Response(
+                    {
+                        "error": "Verification link expired",
+                        "message": "This link has expired. Please request a new verification email.",
+                    },
+                    status=status.HTTP_410_GONE,
+                )
+
+            # Mark as verified
+            verification.mark_verified()
+
+            logger.info(
+                f"Email {verification.email} verified successfully for CV {verification.parsed_cv.id}"
+            )
+
+            # Build redirect URL
+            from django.conf import settings
+
+            frontend_url = getattr(settings, "FRONTEND_URL", "https://ellacv.com")
+            redirect_url = f"{frontend_url}/cv-analysis?session={verification.parsed_cv.session_id}&verified=true"
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Email verified successfully",
+                    "session_id": verification.parsed_cv.session_id,
+                    "redirect_url": redirect_url,
+                    "verified_at": verification.verified_at.isoformat(),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"Error verifying email: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {"error": "Failed to verify email", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     @action(detail=False, methods=["GET"], url_path="results/(?P<session_id>[^/.]+)")
     def guest_results(self, request, session_id=None):
         """
@@ -392,7 +613,8 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                         "status": guest_cv.status,
                         "message": "Analysis still processing. Please check again in a few moments.",
                         "session_id": session_id,
-                    }
+                    },
+                    status=status.HTTP_202_ACCEPTED,
                 )
 
             # Check if analysis data is ready (parsing might be complete but AI analysis still running)
@@ -407,6 +629,14 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
                     },
                     status=status.HTTP_202_ACCEPTED,
                 )
+
+            # PHASE 2: Check email verification status
+            verification = EmailVerification.objects.filter(
+                parsed_cv=guest_cv, is_verified=True
+            ).first()
+
+            is_verified = verification is not None
+            logger.info(f"Session {session_id} verification status: {is_verified}")
 
             # Get analysis data
             analysis = guest_cv.analysis_data or {}
@@ -692,6 +922,30 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             }
 
             logger.info(f"Returning full analysis for session {session_id}")
+
+            # PHASE 2: Gate premium features based on email verification
+            if not is_verified:
+                # Return basic analysis only
+                basic_analysis = {
+                    "session_id": session_id,
+                    "verified": False,
+                    "ats_score": overall_score,
+                    "score_category": self._get_score_category(overall_score),
+                    "section_scores": detailed_section_scores,
+                    "top_issues": critical_issues[:3],  # Top 3 issues only
+                    "strengths": strengths[:3],  # Top 3 strengths only
+                    "verification_required": True,
+                    "message": "Verify your email to unlock detailed career insights and personalized recommendations",
+                }
+                logger.info(
+                    f"Returning basic analysis (unverified) for session {session_id}"
+                )
+                return Response(basic_analysis)
+
+            # Add verification status to full analysis
+            full_analysis["verified"] = True
+            full_analysis["verification_required"] = False
+
             return Response(full_analysis)
 
         except ParsedCV.DoesNotExist:
