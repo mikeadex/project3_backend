@@ -46,9 +46,7 @@ except ImportError:
     pytesseract = None
     Image = None
     PYTESSERACT_AVAILABLE = False
-    print(
-        "Warning: pytesseract or Pillow not available. OCR functionality will be limited."
-    )
+    logger.warning("pytesseract or Pillow not available. OCR functionality will be limited.")
 
 # Graceful pdfplumber import
 try:
@@ -58,9 +56,7 @@ try:
 except ImportError:
     pdfplumber = None
     PDFPLUMBER_AVAILABLE = False
-    print(
-        "Warning: pdfplumber not available. PDF parsing functionality will be limited."
-    )
+    logger.warning("pdfplumber not available. PDF parsing functionality will be limited.")
 
 # Use the dedicated cv_parser logger
 logger = logging.getLogger("cv_parser")
@@ -412,7 +408,7 @@ class AdvancedDocumentParser:
                     if text.strip():
                         return text
                 except Exception as doc_xml_error:
-                    print(f"Error parsing document.xml: {doc_xml_error}")
+                    logger.debug(f"Error parsing document.xml: {doc_xml_error}")
 
                 # Fallback: list all XML files and try parsing
                 xml_files = [f for f in zf.namelist() if f.endswith(".xml")]
@@ -431,17 +427,17 @@ class AdvancedDocumentParser:
                         text = " ".join(texts)
 
                         if text.strip():
-                            print(f"Text extracted from {xml_file}")
+                            logger.debug(f"Text extracted from {xml_file}")
                             return text
                     except Exception as xml_error:
-                        print(f"Error parsing {xml_file}: {xml_error}")
+                        logger.debug(f"Error parsing {xml_file}: {xml_error}")
 
-                print(f"WARNING: No text extracted from {docx_path}")
+                logger.warning(f"No text extracted from {docx_path}")
                 return ""
 
         except Exception as e:
-            print(
-                f"CRITICAL ERROR extracting text from DOCX {docx_path}: {type(e).__name__} - {e}"
+            logger.error(
+                f"Critical error extracting text from DOCX {docx_path}: {type(e).__name__} - {e}"
             )
             return ""
 

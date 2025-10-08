@@ -478,38 +478,41 @@ else:  # Default to Resend
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
-# Debug email configuration - ALWAYS show in production for debugging
-SHOW_EMAIL_CONFIG = True  # Force enable for debugging
-if DEBUG or os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true" or SHOW_EMAIL_CONFIG:
-    print("=" * 50)
-    print("📧 EMAIL CONFIGURATION")
-    print("=" * 50)
-    print(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
-    print(f"Email Provider: {EMAIL_PROVIDER}")
-    print(f"Use Testmail Testing: {EMAIL_USE_TESTMAIL}")
-    print(f"Email Host: {EMAIL_HOST}")
-    print(f"Email Port: {EMAIL_PORT}")
-    print(f"Frontend URL: {FRONTEND_URL}")
-    print("")
-    print("📦 API Key Status:")
-    print(f"   • Resend: {'✅ Set' if os.getenv('RESEND_API_KEY') else '❌ Not set'}")
-    print(f"   • SendGrid: {'✅ Set' if os.getenv('SENDGRID_API_KEY') else '❌ Not set'}")
-    print(f"   • Brevo: {'✅ Set' if os.getenv('BREVO_API_KEY') else '❌ Not set'}")
-    print("")
+# Debug email configuration - Only show when explicitly enabled or in DEBUG mode
+SHOW_EMAIL_CONFIG = os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true"
+if DEBUG or SHOW_EMAIL_CONFIG:
+    import logging
+    email_logger = logging.getLogger("django.email")
+    
+    email_logger.info("=" * 50)
+    email_logger.info("📧 EMAIL CONFIGURATION")
+    email_logger.info("=" * 50)
+    email_logger.info(f"Email Backend: {globals().get('EMAIL_BACKEND', 'Not set')}")
+    email_logger.info(f"Email Provider: {EMAIL_PROVIDER}")
+    email_logger.info(f"Use Testmail Testing: {EMAIL_USE_TESTMAIL}")
+    email_logger.info(f"Email Host: {EMAIL_HOST}")
+    email_logger.info(f"Email Port: {EMAIL_PORT}")
+    email_logger.info(f"Frontend URL: {FRONTEND_URL}")
+    email_logger.info("")
+    email_logger.info("📦 API Key Status:")
+    email_logger.info(f"   • Resend: {'✅ Set' if os.getenv('RESEND_API_KEY') else '❌ Not set'}")
+    email_logger.info(f"   • SendGrid: {'✅ Set' if os.getenv('SENDGRID_API_KEY') else '❌ Not set'}")
+    email_logger.info(f"   • Brevo: {'✅ Set' if os.getenv('BREVO_API_KEY') else '❌ Not set'}")
+    email_logger.info("")
     if EMAIL_USE_TESTMAIL:
-        print("🧪 TESTMAIL.APP TESTING MODE ENABLED")
-        print("   • Register with: yourtest.anything@inbox.testmail.app")
-        print("   • Email content will appear in console logs")
-        print("   • Check verification links in logs")
+        email_logger.info("🧪 TESTMAIL.APP TESTING MODE ENABLED")
+        email_logger.info("   • Register with: yourtest.anything@inbox.testmail.app")
+        email_logger.info("   • Email content will appear in console logs")
+        email_logger.info("   • Check verification links in logs")
     elif has_email_api_key:
-        print(f"🚀 PRODUCTION EMAIL ENABLED via {EMAIL_PROVIDER.upper()}")
-        print("   • Real emails will be sent to users")
-        print("   • Check provider dashboard for delivery status")
+        email_logger.info(f"🚀 PRODUCTION EMAIL ENABLED via {EMAIL_PROVIDER.upper()}")
+        email_logger.info("   • Real emails will be sent to users")
+        email_logger.info("   • Check provider dashboard for delivery status")
     else:
-        print("🔧 DEVELOPMENT MODE - Console Backend")
-        print("   • Emails will appear in logs only")
-        print("   • Add EMAIL_PROVIDER and API key for production")
-    print("=" * 50)
+        email_logger.info("🔧 DEVELOPMENT MODE - Console Backend")
+        email_logger.info("   • Emails will appear in logs only")
+        email_logger.info("   • Add EMAIL_PROVIDER and API key for production")
+    email_logger.info("=" * 50)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

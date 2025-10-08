@@ -9,6 +9,9 @@ from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
 from user_agents import parse
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .models import Category, Tag, Post, Comment, BlogImage, PostAnalytics
 from .serializers import (
@@ -116,7 +119,7 @@ class PostViewSet(viewsets.ModelViewSet):
         
         if not serializer.is_valid():
             # Log the validation errors for debugging
-            print("Post creation validation errors:", serializer.errors)
+            logger.warning(f"Post creation validation errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         self.perform_create(serializer)

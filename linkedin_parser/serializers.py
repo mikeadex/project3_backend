@@ -1,4 +1,8 @@
 from rest_framework import serializers
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .models import (
     LinkedInProfile,
     LinkedInEducation,
@@ -87,5 +91,5 @@ class LinkedInProfileSerializer(serializers.ModelSerializer):
             profile_data = parser.get_profile_data()
             return profile_data.get('picture', '')
         except Exception as e:
-            print(f"Error getting profile picture: {str(e)}")
+            logger.warning(f"Could not fetch profile picture: {str(e)}")
             return ''
