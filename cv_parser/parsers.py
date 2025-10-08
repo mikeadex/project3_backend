@@ -13,6 +13,9 @@ import json
 import time  # Import time for timing measurements
 from django.conf import settings
 
+# Use the dedicated cv_parser logger - define early so it can be used in imports
+logger = logging.getLogger("cv_parser")
+
 # Conditional ML imports - only load if ML features enabled
 try:
     import spacy
@@ -46,7 +49,9 @@ except ImportError:
     pytesseract = None
     Image = None
     PYTESSERACT_AVAILABLE = False
-    logger.warning("pytesseract or Pillow not available. OCR functionality will be limited.")
+    logger.warning(
+        "pytesseract or Pillow not available. OCR functionality will be limited."
+    )
 
 # Graceful pdfplumber import
 try:
@@ -56,10 +61,9 @@ try:
 except ImportError:
     pdfplumber = None
     PDFPLUMBER_AVAILABLE = False
-    logger.warning("pdfplumber not available. PDF parsing functionality will be limited.")
-
-# Use the dedicated cv_parser logger
-logger = logging.getLogger("cv_parser")
+    logger.warning(
+        "pdfplumber not available. PDF parsing functionality will be limited."
+    )
 
 
 class AdvancedDocumentParser:
