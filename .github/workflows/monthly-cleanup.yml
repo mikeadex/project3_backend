@@ -1,0 +1,90 @@
+name: Monthly Job Cleanup
+
+on:
+  # Schedule: Run on 1st of every month at 4:00 AM UTC
+  schedule:
+    - cron: "0 4 1 * *" # 1st day of month at 4:00 AM UTC
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      days_old:
+        description: "Delete jobs older than X days"
+        required: false
+        default: "90"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🗑️ Delete Old Jobs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: ella_backend.settings
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: "False"
+        run: |
+          DAYS_OLD="${{ github.event.inputs.days_old || '90' }}"
+          echo "🗑️ Deleting jobs older than $DAYS_OLD days..."
+
+          python manage.py shell << EOF
+          from jobstract.models import Opportunity
+          from django.utils import timezone
+          from datetime import timedelta
+
+          days_old = $DAYS_OLD
+          cutoff_date = timezone.now().date() - timedelta(days=days_old)
+
+          # Count jobs to delete
+          old_jobs = Opportunity.objects.filter(date_posted__lt=cutoff_date)
+          count = old_jobs.count()
+
+          print(f"📊 Found {count} jobs older than {days_old} days (before {cutoff_date})")
+
+          if count > 0:
+              # Delete old jobs
+              old_jobs.delete()
+              print(f"✅ Successfully deleted {count} old jobs")
+          else:
+              print("ℹ️ No old jobs to delete")
+
+          # Print remaining stats
+          total_remaining = Opportunity.objects.count()
+          print(f"📈 Total jobs remaining in database: {total_remaining}")
+          EOF
+
+      - name: 📧 Notify on failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.NOTIFICATION_EMAIL }}
+          password: ${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
+          subject: "🚨 Monthly Cleanup Failed - ${{ github.run_id }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: GitHub Actions
+          body: |
+            Monthly cleanup workflow failed!
+
+            Repository: ${{ github.repository }}
+            Run ID: ${{ github.run_id }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please check the logs for details.
