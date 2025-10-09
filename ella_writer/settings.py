@@ -12,7 +12,11 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
-from django.conf.global_settings import CSRF_COOKIE_SECURE, SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE
+from django.conf.global_settings import (
+    CSRF_COOKIE_SECURE,
+    SECURE_SSL_REDIRECT,
+    SESSION_COOKIE_SECURE,
+)
 from dotenv import load_dotenv
 import os
 import dj_database_url
@@ -25,18 +29,20 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # DeepSeek API Configuration
-DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
-DEEPSEEK_TIMEOUT = int(os.getenv('DEEPSEEK_TIMEOUT', 20))  # Default to 20 seconds if not set
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_TIMEOUT = int(
+    os.getenv("DEEPSEEK_TIMEOUT", 20)
+)  # Default to 20 seconds if not set
 
 # LLaMA API Configuration
-LLAMA_API_KEY = os.getenv('LLAMA_API_KEY')
-LLAMA_API_URL = os.getenv('LLAMA_API_URL', 'https://api.llama-api.com/chat/completions')
-LLAMA_MODEL = os.getenv('LLAMA_MODEL', 'llama3-8b-instruct')
+LLAMA_API_KEY = os.getenv("LLAMA_API_KEY")
+LLAMA_API_URL = os.getenv("LLAMA_API_URL", "https://api.llama-api.com/chat/completions")
+LLAMA_MODEL = os.getenv("LLAMA_MODEL", "llama3-8b-instruct")
 
 # Stripe API Configuration
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
-STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
-STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -44,20 +50,23 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 # SECURITY WARNING: keep the secret key used in production secret!
 # Secret Key Configuration
 
+
 def get_secret_key():
     import base64
+
     # First, try to get the base64 encoded secret key
-    encoded_secret_key = os.environ.get('DJANGO_SECRET_KEY', '')
-    
+    encoded_secret_key = os.environ.get("DJANGO_SECRET_KEY", "")
+
     try:
         # Try to decode the base64 encoded key
         if encoded_secret_key:
-            return base64.b64decode(encoded_secret_key).decode('utf-8')
+            return base64.b64decode(encoded_secret_key).decode("utf-8")
     except Exception:
         pass
-    
+
     # Fallback to the original secret key or generate a new one
     return encoded_secret_key or "django-insecure-fallback-key-please-replace"
+
 
 # Set the secret key using the function
 SECRET_KEY = get_secret_key()
@@ -68,8 +77,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "www.ellacv.com",
     "ellacv.com",
-    "www.ellacvwriter.com",      # Legacy domain support
-    "ellacvwriter.com",          # Legacy domain support
+    "www.ellacvwriter.com",  # Legacy domain support
+    "ellacvwriter.com",  # Legacy domain support
     "ellacvwriter.vercel.app",
     "www.ellacvwriter.vercel.app",
     "localhost",
@@ -82,11 +91,11 @@ SITE_ID = 1
 
 
 CURRENT_LLM_CONFIG = {
-    'provider': 'mistral',
-    'mistral_api_key': os.getenv('MISTRAL_API_KEY'),
-    'groq_api_key': os.getenv('GROQ_API_KEY'),
-    'huggingface_api_key': os.getenv('HUGGINGFACE_API_KEY'),
-    'model_path': '/path/to/local/llama/model.gguf'
+    "provider": "mistral",
+    "mistral_api_key": os.getenv("MISTRAL_API_KEY"),
+    "groq_api_key": os.getenv("GROQ_API_KEY"),
+    "huggingface_api_key": os.getenv("HUGGINGFACE_API_KEY"),
+    "model_path": "/path/to/local/llama/model.gguf",
 }
 
 # Application definition
@@ -121,7 +130,7 @@ INSTALLED_APPS = [
     "ai_cv_parser",
     "subscription",
     "blog",
-    "django_filters",  
+    "django_filters",
     "tinymce",
 ]
 
@@ -140,53 +149,53 @@ MIDDLEWARE = [
 ]
 
 SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': os.getenv('GOOGLE_OAUTH_CLIENT_ID', ''),
-            'secret': os.getenv('GOOGLE_OAUTH_CLIENT_SECRET', ''),
-            'key': ''
+    "google": {
+        "APP": {
+            "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+            "secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+            "key": "",
         },
-        'SCOPE': [
-            'profile',
-            'email',
+        "SCOPE": [
+            "profile",
+            "email",
         ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        }
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
     },
-    'github': {
-        'APP': {
-            'client_id': os.getenv('GITHUB_OAUTH_CLIENT_ID', ''),
-            'secret': os.getenv('GITHUB_OAUTH_CLIENT_SECRET', ''),
+    "github": {
+        "APP": {
+            "client_id": os.getenv("GITHUB_OAUTH_CLIENT_ID", ""),
+            "secret": os.getenv("GITHUB_OAUTH_CLIENT_SECRET", ""),
         },
-        'SCOPE': [
-            'user:email',
+        "SCOPE": [
+            "user:email",
         ],
     },
-    'linkedin_oauth2': {
-        'APP': {
-            'client_id': os.getenv('LINKEDIN_OAUTH_CLIENT_ID', ''),
-            'secret': os.getenv('LINKEDIN_OAUTH_CLIENT_SECRET', ''),
+    "linkedin_oauth2": {
+        "APP": {
+            "client_id": os.getenv("LINKEDIN_OAUTH_CLIENT_ID", ""),
+            "secret": os.getenv("LINKEDIN_OAUTH_CLIENT_SECRET", ""),
         },
-        'SCOPE': [
-            'openid',
-            'profile', 
-            'email',
+        "SCOPE": [
+            "openid",
+            "profile",
+            "email",
         ],
-        'PROFILE_FIELDS': [
-            'id',
-            'localizedFirstName',
-            'localizedLastName',
-            'emailAddress',
-        ]
+        "PROFILE_FIELDS": [
+            "id",
+            "localizedFirstName",
+            "localizedLastName",
+            "emailAddress",
+        ],
     },
 }
 
 CORS_ALLOWED_ORIGINS = [
-    "https://www.ellacv.com",        # Current production domain
-    "https://ellacv.com",            # Current production domain (non-www)
+    "https://www.ellacv.com",  # Current production domain
+    "https://ellacv.com",  # Current production domain (non-www)
     "https://www.ellacvwriter.com",  # Legacy domain support
-    "https://ellacvwriter.com",      # Legacy domain support
+    "https://ellacvwriter.com",  # Legacy domain support
     "https://ellacvwriter.vercel.app",
     "https://www.ellacvwriter.vercel.app",
     "http://localhost:5173",
@@ -195,11 +204,11 @@ CORS_ALLOWED_ORIGINS = [
 
 # Add this to fix CORS issues in production
 CORS_ALLOW_ALL_ORIGINS = True  # Temporarily allow all origins for troubleshooting
-CORS_ORIGIN_ALLOW_ALL = True   # Legacy setting for Django CORS Headers < 3.0
+CORS_ORIGIN_ALLOW_ALL = True  # Legacy setting for Django CORS Headers < 3.0
 
 # Add explicit CORS configuration for credentials
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
+CORS_EXPOSE_HEADERS = ["Content-Type", "Authorization"]
 
 # Ensure CSRF settings don't interfere with API requests
 CSRF_TRUSTED_ORIGINS = [
@@ -214,56 +223,56 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
 ]
 
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'access-control-allow-origin',
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "access-control-allow-origin",
 ]
 
 # Production-specific settings
-if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
+if os.environ.get("DJANGO_SETTINGS_MODULE", "").endswith("production"):
     # Security settings
     DEBUG = False
-    
+
     # Enforce HTTPS and secure cookies
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # Keep CORS settings permissive in production for now
     # We'll maintain CORS_ALLOW_ALL_ORIGINS = True from above
     # Important: This is a temporary measure to fix immediate issues
     # TODO: Once stable, replace with specific allowed origins for better security
-    
+
     # Keep CORS middleware for OAuth callbacks to work properly
     # Note: Commenting out CORS removal to fix OAuth regression
     # MIDDLEWARE = [m for m in MIDDLEWARE if 'corsheaders.middleware.CorsMiddleware' not in m]
-    
+
     # Add your production domains to allowed hosts
     ALLOWED_HOSTS = [
-        'project3-backend-7ck4.onrender.com', 
-        'ella-backend-gw8c.onrender.com', 
-        'www.ellacvwriter.com',
-        'ellacvwriter.com',
-        'www.ellacv.com',
-        'ellacv.com',
-        'ellacvwriter.vercel.app',
-        'www.ellacvwriter.vercel.app',
+        "project3-backend-7ck4.onrender.com",
+        "ella-backend-gw8c.onrender.com",
+        "www.ellacvwriter.com",
+        "ellacvwriter.com",
+        "www.ellacv.com",
+        "ellacv.com",
+        "ellacvwriter.vercel.app",
+        "www.ellacvwriter.vercel.app",
     ]
 
 REST_FRAMEWORK = {
@@ -305,9 +314,9 @@ EMAIL_USE_TESTMAIL = os.getenv("USE_TESTMAIL_TESTING", "false").lower() == "true
 
 # Check if any email provider API key is configured
 has_email_api_key = (
-    os.getenv("RESEND_API_KEY") or 
-    os.getenv("SENDGRID_API_KEY") or 
-    os.getenv("BREVO_API_KEY")
+    os.getenv("RESEND_API_KEY")
+    or os.getenv("SENDGRID_API_KEY")
+    or os.getenv("BREVO_API_KEY")
 )
 
 if has_email_api_key and not EMAIL_USE_TESTMAIL:
@@ -382,7 +391,9 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"  # ✅ Allow social logins to skip verif
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
-ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = (
+    f"{FRONTEND_URL}/email-confirmed"
+)
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False  # Don't auto-login after email confirmation
 ACCOUNT_LOGOUT_ON_GET = False
 
@@ -392,7 +403,9 @@ SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"  # ✅ Skip verification for social logins
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False  # ✅ Don't require email verification
-SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True  # ✅ Auto-connect social accounts
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = (
+    True  # ✅ Auto-connect social accounts
+)
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -407,8 +420,7 @@ WSGI_APPLICATION = "ella_writer.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.parse(
-        url=os.getenv("DATABASE_URL", ""),
-        conn_max_age=600, conn_health_checks=True
+        url=os.getenv("DATABASE_URL", ""), conn_max_age=600, conn_health_checks=True
     )
 }
 
@@ -449,12 +461,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 # Add STATIC configuration
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+STATIC_URL = "/static/"
 
 # Media files (User uploaded files)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 # Email settings for production - Support multiple providers
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "resend").lower()
@@ -482,8 +494,9 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.co
 SHOW_EMAIL_CONFIG = os.getenv("SHOW_EMAIL_CONFIG", "false").lower() == "true"
 if DEBUG or SHOW_EMAIL_CONFIG:
     import logging
+
     email_logger = logging.getLogger("django.email")
-    
+
     email_logger.info("=" * 50)
     email_logger.info("📧 EMAIL CONFIGURATION")
     email_logger.info("=" * 50)
@@ -495,9 +508,15 @@ if DEBUG or SHOW_EMAIL_CONFIG:
     email_logger.info(f"Frontend URL: {FRONTEND_URL}")
     email_logger.info("")
     email_logger.info("📦 API Key Status:")
-    email_logger.info(f"   • Resend: {'✅ Set' if os.getenv('RESEND_API_KEY') else '❌ Not set'}")
-    email_logger.info(f"   • SendGrid: {'✅ Set' if os.getenv('SENDGRID_API_KEY') else '❌ Not set'}")
-    email_logger.info(f"   • Brevo: {'✅ Set' if os.getenv('BREVO_API_KEY') else '❌ Not set'}")
+    email_logger.info(
+        f"   • Resend: {'✅ Set' if os.getenv('RESEND_API_KEY') else '❌ Not set'}"
+    )
+    email_logger.info(
+        f"   • SendGrid: {'✅ Set' if os.getenv('SENDGRID_API_KEY') else '❌ Not set'}"
+    )
+    email_logger.info(
+        f"   • Brevo: {'✅ Set' if os.getenv('BREVO_API_KEY') else '❌ Not set'}"
+    )
     email_logger.info("")
     if EMAIL_USE_TESTMAIL:
         email_logger.info("🧪 TESTMAIL.APP TESTING MODE ENABLED")
@@ -533,8 +552,8 @@ SOCIALACCOUNT_LOGIN_ON_GET = True
 SOCIALACCOUNT_STORE_TOKENS = False
 
 # Custom adapters for SPA (Single Page Application) compatibility
-ACCOUNT_ADAPTER = 'api.adapters.SPAAccountAdapter'
-SOCIALACCOUNT_ADAPTER = 'api.adapters.SPASocialAccountAdapter'
+ACCOUNT_ADAPTER = "api.adapters.SPAAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "api.adapters.SPASocialAccountAdapter"
 
 # Form setting
 ACCOUNT_FORMS = {
@@ -551,8 +570,8 @@ ACCOUNT_PASSWORD_REQUIRED = True
 
 
 # Environment Configuration
-ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'development')
-ENABLE_ML_FEATURES = os.getenv('ENABLE_ML_FEATURES', 'false').lower() == 'true'
+ENVIRONMENT = os.getenv("DJANGO_ENVIRONMENT", "development")
+ENABLE_ML_FEATURES = os.getenv("ENABLE_ML_FEATURES", "false").lower() == "true"
 
 # LLM Configuration (only load if ML features enabled)
 if ENABLE_ML_FEATURES:
@@ -562,25 +581,25 @@ if ENABLE_ML_FEATURES:
 else:
     # Disable ML features for faster builds and lighter deployments
     GEMINI_API_KEY = None
-    MISTRAL_API_KEY = None 
+    MISTRAL_API_KEY = None
     GROQ_API_KEY = None
 
 LLM_PROVIDERS = {
-    'development': {
-        'provider': 'local',
-        'model_path': os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf"),
-        'fallback_provider': 'local'
+    "development": {
+        "provider": "local",
+        "model_path": os.path.join(BASE_DIR, "models/llama-2-7b-chat.gguf"),
+        "fallback_provider": "local",
     },
-    'production': {
-        'provider': 'mistral',
-        'api_key': MISTRAL_API_KEY,
-        'fallback_provider': 'groq_llama',
-        'fallback_api_key': GROQ_API_KEY
-    }
+    "production": {
+        "provider": "mistral",
+        "api_key": MISTRAL_API_KEY,
+        "fallback_provider": "groq_llama",
+        "fallback_api_key": GROQ_API_KEY,
+    },
 }
 
 # Get current environment configuration
-CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS['development'])
+CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS["development"])
 
 # LinkedIn OAuth Configuration
 LINKEDIN_CONFIG = {
@@ -593,73 +612,75 @@ LINKEDIN_CONFIG = {
 }
 
 # Add to existing settings.py
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # TinyMCE LinkedIn-style configuration
 TINYMCE_DEFAULT_CONFIG = {
-    'selector': 'textarea',
-    'height': 360,
-    'width': '100%',
-    'menubar': False,
-    'statusbar': False,
-    'plugins': 'link image lists paste code hr table',
-    'toolbar': 'undo redo | styleselect | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | removeformat',
-    'toolbar_mode': 'sliding',
-    'contextmenu': 'link image table',
-    'paste_data_images': True,
-    'paste_as_text': False,
-    'paste_merge_formats': True,
-    'paste_webkit_styles': 'font-family font-size color background-color',
-    'browser_spellcheck': True,
-    'image_advtab': True,
-    'image_caption': True,
-    'style_formats': [
-        {'title': 'Paragraph', 'format': 'p'},
-        {'title': 'Heading 2', 'format': 'h2'},
-        {'title': 'Heading 3', 'format': 'h3'},
-        {'title': 'Heading 4', 'format': 'h4'},
-        {'title': 'Blockquote', 'format': 'blockquote'}
+    "selector": "textarea",
+    "height": 360,
+    "width": "100%",
+    "menubar": False,
+    "statusbar": False,
+    "plugins": "link image lists paste code hr table",
+    "toolbar": "undo redo | styleselect | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | removeformat",
+    "toolbar_mode": "sliding",
+    "contextmenu": "link image table",
+    "paste_data_images": True,
+    "paste_as_text": False,
+    "paste_merge_formats": True,
+    "paste_webkit_styles": "font-family font-size color background-color",
+    "browser_spellcheck": True,
+    "image_advtab": True,
+    "image_caption": True,
+    "style_formats": [
+        {"title": "Paragraph", "format": "p"},
+        {"title": "Heading 2", "format": "h2"},
+        {"title": "Heading 3", "format": "h3"},
+        {"title": "Heading 4", "format": "h4"},
+        {"title": "Blockquote", "format": "blockquote"},
     ],
-    'valid_elements': 'p,br,strong/b,em/i,u,strike,a[href|target=_blank|rel=nofollow],img[src|alt|width|height],h2,h3,h4,blockquote,ul,ol,li,table,tr,td,th,thead,tbody,hr,code,pre',
-    'convert_urls': False,
-    'relative_urls': False,
-    'remove_script_host': False,
-    'content_css': [
-        'https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css',
-        'https://fonts.googleapis.com/css?family=Roboto:400,700'
+    "valid_elements": "p,br,strong/b,em/i,u,strike,a[href|target=_blank|rel=nofollow],img[src|alt|width|height],h2,h3,h4,blockquote,ul,ol,li,table,tr,td,th,thead,tbody,hr,code,pre",
+    "convert_urls": False,
+    "relative_urls": False,
+    "remove_script_host": False,
+    "content_css": [
+        "https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css",
+        "https://fonts.googleapis.com/css?family=Roboto:400,700",
     ],
 }
 
 # Production-specific settings
-if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
+if os.environ.get("DJANGO_SETTINGS_MODULE", "").endswith("production"):
     # Security settings
     DEBUG = False
-    
+
     # Use environment variable for secret key in production
     # SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', SECRET_KEY)
-    
+
     # Enforce HTTPS and secure cookies
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # Database configuration for Render
     DATABASES = {
-        'default': dj_database_url.config(
-            default=os.environ.get('DATABASE_URL'),
-            conn_max_age=600,
-            ssl_require=True
+        "default": dj_database_url.config(
+            default=os.environ.get("DATABASE_URL"), conn_max_age=600, ssl_require=True
         )
     }
-    
+
     # Allowed hosts from environment variable
-    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
-    
+    ALLOWED_HOSTS = (
+        os.environ.get("ALLOWED_HOSTS", "").split(",")
+        if os.environ.get("ALLOWED_HOSTS")
+        else []
+    )
+
     # CORS settings for production
     # Note: We're not redefining CORS_ALLOWED_ORIGINS here anymore since it's defined globally above
     # and already includes all the production domains
-    
+
     CSRF_TRUSTED_ORIGINS = [
         "https://www.ellacvwriter.com",
         "https://ellacvwriter.com",
@@ -668,11 +689,15 @@ if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production'):
         "https://ellacvwriter.vercel.app",
         "https://www.ellacvwriter.vercel.app",
     ]
-    
+
     # Logging for production
-    LOGGING['handlers']['file']['filename'] = '/var/log/ella/cv_writer.log'
-    LOGGING['loggers']['cv_writer']['level'] = 'INFO'
+    LOGGING["handlers"]["file"]["filename"] = "/var/log/ella/cv_writer.log"
+    LOGGING["loggers"]["cv_writer"]["level"] = "INFO"
 
 # Ensure environment-specific LLM configuration
-ENVIRONMENT = 'production' if os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('production') else 'development'
-CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS['development'])
+ENVIRONMENT = (
+    "production"
+    if os.environ.get("DJANGO_SETTINGS_MODULE", "").endswith("production")
+    else "development"
+)
+CURRENT_LLM_CONFIG = LLM_PROVIDERS.get(ENVIRONMENT, LLM_PROVIDERS["development"])

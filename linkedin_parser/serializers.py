@@ -9,38 +9,39 @@ from .models import (
     LinkedInExperience,
     LinkedInSkill,
     LinkedInCertification,
-    LinkedInLanguage
+    LinkedInLanguage,
 )
 from .services import LinkedInParserService
+
 
 class LinkedInEducationSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInEducation
-        exclude = ('profile', 'created_at', 'updated_at')
+        exclude = ("profile", "created_at", "updated_at")
 
 
 class LinkedInExperienceSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInExperience
-        exclude = ('profile', 'created_at', 'updated_at')
+        exclude = ("profile", "created_at", "updated_at")
 
 
 class LinkedInSkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInSkill
-        exclude = ('profile', 'created_at', 'updated_at')
+        exclude = ("profile", "created_at", "updated_at")
 
 
 class LinkedInCertificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInCertification
-        exclude = ('profile', 'created_at', 'updated_at')
+        exclude = ("profile", "created_at", "updated_at")
 
 
 class LinkedInLanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInLanguage
-        exclude = ('profile', 'created_at', 'updated_at')
+        exclude = ("profile", "created_at", "updated_at")
 
 
 class LinkedInProfileSerializer(serializers.ModelSerializer):
@@ -53,43 +54,43 @@ class LinkedInProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = LinkedInProfile
         fields = [
-            'id',
-            'user',
-            'profile_url',
-            'profile_picture_url',
-            'name',
-            'email',
-            'headline',
-            'sync_status',
-            'last_synced',
-            'error_message',
-            'created_at',
-            'updated_at',
-            'education',
-            'experience',
-            'skills',
-            'certifications',
-            'languages'
+            "id",
+            "user",
+            "profile_url",
+            "profile_picture_url",
+            "name",
+            "email",
+            "headline",
+            "sync_status",
+            "last_synced",
+            "error_message",
+            "created_at",
+            "updated_at",
+            "education",
+            "experience",
+            "skills",
+            "certifications",
+            "languages",
         ]
         read_only_fields = [
-            'user',
-            'sync_status',
-            'last_synced',
-            'error_message',
-            'created_at',
-            'updated_at'
+            "user",
+            "sync_status",
+            "last_synced",
+            "error_message",
+            "created_at",
+            "updated_at",
         ]
 
     def get_profile_picture(self, obj):
         """Get the profile picture URL from the API response"""
         if not obj.access_token:
-            return ''
-            
+            return ""
+
         try:
             # Get profile data from the API
             parser = LinkedInParserService(obj.access_token)
             profile_data = parser.get_profile_data()
-            return profile_data.get('picture', '')
+            return profile_data.get("picture", "")
         except Exception as e:
             logger.warning(f"Could not fetch profile picture: {str(e)}")
-            return ''
+            return ""

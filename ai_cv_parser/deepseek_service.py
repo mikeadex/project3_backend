@@ -1129,14 +1129,20 @@ class DeepSeekService:
         try:
             # Check if API key is available
             if not self.api_key:
-                logger.warning("DeepSeek API key not available, returning basic career analysis")
+                logger.warning(
+                    "DeepSeek API key not available, returning basic career analysis"
+                )
                 experience = cv_data.get("experience", [])
-                tenure_stats = self._calculate_average_tenure_and_gaps(experience) if experience else {
-                    "total_experience": "0 years",
-                    "average_tenure": "N/A",
-                    "employment_gaps": 0
-                }
-                
+                tenure_stats = (
+                    self._calculate_average_tenure_and_gaps(experience)
+                    if experience
+                    else {
+                        "total_experience": "0 years",
+                        "average_tenure": "N/A",
+                        "employment_gaps": 0,
+                    }
+                )
+
                 return {
                     "job_consistency": {
                         "score": 0,
@@ -1161,7 +1167,7 @@ class DeepSeekService:
                         "recommendations": [],
                     },
                 }
-            
+
             experience = cv_data.get("experience", [])
             education = cv_data.get("education", [])
             certifications = cv_data.get("certifications", [])
@@ -1390,15 +1396,19 @@ Return ONLY the JSON object, no additional text."""
         except Exception as e:
             logger.error(f"Error analyzing career trajectory: {str(e)}")
             logger.error(traceback.format_exc())
-            
+
             # Try to calculate basic stats even on error
             experience = cv_data.get("experience", [])
-            tenure_stats = self._calculate_average_tenure_and_gaps(experience) if experience else {
-                "total_experience": "0 years",
-                "average_tenure": "N/A",
-                "employment_gaps": 0
-            }
-            
+            tenure_stats = (
+                self._calculate_average_tenure_and_gaps(experience)
+                if experience
+                else {
+                    "total_experience": "0 years",
+                    "average_tenure": "N/A",
+                    "employment_gaps": 0,
+                }
+            )
+
             return {
                 "error": str(e),
                 "job_consistency": {

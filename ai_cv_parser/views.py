@@ -2692,16 +2692,20 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         f"🔍 Starting career trajectory analysis for CV {cv_id}"
                     )
                     deepseek_service = DeepSeekService()
-                    
+
                     # Check if DeepSeek is available
                     if not deepseek_service.api_key:
-                        logger.warning(f"⚠️ DeepSeek API key not configured - skipping career trajectory analysis for CV {cv_id}")
+                        logger.warning(
+                            f"⚠️ DeepSeek API key not configured - skipping career trajectory analysis for CV {cv_id}"
+                        )
                         # Don't fail, just skip the analysis
                         parsed_cv.parsed_data["career_trajectory"] = {
                             "job_consistency": {
                                 "score": 0,
                                 "level": "Not Available",
-                                "insights": ["AI analysis requires API key configuration"],
+                                "insights": [
+                                    "AI analysis requires API key configuration"
+                                ],
                                 "recommendations": [],
                             },
                             "role_stability": {
@@ -2709,7 +2713,9 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                                 "level": "Not Available",
                                 "average_tenure": "N/A",
                                 "employment_gaps": 0,
-                                "insights": ["AI analysis requires API key configuration"],
+                                "insights": [
+                                    "AI analysis requires API key configuration"
+                                ],
                                 "flags": [],
                             },
                             "career_change_potential": {
@@ -2732,7 +2738,9 @@ class AICVParserViewSet(viewsets.ModelViewSet):
 
                             # Add career analysis to parsed_data
                             if "error" not in career_analysis:
-                                parsed_cv.parsed_data["career_trajectory"] = career_analysis
+                                parsed_cv.parsed_data["career_trajectory"] = (
+                                    career_analysis
+                                )
 
                                 # Update experience_level with accurate total_experience from career trajectory
                                 if career_analysis.get("role_stability", {}).get(
@@ -2765,7 +2773,9 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                                     f"❌ Career analysis returned error: {career_analysis.get('error')}"
                                 )
                                 # Still save it so we can see the error message
-                                parsed_cv.parsed_data["career_trajectory"] = career_analysis
+                                parsed_cv.parsed_data["career_trajectory"] = (
+                                    career_analysis
+                                )
                                 safe_save(parsed_cv, update_fields=["parsed_data"])
                         finally:
                             loop.close()
