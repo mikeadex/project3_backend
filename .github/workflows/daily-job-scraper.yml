@@ -52,7 +52,7 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
           # Django settings
-          DJANGO_SETTINGS_MODULE: ella_backend.settings
+          DJANGO_SETTINGS_MODULE: ella_writer.settings
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: "False"
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}

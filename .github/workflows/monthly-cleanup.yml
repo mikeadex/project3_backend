@@ -36,7 +36,7 @@ jobs:
       - name: 🗑️ Delete Old Jobs
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DJANGO_SETTINGS_MODULE: ella_backend.settings
+          DJANGO_SETTINGS_MODULE: ella_writer.settings
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: "False"
         run: |
