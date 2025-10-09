@@ -85,7 +85,7 @@ jobs:
           EOF
 
       - name: 📧 Notify on failure
-        if: failure()
+        if: failure() && secrets.NOTIFICATION_EMAIL != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -94,7 +94,7 @@ jobs:
           password: ${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
           subject: "🚨 Weekly Deep Scraper Failed - ${{ github.run_id }}"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: GitHub Actions
+          from: GitHub Actions <noreply@github.com>
           body: |
             Weekly deep scraper workflow failed!
 

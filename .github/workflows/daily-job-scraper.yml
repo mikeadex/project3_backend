@@ -110,7 +110,7 @@ jobs:
           EOF
 
       - name: 📧 Notify on failure
-        if: failure()
+        if: failure() && secrets.NOTIFICATION_EMAIL != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -119,12 +119,12 @@ jobs:
           password: ${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
           subject: "🚨 Job Scraper Failed - ${{ github.run_id }}"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: GitHub Actions
+          from: GitHub Actions <noreply@github.com>
           body: |
             Job scraper workflow failed!
-
+            
             Repository: ${{ github.repository }}
             Run ID: ${{ github.run_id }}
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
+            
             Please check the logs for details.
