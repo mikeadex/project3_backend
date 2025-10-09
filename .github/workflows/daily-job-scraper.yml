@@ -3,7 +3,22 @@ name: Daily Job Scraper
 on:
   # Schedule: Run daily at 2:00 AM UTC
   schedule:
-    - cron: "0 2 * * *" # Daily at 2:00 AM UTC
+    -      - name: 🔍 Run Job Scrapers
+        env:
+          # Database credentials (from GitHub Secrets)
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          # API Keys (from GitHub Secrets)
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+          # Django settings
+          DJANGO_SETTINGS_MODULE: ella_writer.settings
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: "False"
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}* *" # Daily at 2:00 AM UTC
 
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
@@ -52,13 +67,25 @@ jobs:
           else
             echo "✅ DATABASE_URL is set (length: ${#DATABASE_URL} characters)"
           fi
-          
+
           if [ -z "$REED_API_KEY" ]; then
             echo "⚠️ WARNING: REED_API_KEY is not set"
           else
             echo "✅ REED_API_KEY is set"
           fi
-          
+
+          if [ -z "$ADZUNA_APP_ID" ]; then
+            echo "⚠️ WARNING: ADZUNA_APP_ID is not set"
+          else
+            echo "✅ ADZUNA_APP_ID is set"
+          fi
+
+          if [ -z "$ADZUNA_APP_KEY" ]; then
+            echo "⚠️ WARNING: ADZUNA_APP_KEY is not set"
+          else
+            echo "✅ ADZUNA_APP_KEY is set"
+          fi
+
           if [ -z "$SECRET_KEY" ]; then
             echo "⚠️ WARNING: SECRET_KEY is not set"
           else
@@ -67,6 +94,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
       - name: �🔍 Run Job Scrapers
