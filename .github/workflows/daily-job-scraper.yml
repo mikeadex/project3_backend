@@ -42,7 +42,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🔍 Run Job Scrapers
+      - name: � Verify Environment Variables
+        run: |
+          echo "Checking environment variables..."
+          if [ -z "$DATABASE_URL" ]; then
+            echo "❌ ERROR: DATABASE_URL is not set!"
+            echo "Please check GitHub Secrets: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          else
+            echo "✅ DATABASE_URL is set (length: ${#DATABASE_URL} characters)"
+          fi
+          
+          if [ -z "$REED_API_KEY" ]; then
+            echo "⚠️ WARNING: REED_API_KEY is not set"
+          else
+            echo "✅ REED_API_KEY is set"
+          fi
+          
+          if [ -z "$SECRET_KEY" ]; then
+            echo "⚠️ WARNING: SECRET_KEY is not set"
+          else
+            echo "✅ SECRET_KEY is set"
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+
+      - name: �🔍 Run Job Scrapers
         env:
           # Database credentials (from GitHub Secrets)
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
