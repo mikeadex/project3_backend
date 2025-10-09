@@ -70,23 +70,23 @@ jobs:
             echo "✅ ADZUNA_APP_KEY is set"
           fi
         env:
-          DATABASE_URL: \${{ secrets.DATABASE_URL }}
-          REED_API_KEY: \${{ secrets.REED_API_KEY }}
-          ADZUNA_APP_ID: \${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: \${{ secrets.ADZUNA_APP_KEY }}
-          SECRET_KEY: \${{ secrets.SECRET_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
       - name: 🔍 Run Job Scrapers
         env:
-          DATABASE_URL: \${{ secrets.DATABASE_URL }}
-          REED_API_KEY: \${{ secrets.REED_API_KEY }}
-          ADZUNA_APP_ID: \${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: \${{ secrets.ADZUNA_APP_KEY }}
-          DEEPSEEK_API_KEY: \${{ secrets.DEEPSEEK_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DJANGO_SETTINGS_MODULE: ella_writer.settings
-          SECRET_KEY: \${{ secrets.SECRET_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: "False"
-          ALLOWED_HOSTS: \${{ secrets.ALLOWED_HOSTS }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
         run: |
           echo "🚀 Starting job scrapers..."
           python manage.py run_all_scrapers --days 1
