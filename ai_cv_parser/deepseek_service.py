@@ -68,8 +68,8 @@ class DeepSeekService:
                         headers=headers,
                         json=data,
                         timeout=aiohttp.ClientTimeout(
-                            total=120
-                        ),  # Longer timeout (2 minutes)
+                            total=300
+                        ),  # Extended timeout for 3-Layer QC (5 minutes)
                     ) as response:
                         if response.status == 400:
                             error_detail = (
@@ -154,8 +154,8 @@ class DeepSeekService:
                             "top_p": top_p,
                         },
                         timeout=aiohttp.ClientTimeout(
-                            total=120
-                        ),  # Increase timeout to 2 minutes
+                            total=300
+                        ),  # Extended timeout for 3-Layer QC (5 minutes)
                     ) as response:
                         if response.status == 200:
                             result = await response.json()

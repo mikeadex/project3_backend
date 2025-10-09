@@ -69,7 +69,7 @@ class CVQualityStandards:
 
     # Content requirements
     MIN_SUMMARY_LENGTH = 100
-    MAX_SUMMARY_LENGTH = 300
+    MAX_SUMMARY_LENGTH = 800  # Increased to accommodate comprehensive summaries
     MIN_EXPERIENCE_ITEMS = 1
     MIN_SKILLS_COUNT = 5
 
@@ -87,15 +87,29 @@ class CVQualityStandards:
 
     REQUIRED_ACTION_VERBS = [
         "managed",
+        "managing",
         "led",
+        "leading",
         "developed",
+        "developing",
         "implemented",
+        "implementing",
         "created",
+        "creating",
         "designed",
+        "designing",
         "improved",
+        "improving",
         "optimized",
+        "optimizing",
         "achieved",
+        "achieving",
         "delivered",
+        "delivering",
+        "analyzed",
+        "analyzing",
+        "coordinated",
+        "coordinating",
     ]
 
     ATS_KEYWORDS = {
@@ -108,6 +122,19 @@ class CVQualityStandards:
             "agile",
             "scrum",
             "testing",
+        ],
+        "finance": [
+            "financial analysis",
+            "accounting",
+            "financial reporting",
+            "budgeting",
+            "forecasting",
+            "auditing",
+            "compliance",
+            "tax preparation",
+            "reconciliation",
+            "accounts payable",
+            "accounts receivable",
         ],
         "business": [
             "strategy",
@@ -1150,6 +1177,12 @@ class ApproverAlgorithm:
                 reviewer_result.content, industry
             )
 
+            # Log validation results for debugging
+            logger.info(f"🔍 Approver validation results: {validation_results}")
+            failed_checks = [k for k, v in validation_results.items() if not v]
+            if failed_checks:
+                logger.warning(f"⚠️ Failed validation checks: {failed_checks}")
+
             # Determine if content passes all standards
             passed = all(validation_results.values())
 
@@ -1224,11 +1257,17 @@ class ApproverAlgorithm:
 
     def _validate_summary_length(self, summary: str) -> bool:
         """Validate professional summary length"""
-        return (
+        length = len(summary)
+        valid = (
             self.standards.MIN_SUMMARY_LENGTH
-            <= len(summary)
+            <= length
             <= self.standards.MAX_SUMMARY_LENGTH
         )
+        if not valid:
+            logger.warning(
+                f"⚠️ Summary length validation failed: {length} chars (required: {self.standards.MIN_SUMMARY_LENGTH}-{self.standards.MAX_SUMMARY_LENGTH})"
+            )
+        return valid
 
     def _validate_experience_count(self, experiences: List[Dict]) -> bool:
         """Validate minimum experience entries"""
@@ -1614,8 +1653,6 @@ class ThreeLayerQualityController:
             # If still no dates, try to extract from description or other fields
             if not dates:
                 # Look for date patterns in description
-                import re
-
                 date_patterns = [
                     r"(\w+ \d{4}) – (\w+ \d{4})",  # "Jan 2020 – Dec 2022"
                     r"(\d{4}) – (\d{4})",  # "2020 – 2022"

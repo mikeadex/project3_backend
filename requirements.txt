@@ -32,6 +32,9 @@ python-docx==1.1.0
 pdfplumber==0.11.5
 pdfminer.six==20231228
 
+# File security
+python-magic==0.4.27
+
 # CRITICAL: Install numpy first to avoid binary incompatibility
 numpy==1.24.4
 

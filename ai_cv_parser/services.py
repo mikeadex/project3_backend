@@ -888,8 +888,8 @@ class CVRewriteService:
                 logger.error("❌ Could not extract CV content from input data")
                 raise ValueError("Invalid CV data structure")
 
-            # Determine industry for better optimization
-            industry = cv_content.get("industry", "technology")
+            # Determine industry for better optimization using intelligent detection
+            industry = self._detect_industry(cv_content)
 
             # Process through 3-Layer Quality Control System
             logger.info(
@@ -1209,6 +1209,92 @@ class CVRewriteService:
                 "error": str(e),
             }
 
+    def _detect_industry(self, content: dict) -> str:
+        """Detects industry from CV content based on keywords in job titles, skills, and experience."""
+        industries = {
+            "finance": [
+                "banking",
+                "financial",
+                "accounting",
+                "investment",
+                "accountant",
+                "accounts",
+                "finance",
+                "audit",
+                "tax",
+            ],
+            "technology": [
+                "software",
+                "developer",
+                "engineering",
+                "IT",
+                "tech",
+                "programming",
+                "data",
+                "cloud",
+                "devops",
+            ],
+            "healthcare": [
+                "medical",
+                "healthcare",
+                "clinical",
+                "patient",
+                "hospital",
+                "nurse",
+                "doctor",
+            ],
+            "marketing": [
+                "marketing",
+                "advertising",
+                "brand",
+                "digital",
+                "social media",
+                "seo",
+            ],
+            "education": [
+                "teaching",
+                "education",
+                "academic",
+                "instructor",
+                "professor",
+                "tutor",
+            ],
+            "sales": [
+                "sales",
+                "business development",
+                "account manager",
+                "client relations",
+            ],
+            "legal": ["legal", "law", "attorney", "counsel", "compliance", "paralegal"],
+            "hr": [
+                "human resources",
+                "hr",
+                "recruitment",
+                "talent acquisition",
+                "people operations",
+            ],
+        }
+
+        content_str = str(content).lower()
+
+        # Count industry keyword matches
+        matches = {
+            industry: sum(1 for keyword in keywords if keyword.lower() in content_str)
+            for industry, keywords in industries.items()
+        }
+
+        logger.info(f"🔍 Industry detection matches: {matches}")
+
+        # Return industry with most matches, default to technology
+        detected_industry = (
+            max(matches.items(), key=lambda x: x[1])[0]
+            if any(matches.values())
+            else "technology"
+        )
+
+        logger.info(f"🎯 Detected industry: {detected_industry}")
+        return detected_industry
+
     def rewrite_cv_sync(self, cv_data, user):
         """
         Synchronous version of the rewrite_cv method that doesn't use async/await.
@@ -1221,6 +1307,22 @@ class CVRewriteService:
         Returns:
             Dictionary with rewritten content and new CV ID
         """
+        # 🚨 CRITICAL DEBUG LOGGING
+        logger.info("=" * 100)
+        logger.info("🚀🚀🚀 [SYNC] rewrite_cv_sync() METHOD CALLED!")
+        logger.info(
+            f"🔍 [SYNC] Has quality_controller: {hasattr(self, 'quality_controller')}"
+        )
+        if hasattr(self, "quality_controller"):
+            logger.info(
+                f"🔍 [SYNC] quality_controller type: {type(self.quality_controller).__name__}"
+            )
+        else:
+            logger.error("❌ [SYNC] quality_controller MISSING!")
+        logger.info(f"🔍 [SYNC] CV data type: {type(cv_data)}")
+        logger.info(f"🔍 [SYNC] User: {user.username if user else 'None'}")
+        logger.info("=" * 100)
+
         try:
             # Ensure clean database connection
             refresh_db_connection()
@@ -1256,8 +1358,8 @@ class CVRewriteService:
                     logger.error("[SYNC] Could not extract CV content from input data")
                     raise ValueError("Invalid CV data structure")
 
-                # Determine industry for better optimization
-                industry = cv_content.get("industry", "technology")
+                # Determine industry for better optimization using intelligent detection
+                industry = self._detect_industry(cv_content)
 
                 # Process through 3-Layer Quality Control System (synchronous)
                 logger.info(

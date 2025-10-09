@@ -22,6 +22,7 @@ from .models import ParsedCV, EmailVerification
 from .serializers import ParsedCVSerializer
 from .disposable_emails import validate_email_for_cv_analysis
 from .email_service import VerificationEmailService
+from .file_security import validate_uploaded_file, log_security_event
 
 logger = logging.getLogger("ai_cv_parser")
 
@@ -158,21 +159,41 @@ class GuestCVAnalysisViewSet(viewsets.ViewSet):
             file = request.FILES["file"]
             logger.info(f"Processing guest file: {file.name} ({file.size} bytes)")
 
-            # Validate file size (max 10MB)
-            if file.size > 10 * 1024 * 1024:
+            # 🛡️ COMPREHENSIVE SECURITY VALIDATION
+            validation_result = validate_uploaded_file(file)
+
+            if not validation_result["valid"]:
+                # Log security violation
+                log_security_event(
+                    "upload_rejected",
+                    {
+                        "filename": file.name,
+                        "error": validation_result["error"],
+                        "size": file.size,
+                        "mime_type": getattr(file, "content_type", "unknown"),
+                    },
+                    ip_address,
+                )
+
+                logger.warning(
+                    f"Security validation failed for {file.name}: {validation_result['error']}"
+                )
+
                 return Response(
-                    {"error": "File too large. Maximum size is 10MB."},
+                    {"error": validation_result["error"]},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Validate file type
-            allowed_extensions = [".pdf", ".docx", ".doc"]
-            file_ext = os.path.splitext(file.name)[1].lower()
-            if file_ext not in allowed_extensions:
+            # Use sanitized filename from security validation
+            file.name = validation_result["sanitized_name"]
+            logger.info(
+                f"File validated successfully. Using sanitized name: {file.name}"
+            )
+
+            # Additional basic size check (already done in validation, but kept for redundancy)
+            if file.size > 10 * 1024 * 1024:
                 return Response(
-                    {
-                        "error": f'Invalid file type. Allowed types: {", ".join(allowed_extensions)}'
-                    },
+                    {"error": "File too large. Maximum size is 10MB."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

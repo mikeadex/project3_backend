@@ -1162,13 +1162,55 @@ def rewrite_cv(request):
                     }
                     session.save()
 
+                    # 🚨 CRITICAL DEBUG: About to call rewrite_cv_sync
+                    logger.info("=" * 100)
+                    logger.info(
+                        "🔍 DEBUG: ABOUT TO CALL CVRewriteService.rewrite_cv_sync"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: processed_cv_data keys: {list(processed_cv_data.keys()) if isinstance(processed_cv_data, dict) else 'NOT A DICT'}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: User: {user.username if hasattr(user, 'username') else user}"
+                    )
+                    logger.info("=" * 100)
+
                     # Process initial rewrite with DeepSeek
                     cv_rewrite_service = CVRewriteService(
                         deepseek_service=DeepSeekService()
                     )
+
+                    # 🚨 DEBUG: Verify service initialization
+                    logger.info(
+                        f"🔍 DEBUG: cv_rewrite_service created: {cv_rewrite_service}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: Has quality_controller: {hasattr(cv_rewrite_service, 'quality_controller')}"
+                    )
+
                     initial_result = cv_rewrite_service.rewrite_cv_sync(
                         processed_cv_data, user
                     )
+
+                    # 🚨 CRITICAL DEBUG: After calling rewrite_cv_sync
+                    logger.info("=" * 100)
+                    logger.info("🔍 DEBUG: CVRewriteService.rewrite_cv_sync RETURNED")
+                    logger.info(
+                        f"🔍 DEBUG: initial_result type: {type(initial_result)}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: initial_result keys: {list(initial_result.keys()) if isinstance(initial_result, dict) else 'NOT A DICT'}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: initial_result status: {initial_result.get('status') if isinstance(initial_result, dict) else 'N/A'}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: Has quality_score: {initial_result.get('quality_score') if isinstance(initial_result, dict) else 'N/A'}"
+                    )
+                    logger.info(
+                        f"🔍 DEBUG: Has approved: {initial_result.get('approved') if isinstance(initial_result, dict) else 'N/A'}"
+                    )
+                    logger.info("=" * 100)
 
                     # Log the structure of the initial result for debugging
                     logger.info(
@@ -1321,35 +1363,43 @@ def rewrite_cv(request):
                                 "Updated professional summary with improved version"
                             )
 
-                        if "experience" in rewritten_cv and isinstance(
-                            rewritten_cv["experience"], list
-                        ):
-                            # Merge improved experience descriptions with original experience data
-                            original_experiences = complete_rewritten_cv.get(
-                                "experience", []
-                            )
-                            improved_experiences = rewritten_cv["experience"]
+                        if "experience" in rewritten_cv:
+                            # Handle STRING format from 3-Layer QC (formatted bullet points)
+                            if isinstance(rewritten_cv["experience"], str):
+                                complete_rewritten_cv["experience"] = rewritten_cv[
+                                    "experience"
+                                ]
+                                logger.info(
+                                    "Updated experience with 3-Layer QC formatted string"
+                                )
+                            # Handle LIST format from legacy enhancement
+                            elif isinstance(rewritten_cv["experience"], list):
+                                # Merge improved experience descriptions with original experience data
+                                original_experiences = complete_rewritten_cv.get(
+                                    "experience", []
+                                )
+                                improved_experiences = rewritten_cv["experience"]
 
-                            merged_experiences = []
-                            for i, orig_exp in enumerate(original_experiences):
-                                merged_exp = orig_exp.copy()
-                                # Update description if we have an improved version
-                                if (
-                                    i < len(improved_experiences)
-                                    and "description" in improved_experiences[i]
-                                ):
-                                    merged_exp["description"] = improved_experiences[i][
-                                        "description"
-                                    ]
-                                    logger.info(
-                                        f"Updated experience {i+1} description with improved version"
-                                    )
-                                merged_experiences.append(merged_exp)
+                                merged_experiences = []
+                                for i, orig_exp in enumerate(original_experiences):
+                                    merged_exp = orig_exp.copy()
+                                    # Update description if we have an improved version
+                                    if (
+                                        i < len(improved_experiences)
+                                        and "description" in improved_experiences[i]
+                                    ):
+                                        merged_exp["description"] = (
+                                            improved_experiences[i]["description"]
+                                        )
+                                        logger.info(
+                                            f"Updated experience {i+1} description with improved version"
+                                        )
+                                    merged_experiences.append(merged_exp)
 
-                            complete_rewritten_cv["experience"] = merged_experiences
-                            logger.info(
-                                f"Merged {len(merged_experiences)} experience entries"
-                            )
+                                complete_rewritten_cv["experience"] = merged_experiences
+                                logger.info(
+                                    f"Merged {len(merged_experiences)} experience entries"
+                                )
 
                         if "skills" in rewritten_cv:
                             # If skills is a string, keep original structure but note the improvement
