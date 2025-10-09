@@ -51,19 +51,19 @@ jobs:
           else
             echo "✅ DATABASE_URL is set"
           fi
-          
+
           if [ -z "\$REED_API_KEY" ]; then
             echo "⚠️ WARNING: REED_API_KEY is not set"
           else
             echo "✅ REED_API_KEY is set"
           fi
-          
+
           if [ -z "\$ADZUNA_APP_ID" ]; then
             echo "⚠️ WARNING: ADZUNA_APP_ID is not set"
           else
             echo "✅ ADZUNA_APP_ID is set"
           fi
-          
+
           if [ -z "\$ADZUNA_APP_KEY" ]; then
             echo "⚠️ WARNING: ADZUNA_APP_KEY is not set"
           else
@@ -99,4 +99,4 @@ jobs:
           DJANGO_SETTINGS_MODULE: ella_writer.settings
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
-          python -c "from jobstract.models import Opportunity; from django.utils import timezone; today = timezone.now().date(); today_jobs = Opportunity.objects.filter(created_at__date=today).count(); total_jobs = Opportunity.objects.count(); print(f'📊 Jobs added today: {today_jobs}'); print(f'📊 Total jobs: {total_jobs}')"
+          python -c "import django; django.setup(); from jobstract.models import Opportunity; from django.utils import timezone; today = timezone.now().date(); today_jobs = Opportunity.objects.filter(created_at__date=today).count(); total_jobs = Opportunity.objects.count(); print(f'📊 Jobs added today: {today_jobs}'); print(f'📊 Total jobs: {total_jobs}')"
