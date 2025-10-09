@@ -110,7 +110,8 @@ jobs:
           EOF
 
       - name: 📧 Notify on failure
-        if: failure() && secrets.NOTIFICATION_EMAIL != ''
+        if: failure()
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
