@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from jobstract.models import Job
+from jobstract.models import Opportunity
 from jobstract.services.sme_scraper import SMEScraper
 from django.db import transaction
 import logging
@@ -30,7 +30,7 @@ class Command(BaseCommand):
         
         try:
             # Check if we need to scrape based on last scrape time
-            last_job = Job.objects.order_by('-created_at').first()
+            last_job = Opportunity.objects.order_by('-created_at').first()
             if last_job and not force:
                 last_scrape_time = last_job.created_at
                 time_since_last_scrape = timezone.now() - last_scrape_time
@@ -70,7 +70,7 @@ class Command(BaseCommand):
                     for job_data in batch:
                         try:
                             # Check if job already exists
-                            existing_job = Job.objects.filter(
+                            existing_job = Opportunity.objects.filter(
                                 title=job_data['title'],
                                 company=job_data['company'],
                                 location=job_data['location'],
@@ -85,7 +85,7 @@ class Command(BaseCommand):
                                 processed_jobs += 1
                             else:
                                 # Create new job
-                                Job.objects.create(**job_data)
+                                Opportunity.objects.create(**job_data)
                                 processed_jobs += 1
                                 
                         except Exception as e:

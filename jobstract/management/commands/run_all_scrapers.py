@@ -42,14 +42,15 @@ class Command(BaseCommand):
         logger.info(f"Starting all job scrapers with force={force}, location={location}, days={days}")
         
         scrapers = [
-            {
-                'name': 'SME Scraper',
-                'command': 'scrape_jobs',
-                'args': {
-                    'days': days,
-                    'force': force
-                }
-            },
+            # SME Scraper temporarily disabled - SMEScraper service not implemented
+            # {
+            #     'name': 'SME Scraper',
+            #     'command': 'scrape_jobs',
+            #     'args': {
+            #         'days': days,
+            #         'force': force
+            #     }
+            # },
             {
                 'name': 'Reed Scraper',
                 'command': 'reed_scraper',
