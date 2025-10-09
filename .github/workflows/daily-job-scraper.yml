@@ -3,22 +3,7 @@ name: Daily Job Scraper
 on:
   # Schedule: Run daily at 2:00 AM UTC
   schedule:
-    -      - name: 🔍 Run Job Scrapers
-        env:
-          # Database credentials (from GitHub Secrets)
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-          # API Keys (from GitHub Secrets)
-          REED_API_KEY: ${{ secrets.REED_API_KEY }}
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-
-          # Django settings
-          DJANGO_SETTINGS_MODULE: ella_writer.settings
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          DEBUG: "False"
-          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}* *" # Daily at 2:00 AM UTC
+    - cron: "0 2 * * *"
 
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
@@ -40,7 +25,7 @@ on:
 jobs:
   scrape-jobs:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # Prevent hanging jobs
+    timeout-minutes: 30
 
     steps:
       - name: 📥 Checkout code
@@ -50,138 +35,74 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-          cache: "pip" # Cache pip dependencies for faster runs
+          cache: "pip"
 
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: � Verify Environment Variables
+      - name: 🔐 Verify Environment Variables
         run: |
           echo "Checking environment variables..."
-          if [ -z "$DATABASE_URL" ]; then
+          if [ -z "\$DATABASE_URL" ]; then
             echo "❌ ERROR: DATABASE_URL is not set!"
-            echo "Please check GitHub Secrets: https://github.com/${{ github.repository }}/settings/secrets/actions"
             exit 1
           else
-            echo "✅ DATABASE_URL is set (length: ${#DATABASE_URL} characters)"
+            echo "✅ DATABASE_URL is set"
           fi
-
-          if [ -z "$REED_API_KEY" ]; then
+          
+          if [ -z "\$REED_API_KEY" ]; then
             echo "⚠️ WARNING: REED_API_KEY is not set"
           else
             echo "✅ REED_API_KEY is set"
           fi
-
-          if [ -z "$ADZUNA_APP_ID" ]; then
+          
+          if [ -z "\$ADZUNA_APP_ID" ]; then
             echo "⚠️ WARNING: ADZUNA_APP_ID is not set"
           else
             echo "✅ ADZUNA_APP_ID is set"
           fi
-
-          if [ -z "$ADZUNA_APP_KEY" ]; then
+          
+          if [ -z "\$ADZUNA_APP_KEY" ]; then
             echo "⚠️ WARNING: ADZUNA_APP_KEY is not set"
           else
             echo "✅ ADZUNA_APP_KEY is set"
           fi
-
-          if [ -z "$SECRET_KEY" ]; then
-            echo "⚠️ WARNING: SECRET_KEY is not set"
-          else
-            echo "✅ SECRET_KEY is set"
-          fi
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          REED_API_KEY: ${{ secrets.REED_API_KEY }}
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          REED_API_KEY: \${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: \${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: \${{ secrets.ADZUNA_APP_KEY }}
+          SECRET_KEY: \${{ secrets.SECRET_KEY }}
 
-      - name: �🔍 Run Job Scrapers
+      - name: 🔍 Run Job Scrapers
         env:
-          # Database credentials (from GitHub Secrets)
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-          # API Keys (from GitHub Secrets)
-          REED_API_KEY: ${{ secrets.REED_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-
-          # Django settings
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          REED_API_KEY: \${{ secrets.REED_API_KEY }}
+          ADZUNA_APP_ID: \${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: \${{ secrets.ADZUNA_APP_KEY }}
+          DEEPSEEK_API_KEY: \${{ secrets.DEEPSEEK_API_KEY }}
           DJANGO_SETTINGS_MODULE: ella_writer.settings
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SECRET_KEY: \${{ secrets.SECRET_KEY }}
           DEBUG: "False"
-          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          ALLOWED_HOSTS: \${{ secrets.ALLOWED_HOSTS }}
         run: |
           echo "🚀 Starting job scrapers..."
-
-          # Use inputs if manual trigger, otherwise use defaults
-          LOCATION="${{ github.event.inputs.location || '' }}"
-          DAYS="${{ github.event.inputs.days || '1' }}"
-          FORCE="${{ github.event.inputs.force || 'false' }}"
-
-          # Build command arguments
-          CMD="python manage.py run_all_scrapers --days $DAYS"
-
-          if [ "$FORCE" = "true" ]; then
-            CMD="$CMD --force"
-          fi
-
-          if [ -n "$LOCATION" ]; then
-            CMD="$CMD --location '$LOCATION'"
-          fi
-
-          echo "📝 Running command: $CMD"
-          eval $CMD
-
-          echo "✅ Job scraping completed successfully!"
+          python manage.py run_all_scrapers --days 1
+          echo "✅ Job scraping completed!"
 
       - name: 📊 Summary Statistics
-        if: always() # Run even if scraping partially failed
+        if: always()
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
         run: |
-          echo "📊 Generating statistics..."
-          python manage.py shell << EOF
-          from jobstract.models import Opportunity
-          from django.utils import timezone
-          from datetime import timedelta
-
-          # Jobs added today
-          today = timezone.now().date()
-          today_jobs = Opportunity.objects.filter(created_at__date=today).count()
-
-          # Total jobs
-          total_jobs = Opportunity.objects.count()
-
-          # Jobs from last 7 days
-          week_ago = timezone.now() - timedelta(days=7)
-          weekly_jobs = Opportunity.objects.filter(created_at__gte=week_ago).count()
-
-          print(f"📈 Statistics:")
-          print(f"  - Jobs added today: {today_jobs}")
-          print(f"  - Total jobs in DB: {total_jobs}")
-          print(f"  - Jobs from last 7 days: {weekly_jobs}")
-          print(f"  - Average per day (last 7d): {weekly_jobs / 7:.1f}")
-          EOF
-
-      - name: 📧 Notify on failure
-        if: failure()
-        continue-on-error: true
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.NOTIFICATION_EMAIL }}
-          password: ${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
-          subject: "🚨 Job Scraper Failed - ${{ github.run_id }}"
-          to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: GitHub Actions <noreply@github.com>
-          body: |
-            Job scraper workflow failed!
-
-            Repository: ${{ github.repository }}
-            Run ID: ${{ github.run_id }}
-            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-            Please check the logs for details.
+          python manage.py shell << 'PYEOF'
+from jobstract.models import Opportunity
+from django.utils import timezone
+today = timezone.now().date()
+today_jobs = Opportunity.objects.filter(created_at__date=today).count()
+total_jobs = Opportunity.objects.count()
+print(f"📊 Jobs added today: {today_jobs}")
+print(f"📊 Total jobs: {total_jobs}")
+PYEOF
