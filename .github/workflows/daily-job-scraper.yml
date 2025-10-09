@@ -122,9 +122,9 @@ jobs:
           from: GitHub Actions <noreply@github.com>
           body: |
             Job scraper workflow failed!
-            
+
             Repository: ${{ github.repository }}
             Run ID: ${{ github.run_id }}
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
+
             Please check the logs for details.

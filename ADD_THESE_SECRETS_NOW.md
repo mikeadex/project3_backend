@@ -10,7 +10,8 @@ Click "New repository secret" for each one below:
 
 **Name**: `DATABASE_URL`
 
-**Value**: 
+**Value**:
+
 ```
 postgresql://neondb_owner:npg_TteR75HFXhpJ@ep-weathered-haze-a8l0ky65-pooler.eastus2.azure.neon.tech/neondb?sslmode=require
 ```
@@ -22,6 +23,7 @@ postgresql://neondb_owner:npg_TteR75HFXhpJ@ep-weathered-haze-a8l0ky65-pooler.eas
 **Name**: `REED_API_KEY`
 
 **Value**:
+
 ```
 78341a75-e20b-41f5-ad6f-2051f4dbbba1
 ```
@@ -33,6 +35,7 @@ postgresql://neondb_owner:npg_TteR75HFXhpJ@ep-weathered-haze-a8l0ky65-pooler.eas
 **Name**: `SECRET_KEY`
 
 **Value**:
+
 ```
 cG9wcTJjKV5ebG96XnM3YWUld3NmMz10IXQoPWw3Y2JmNSFzenEmcl4wXnBnKj10bQ==
 ```
@@ -44,6 +47,7 @@ cG9wcTJjKV5ebG96XnM3YWUld3NmMz10IXQoPWw3Y2JmNSFzenEmcl4wXnBnKj10bQ==
 **Name**: `DEEPSEEK_API_KEY`
 
 **Value**:
+
 ```
 sk-72efdda392064447b46db563f3bebb0a
 ```
@@ -55,6 +59,7 @@ sk-72efdda392064447b46db563f3bebb0a
 **Name**: `ALLOWED_HOSTS`
 
 **Value**:
+
 ```
 www.ellacvwriter.com,ellacvwriter.com,localhost
 ```
