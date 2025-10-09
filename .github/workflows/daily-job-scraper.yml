@@ -95,14 +95,8 @@ jobs:
       - name: 📊 Summary Statistics
         if: always()
         env:
-          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: ella_writer.settings
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
-          python manage.py shell << 'PYEOF'
-from jobstract.models import Opportunity
-from django.utils import timezone
-today = timezone.now().date()
-today_jobs = Opportunity.objects.filter(created_at__date=today).count()
-total_jobs = Opportunity.objects.count()
-print(f"📊 Jobs added today: {today_jobs}")
-print(f"📊 Total jobs: {total_jobs}")
-PYEOF
+          python -c "from jobstract.models import Opportunity; from django.utils import timezone; today = timezone.now().date(); today_jobs = Opportunity.objects.filter(created_at__date=today).count(); total_jobs = Opportunity.objects.count(); print(f'📊 Jobs added today: {today_jobs}'); print(f'📊 Total jobs: {total_jobs}')"
