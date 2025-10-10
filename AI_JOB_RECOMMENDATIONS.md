@@ -9,6 +9,7 @@ The new job recommendation system uses **multi-factor AI scoring** to match user
 ## ❌ Old System (Before)
 
 ### **Simple Matching**
+
 ```python
 # Only checked:
 1. Skills (basic text search)
@@ -16,6 +17,7 @@ The new job recommendation system uses **multi-factor AI scoring** to match user
 ```
 
 ### **Problems:**
+
 - ❌ No ranking or scoring
 - ❌ No explanation why jobs were recommended
 - ❌ Many users saw "No recommendations" message
@@ -29,6 +31,7 @@ The new job recommendation system uses **multi-factor AI scoring** to match user
 ### **5-Factor Scoring Algorithm**
 
 #### **1. Skills Match (40% weight)** 🎯
+
 - **What**: Compares user's skills with job requirements
 - **How**: Calculates percentage of required skills user possesses
 - **Scoring**:
@@ -38,6 +41,7 @@ The new job recommendation system uses **multi-factor AI scoring** to match user
   - 0% = No skills match
 
 **Example:**
+
 ```
 Job requires: Python, Django, React, PostgreSQL
 User has: Python, Django, JavaScript
@@ -49,6 +53,7 @@ Weighted Score = 50% × 0.40 = 20 points
 ---
 
 #### **2. Title Similarity (25% weight)** 📝
+
 - **What**: Measures how similar job title is to user's past roles
 - **How**: Uses sequence matching + keyword overlap
 - **Scoring**:
@@ -58,6 +63,7 @@ Weighted Score = 50% × 0.40 = 20 points
   - 25% = Different but related field
 
 **Example:**
+
 ```
 User's past role: "Senior Software Engineer"
 Job title: "Software Developer"
@@ -69,6 +75,7 @@ Weighted Score = 70% × 0.25 = 17.5 points
 ---
 
 #### **3. Experience Level (20% weight)** 📊
+
 - **What**: Matches job requirements with user's experience level
 - **How**: 8-tier hierarchy with proximity scoring
 - **Hierarchy**:
@@ -90,6 +97,7 @@ Weighted Score = 70% × 0.25 = 17.5 points
   - 3+ levels difference = 40%
 
 **Example:**
+
 ```
 User level: Senior (4)
 Job requires: Mid Level (3)
@@ -102,6 +110,7 @@ Weighted Score = 80% × 0.20 = 16 points
 ---
 
 #### **4. Location Match (10% weight)** 📍
+
 - **What**: Preference for jobs in user's location or remote
 - **How**: Compares job location with user's preferred location
 - **Scoring**:
@@ -111,6 +120,7 @@ Weighted Score = 80% × 0.20 = 16 points
   - Different city = 30%
 
 **Example:**
+
 ```
 User location: London
 Job 1: London → 100% → 10 points
@@ -122,6 +132,7 @@ Job 4: Birmingham → 30% → 3 points
 ---
 
 #### **5. Recency Score (5% weight)** ⏰
+
 - **What**: Newer jobs ranked higher
 - **How**: Calculates days since posting
 - **Scoring**:
@@ -133,6 +144,7 @@ Job 4: Birmingham → 30% → 3 points
   - 90+ days = 50%
 
 **Example:**
+
 ```
 Job posted: 5 days ago
 Recency Score = 100%
@@ -145,14 +157,14 @@ Weighted Score = 100% × 0.05 = 5 points
 
 ### **Job Example: "Senior Python Developer at TechCorp"**
 
-| Factor | Score | Weight | Weighted Score |
-|--------|-------|--------|----------------|
-| Skills Match | 85% | 40% | **34.0 points** |
-| Title Similarity | 75% | 25% | **18.8 points** |
-| Experience Level | 100% | 20% | **20.0 points** |
-| Location Match | 90% | 10% | **9.0 points** |
-| Recency | 100% | 5% | **5.0 points** |
-| **TOTAL** | - | - | **86.8/100** ✅ |
+| Factor           | Score | Weight | Weighted Score  |
+| ---------------- | ----- | ------ | --------------- |
+| Skills Match     | 85%   | 40%    | **34.0 points** |
+| Title Similarity | 75%   | 25%    | **18.8 points** |
+| Experience Level | 100%  | 20%    | **20.0 points** |
+| Location Match   | 90%   | 10%    | **9.0 points**  |
+| Recency          | 100%  | 5%     | **5.0 points**  |
+| **TOTAL**        | -     | -      | **86.8/100** ✅ |
 
 **Match Explanation**: "Strong skills match (85%) • Similar to your past roles • Perfect experience level match • Remote work available • Recently posted"
 
@@ -161,6 +173,7 @@ Weighted Score = 100% × 0.05 = 5 points
 ## 🎨 User Experience Improvements
 
 ### **Before:**
+
 ```
 Recommended for You
 
@@ -168,30 +181,31 @@ Recommended for You
 ```
 
 ### **After:**
+
 ```
 Recommended for You  ✨
 
 1. Senior Software Developer at TechCorp
    📍 London (Remote) • 💰 £60k-£80k • 🎯 86% Match
-   
+
    Why recommended:
    • Strong skills match (85%)
    • Similar to your past roles
    • Perfect experience level match
    • Remote work available
    • Recently posted
-   
+
    [Apply Now]
 
 2. Python Developer at StartupCo
    📍 Manchester (Hybrid) • 💰 £50k-£65k • 🎯 78% Match
-   
+
    Why recommended:
    • Good skills match (75%)
    • Related to your experience
    • Good experience level fit
    • Recently posted
-   
+
    [Apply Now]
 
 ... (showing top 20 matches)
@@ -215,7 +229,7 @@ class JobRecommendationEngine:
         'location': 0.10,    # 10%
         'recency': 0.05,     # 5%
     }
-    
+
     MIN_SCORE_THRESHOLD = 30  # Only show jobs scoring 30+
 ```
 
@@ -253,11 +267,13 @@ class JobRecommendationEngine:
 ### **Recommendation Quality**
 
 **Before:**
+
 - Average relevance: ~40%
 - Users seeing 0 recommendations: ~60%
 - User satisfaction: Low
 
 **After:**
+
 - Average relevance: ~85%
 - Users seeing 0 recommendations: ~5%
 - User satisfaction: High
@@ -265,10 +281,12 @@ class JobRecommendationEngine:
 ### **User Engagement**
 
 **Before:**
+
 - Click-through rate: ~5%
 - Application rate: ~2%
 
 **After (Expected):**
+
 - Click-through rate: ~35% (7x improvement)
 - Application rate: ~15% (7.5x improvement)
 
@@ -307,7 +325,7 @@ for rec in recommendations:
     job = rec['job']
     score = rec['score']
     scores = rec['component_scores']
-    
+
     print(f"\n🎯 {job.title} ({score}% match)")
     print(f"   Company: {job.employer.employer_name}")
     print(f"   Scores: Skills={scores['skills']}, Title={scores['title']}, "
@@ -321,12 +339,14 @@ for rec in recommendations:
 ### **No Recommendations?**
 
 **Check user profile:**
+
 ```python
 engine = JobRecommendationEngine(user=user)
 print(engine.user_profile)
 ```
 
 Expected output:
+
 ```python
 {
     'skills': {'python', 'django', 'react'},
@@ -338,6 +358,7 @@ Expected output:
 ```
 
 **Check if jobs exist:**
+
 ```python
 from jobstract.models import Opportunity
 jobs_count = Opportunity.objects.filter(opportunity_type='job').count()
@@ -345,6 +366,7 @@ print(f"Total jobs: {jobs_count}")
 ```
 
 **Lower threshold if needed:**
+
 ```python
 # In recommendation_engine.py
 MIN_SCORE_THRESHOLD = 20  # Lower from 30 to 20
@@ -357,15 +379,18 @@ MIN_SCORE_THRESHOLD = 20  # Lower from 30 to 20
 ### **Production Checklist**
 
 1. ✅ **Database has professional jobs**
+
    - Tomorrow's scraper run will add ~500 professional jobs
    - Engine will have jobs to recommend
 
 2. ✅ **Users have complete profiles**
+
    - Skills added
    - Work experience entered
    - CV created
 
 3. ✅ **API endpoint working**
+
    ```bash
    curl -H "Authorization: Bearer <token>" \
         https://your-api.com/api/jobstract/opportunities/recommended/
@@ -383,16 +408,19 @@ MIN_SCORE_THRESHOLD = 20  # Lower from 30 to 20
 ### **Phase 2 (Optional)**
 
 1. **Machine Learning Integration**
+
    - Learn from user's application history
    - Adjust weights based on user behavior
    - Predict application likelihood
 
 2. **Collaborative Filtering**
+
    - "Users like you also applied to..."
    - Similar user profiles
    - Industry trends
 
 3. **Advanced NLP**
+
    - Semantic similarity (not just keyword matching)
    - Job description analysis
    - Company culture matching
@@ -409,12 +437,14 @@ MIN_SCORE_THRESHOLD = 20  # Lower from 30 to 20
 ### **What Changed**
 
 **Before:**
+
 - ❌ Basic skill + experience filtering
 - ❌ No scoring system
 - ❌ Random ordering
 - ❌ No explanations
 
 **After:**
+
 - ✅ AI-powered 5-factor scoring
 - ✅ Weighted algorithm (0-100 scale)
 - ✅ Ranked by relevance
@@ -434,11 +464,12 @@ MIN_SCORE_THRESHOLD = 20  # Lower from 30 to 20
 ## 🔗 Related Features
 
 Works with:
+
 1. **Professional Job Targeting** (PROFESSIONAL_JOBS_TARGETING.md)
    - 500 professional jobs/day
    - 8 sectors, 69 keywords
-   
 2. **Duplicate Detection** (DUPLICATE_DETECTION_FIXED.md)
+
    - No duplicate job listings
    - Cleaner recommendations
 

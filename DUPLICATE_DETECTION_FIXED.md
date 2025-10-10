@@ -3,6 +3,7 @@
 ## ❌ The Problem
 
 From your scraper output, we saw jobs appearing multiple times:
+
 ```
 ✅ Created new job: Van Delivery Driver at UKE Mulitdrop Limited
 ✅ Created new job: Van Delivery Driver at UKE Mulitdrop Limited
@@ -13,6 +14,7 @@ From your scraper output, we saw jobs appearing multiple times:
 ```
 
 **Root Cause:**
+
 - Previous duplicate detection used `title + employer + application_url`
 - Problem: Same job has **different tracking URLs** from aggregators
 - Example: Adzuna adds unique tracking parameters to each URL
@@ -25,6 +27,7 @@ From your scraper output, we saw jobs appearing multiple times:
 ### **New Duplicate Detection Logic**
 
 Changed from:
+
 ```python
 # OLD (BROKEN)
 Opportunity.objects.get_or_create(
@@ -36,6 +39,7 @@ Opportunity.objects.get_or_create(
 ```
 
 To:
+
 ```python
 # NEW (FIXED)
 existing_job = Opportunity.objects.filter(
@@ -62,6 +66,7 @@ else:
 ## 📊 Impact
 
 ### **Before Fix**
+
 ```
 📋 Found 37992 total jobs, processing 50 results
 ✅ Created new job: Van Delivery Driver at UKE Mulitdrop Limited
@@ -74,6 +79,7 @@ Total: 50 jobs scraped → 30 unique jobs (40% duplicates)
 ```
 
 ### **After Fix**
+
 ```
 📋 Found 37992 total jobs, processing 50 results
 ✅ Created new job: Van Delivery Driver at UKE Mulitdrop Limited
@@ -86,6 +92,7 @@ Total: 50 jobs scraped → 48 unique jobs (4% duplicates)
 ```
 
 ### **Expected Results**
+
 - **Duplicate Reduction**: 40% → 4% (90% improvement)
 - **Database Size**: ~35% smaller (less storage needed)
 - **Job Quality**: Only unique professional positions
@@ -98,18 +105,22 @@ Total: 50 jobs scraped → 48 unique jobs (4% duplicates)
 ### **Files Modified**
 
 1. **`jobstract/management/commands/adzuna_scraper.py`**
+
    - Changed duplicate detection to `title + employer + location`
    - Added case-insensitive matching with `__iexact`
 
 2. **`jobstract/management/commands/reed_scraper.py`**
+
    - Same duplicate detection logic
    - Shows "⏭️ Skipped duplicate" messages
 
 3. **`jobstract/management/commands/dwp_scraper.py`**
+
    - Same duplicate detection logic
    - Consistent with other scrapers
 
 4. **`jobstract/models.py`**
+
    - Added composite index: `['title', 'employer', 'location']`
    - Added created_at index for faster date queries
 
@@ -122,22 +133,25 @@ Total: 50 jobs scraped → 48 unique jobs (4% duplicates)
 ## 🚀 Deployment Steps
 
 ### **1. Run Migration (GitHub Actions)**
+
 The migration will run automatically when the workflow executes. No manual action needed!
 
 However, if you want to run it manually on your production database:
+
 ```bash
 # In GitHub Actions or production server
 python manage.py migrate jobstract
 ```
 
 ### **2. Verify Indexes Created**
+
 ```python
 from django.db import connection
 
 # Check indexes
 with connection.cursor() as cursor:
     cursor.execute("""
-        SELECT indexname FROM pg_indexes 
+        SELECT indexname FROM pg_indexes
         WHERE tablename = 'jobstract_opportunity'
     """)
     indexes = cursor.fetchall()
@@ -146,6 +160,7 @@ with connection.cursor() as cursor:
 ```
 
 Expected output:
+
 ```
 job_duplicate_idx    ← NEW index for duplicate detection
 job_created_idx      ← NEW index for date queries
@@ -159,6 +174,7 @@ job_created_idx      ← NEW index for date queries
 ### **Duplicate Detection Speed**
 
 **Before (no index):**
+
 ```
 Checking 1 job: ~5ms
 Checking 100 jobs: ~500ms
@@ -166,6 +182,7 @@ Checking 500 jobs: ~2,500ms (2.5 seconds)
 ```
 
 **After (with composite index):**
+
 ```
 Checking 1 job: ~0.5ms
 Checking 100 jobs: ~50ms
@@ -189,6 +206,7 @@ python manage.py run_all_scrapers --days 1 --debug
 ```
 
 **Look for these messages:**
+
 ```
 ✅ Created new job: Software Developer at TechCorp
 ⏭️  Skipped duplicate: Software Developer  ← Good! Working!
@@ -221,6 +239,7 @@ for dup in duplicates:
 ## 🎯 Summary
 
 ### **What Changed**
+
 - ✅ Duplicate detection now uses `title + employer + location` (not URL)
 - ✅ Case-insensitive matching catches variations
 - ✅ Database indexes speed up queries by 10x
@@ -228,6 +247,7 @@ for dup in duplicates:
 - ✅ Migration file ready to apply
 
 ### **Benefits**
+
 - 🎯 90% reduction in duplicates (40% → 4%)
 - 📊 35% smaller database
 - ⚡ 10x faster duplicate checking
@@ -235,7 +255,9 @@ for dup in duplicates:
 - 🎨 Cleaner job listings for users
 
 ### **Next Run**
+
 Tomorrow at **2 AM UTC**, you'll see output like:
+
 ```
 ----- Running Reed Scraper (software developer) -----
 ✅ Created new job: Senior Software Developer
@@ -253,11 +275,14 @@ Tomorrow at **2 AM UTC**, you'll see output like:
 ## 🔗 Related Updates
 
 This fix works together with:
+
 1. **Professional Keywords** (PROFESSIONAL_JOBS_TARGETING.md)
+
    - Targets 69 professional keywords across 8 sectors
    - Now with fewer duplicates!
 
 2. **Beautifulsoup4 Fix** (requirements.txt)
+
    - All scrapers working correctly
 
 3. **Workflow Improvements** (daily-job-scraper.yml)

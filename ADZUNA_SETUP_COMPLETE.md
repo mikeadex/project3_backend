@@ -3,17 +3,20 @@
 ## ✅ What Was Added
 
 ### 1. **Adzuna Scraper** (`adzuna_scraper.py`)
+
 - Fetches jobs from Adzuna API (aggregates 100+ job boards)
 - Supports location, keywords, date range filtering
 - Includes error handling and rate limit detection
 - Beautiful summary output with emoji indicators
 
 ### 2. **Orchestrator Updated** (`run_all_scrapers.py`)
+
 - Added Adzuna scraper to daily automation
 - Runs in sequence: Reed → Adzuna → DWP
 - Passes location and days parameters
 
 ### 3. **GitHub Actions Workflows Updated**
+
 - `daily-job-scraper.yml`: Added ADZUNA_APP_ID and ADZUNA_APP_KEY verification
 - `weekly-deep-scrape.yml`: Added Adzuna credentials to environment
 
@@ -22,6 +25,7 @@
 ## 📊 Test Results
 
 **Local Test (Just Ran):**
+
 ```
 Starting Adzuna job fetching...
 📡 Fetching jobs from Adzuna API...
@@ -52,6 +56,7 @@ Starting Adzuna job fetching...
 ## 🔑 GitHub Secrets Required
 
 ### **Already Added:**
+
 - ✅ `DATABASE_URL`
 - ✅ `REED_API_KEY`
 - ✅ `SECRET_KEY`
@@ -67,24 +72,30 @@ Starting Adzuna job fetching...
 ## 📅 Automation Schedule
 
 ### **Daily Scraper** (2 AM UTC)
+
 Runs: Reed → Adzuna → DWP
+
 ```bash
 python manage.py run_all_scrapers --days 1
 ```
 
 **Expected Jobs:**
+
 - Reed: ~100 jobs
 - **Adzuna: ~50 jobs** 🆕
 - DWP: ~50 jobs
 - **Total: ~200 jobs/day** (up from 150)
 
 ### **Weekly Deep Scraper** (Sunday 3 AM UTC)
+
 Runs: Reed → Adzuna → DWP (7-day scrape)
+
 ```bash
 python manage.py run_all_scrapers --days 7 --force
 ```
 
 **Expected Jobs:**
+
 - Reed: ~700 jobs
 - **Adzuna: ~350 jobs** 🆕
 - DWP: ~350 jobs
@@ -95,11 +106,13 @@ python manage.py run_all_scrapers --days 7 --force
 ## 🎯 New Job Count Projections
 
 ### **Before Adzuna:**
+
 - Daily: 150-200 jobs
 - Weekly: 1,000-1,500 jobs
 - Monthly: 4,000-6,000 jobs
 
 ### **After Adzuna:** 🚀
+
 - Daily: **200-250 jobs** (+33%)
 - Weekly: **1,400-1,750 jobs** (+40%)
 - Monthly: **6,000-7,500 jobs** (+50%)
@@ -110,17 +123,18 @@ python manage.py run_all_scrapers --days 7 --force
 
 ### **Current Setup (ALL FREE):**
 
-| Service | Tier | Cost | Jobs/Day | Jobs/Month |
-|---------|------|------|----------|------------|
-| Reed API | Unlimited | $0 | 100+ | 3,000+ |
-| **Adzuna API** | Free (250 calls/mo) | **$0** | **50** | **1,500** |
-| DWP Scraper | Web scraping | $0 | 50 | 1,500 |
-| GitHub Actions | 2,000 min/mo | $0 | - | - |
-| **TOTAL** | - | **$0/month** | **200+** | **6,000+** |
+| Service        | Tier                | Cost         | Jobs/Day | Jobs/Month |
+| -------------- | ------------------- | ------------ | -------- | ---------- |
+| Reed API       | Unlimited           | $0           | 100+     | 3,000+     |
+| **Adzuna API** | Free (250 calls/mo) | **$0**       | **50**   | **1,500**  |
+| DWP Scraper    | Web scraping        | $0           | 50       | 1,500      |
+| GitHub Actions | 2,000 min/mo        | $0           | -        | -          |
+| **TOTAL**      | -                   | **$0/month** | **200+** | **6,000+** |
 
 **🎉 Still 100% FREE!**
 
 ### **Adzuna Free Tier Details:**
+
 - 250 API calls/month
 - 50 jobs per call
 - = 12,500 jobs/month max
@@ -128,7 +142,9 @@ python manage.py run_all_scrapers --days 7 --force
 - **Well within limits!** ✅
 
 ### **When to Upgrade:**
+
 Only if you need 100+ active users making job applications:
+
 - Developer Tier: £50/month (5,000 calls = 250k jobs)
 - Business Tier: £500/month (100k calls = 5M jobs)
 
@@ -137,9 +153,11 @@ Only if you need 100+ active users making job applications:
 ## 🚀 Next Steps
 
 ### **1. Add GitHub Secrets (Required)**
+
 Go to: https://github.com/mikeadex/project3_backend/settings/secrets/actions
 
 **Add these 2 secrets:**
+
 1. **Name:** `ADZUNA_APP_ID`  
    **Value:** `[your Adzuna app ID]`
 
@@ -147,6 +165,7 @@ Go to: https://github.com/mikeadex/project3_backend/settings/secrets/actions
    **Value:** `[your Adzuna app key]`
 
 ### **2. Commit and Push Changes**
+
 ```bash
 cd Ella-backend
 git add .
@@ -155,11 +174,13 @@ git push origin new-main
 ```
 
 ### **3. Test Workflow Manually**
+
 1. Go to: https://github.com/mikeadex/project3_backend/actions
 2. Click "Daily Job Scraper"
 3. Click "Run workflow" → "Run workflow"
 
 **Expected Output:**
+
 ```
 ✅ REED_API_KEY is set
 ✅ ADZUNA_APP_ID is set
@@ -188,6 +209,7 @@ Created new job: Software Developer at TechCorp
 ```
 
 ### **4. Monitor First Week**
+
 - Check Actions tab daily for green checkmarks
 - Verify ~200 jobs added per day
 - Confirm no rate limit errors (should be fine)
@@ -197,6 +219,7 @@ Created new job: Software Developer at TechCorp
 ## 🧪 Manual Testing Commands
 
 ### **Test Adzuna Alone:**
+
 ```bash
 # Small test (10 jobs)
 python manage.py adzuna_scraper --days 7 --results 10
@@ -212,6 +235,7 @@ python manage.py adzuna_scraper --keywords "software developer" --days 7
 ```
 
 ### **Test All Scrapers:**
+
 ```bash
 # Daily scrape (all 3 scrapers)
 python manage.py run_all_scrapers --days 1
@@ -228,6 +252,7 @@ python manage.py run_all_scrapers --location "Manchester" --days 1
 ## 📊 Adzuna Scraper Features
 
 ### **What It Does:**
+
 - ✅ Aggregates 100+ job boards (Indeed, Monster, Reed duplicate-filtered, etc.)
 - ✅ UK-wide search by default
 - ✅ Location filtering (London, Manchester, etc.)
@@ -242,6 +267,7 @@ python manage.py run_all_scrapers --location "Manchester" --days 1
 - ✅ Beautiful formatted output
 
 ### **What It Doesn't Do:**
+
 - ❌ Submit job applications (no job board allows this)
 - ❌ Store user credentials
 - ❌ Send emails to users
@@ -251,26 +277,31 @@ python manage.py run_all_scrapers --location "Manchester" --days 1
 ## 🎨 Output Examples
 
 ### **Success:**
+
 ```
 ✅ Created new job: Senior Full Stack Developer at TechCorp
 ```
 
 ### **Duplicate:**
+
 ```
 ⏭️  Skipped duplicate: Marketing Manager at StartupCo
 ```
 
 ### **Update (with --force):**
+
 ```
 🔄 Updated existing job: Project Manager - Remote
 ```
 
 ### **Error:**
+
 ```
 ❌ Error processing job: Invalid date format
 ```
 
 ### **Rate Limit:**
+
 ```
 ⚠️  Rate limit exceeded. Free tier allows 250 calls/month.
 ```
@@ -280,18 +311,21 @@ python manage.py run_all_scrapers --location "Manchester" --days 1
 ## 🔥 Summary
 
 **What Changed:**
+
 - ✅ Added Adzuna scraper (new file)
 - ✅ Updated orchestrator (added to automation)
 - ✅ Updated GitHub Actions (2 workflow files)
 - ✅ Tested locally (10 jobs created successfully)
 
 **What You Get:**
+
 - 🎉 **50% more jobs** (6,000 → 9,000 jobs/month)
 - 🎉 **Still 100% FREE** (within Adzuna free tier)
 - 🎉 **100+ job boards** aggregated (Indeed, Monster, etc.)
 - 🎉 **Zero maintenance** (fully automated)
 
 **Next Action:**
+
 1. Add ADZUNA_APP_ID and ADZUNA_APP_KEY to GitHub Secrets
 2. Commit and push changes
 3. Test workflow manually

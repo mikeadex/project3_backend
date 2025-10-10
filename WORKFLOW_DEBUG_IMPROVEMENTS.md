@@ -1,14 +1,17 @@
 # Workflow Debug Improvements
 
 ## Issue
+
 The GitHub Actions cron job ran at the expected time but completed very quickly (1-5 seconds per step), suggesting it didn't actually extract any jobs.
 
 ## Root Cause Analysis
+
 The workflow was running silently without proper error handling or verbose output, making it impossible to diagnose failures.
 
 ## Solutions Implemented
 
 ### 1. **Enhanced Error Handling in Workflow** ✅
+
 Updated `.github/workflows/daily-job-scraper.yml`:
 
 ```yaml
@@ -28,6 +31,7 @@ Updated `.github/workflows/daily-job-scraper.yml`:
 ```
 
 **Benefits**:
+
 - `set -e`: Exits immediately if any command fails
 - `--debug`: Enables verbose output from all scrapers
 - `2>&1 | tee`: Captures both stdout and stderr to log file
@@ -35,11 +39,12 @@ Updated `.github/workflows/daily-job-scraper.yml`:
 - Displays full log on failure
 
 ### 2. **Log Artifact Upload** ✅
+
 Added step to upload logs as artifacts:
 
 ```yaml
 - name: 📤 Upload Scraper Logs
-  if: always()  # Run even if previous step fails
+  if: always() # Run even if previous step fails
   uses: actions/upload-artifact@v3
   with:
     name: scraper-logs
@@ -48,14 +53,17 @@ Added step to upload logs as artifacts:
 ```
 
 **Benefits**:
+
 - Logs available for 7 days after each run
 - Can download and analyze even successful runs
 - `if: always()` ensures logs uploaded even on failure
 
 ### 3. **Debug Flag Support in Orchestrator** ✅
+
 Updated `jobstract/management/commands/run_all_scrapers.py`:
 
 **Added debug argument**:
+
 ```python
 parser.add_argument(
     "--debug",
@@ -65,6 +73,7 @@ parser.add_argument(
 ```
 
 **Pass debug to all scrapers**:
+
 ```python
 {
     "name": "Reed Scraper",
@@ -100,6 +109,7 @@ parser.add_argument(
 ## How to Check Logs After Next Run
 
 ### Method 1: GitHub Actions Web UI
+
 1. Go to: https://github.com/mikeadex/project3_backend/actions
 2. Click on the latest "Daily Job Scraper" run
 3. Expand each step to see detailed output
@@ -108,6 +118,7 @@ parser.add_argument(
 6. Extract and read `scraper_output.log`
 
 ### Method 2: Via API (if you have GitHub CLI)
+
 ```bash
 # List recent runs
 gh run list --workflow=daily-job-scraper.yml --limit 5
@@ -124,6 +135,7 @@ gh run download <RUN_ID> --name scraper-logs
 With `--debug` flag, you should see:
 
 **Reed Scraper**:
+
 ```
 ----- Running Reed Scraper -----
 Starting Reed job fetching...
@@ -137,6 +149,7 @@ Created new job: Marketing Manager at StartupCo
 ```
 
 **Adzuna Scraper**:
+
 ```
 ----- Running Adzuna Scraper -----
 📡 Fetching jobs from Adzuna API...
@@ -148,6 +161,7 @@ Created new job: Marketing Manager at StartupCo
 ```
 
 **DWP Scraper**:
+
 ```
 ----- Running DWP Scraper -----
 Starting DWP Civil Service job fetching...
@@ -159,6 +173,7 @@ Created new job: Admin Officer at HMRC
 ```
 
 **Final Summary**:
+
 ```
 📊 Jobs added today: 200
 📊 Total jobs: 200
@@ -171,12 +186,14 @@ Created new job: Admin Officer at HMRC
 **Check for these common issues**:
 
 1. **Database Connection**: Verify `DATABASE_URL` secret is correct
+
    ```bash
    # In workflow logs, look for:
    ✅ DATABASE_URL is set (length: 150+ characters)
    ```
 
 2. **API Keys Missing**: Ensure all secrets are set
+
    ```bash
    ✅ REED_API_KEY is set
    ✅ ADZUNA_APP_ID is set
@@ -184,6 +201,7 @@ Created new job: Admin Officer at HMRC
    ```
 
 3. **Python Dependencies**: Check if pip install succeeded
+
    ```bash
    # Should see in "📦 Install dependencies" step:
    Successfully installed django psycopg2-binary requests beautifulsoup4...
@@ -208,6 +226,7 @@ ERROR: Duplicate key violation
 ```
 
 **Possible causes**:
+
 - Jobs already exist (check `--force` flag)
 - Database full or locked
 - Duplicate detection too aggressive
@@ -230,10 +249,11 @@ You can test the workflow manually before waiting for cron:
 2. **Check workflow logs** immediately after
 3. **Download artifact logs** for detailed analysis
 4. **Verify job counts** in database:
+
    ```python
    from jobstract.models import Opportunity
    from django.utils import timezone
-   
+
    today = timezone.now().date()
    today_jobs = Opportunity.objects.filter(created_at__date=today).count()
    print(f"Jobs added today: {today_jobs}")  # Should be ~200
@@ -244,6 +264,7 @@ You can test the workflow manually before waiting for cron:
 All improvements pushed in 2 commits:
 
 1. **ff81d38**: "feat: Add debug logging and error handling to scraper workflow"
+
    - Enhanced workflow error handling
    - Added log artifact upload
    - Better error messages
@@ -256,6 +277,7 @@ All improvements pushed in 2 commits:
 ## Success Criteria
 
 The workflow should now:
+
 - ✅ Run for 2-5 minutes (not 1-5 seconds)
 - ✅ Show verbose output from all scrapers
 - ✅ Create ~200 jobs daily (100 Reed + 50 Adzuna + 50 DWP)

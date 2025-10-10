@@ -10,27 +10,37 @@ import logging
 from datetime import datetime
 from .models import Opportunity, Employer, JobApplication, ApplicationEvent
 from .serializers import (
-    OpportunitySerializer, EmployerSerializer,
-    JobApplicationSerializer, ApplicationEventSerializer
+    OpportunitySerializer,
+    EmployerSerializer,
+    JobApplicationSerializer,
+    ApplicationEventSerializer,
 )
 from cv_writer.models import CvWriter, Skill, Experience, Education
 from django.db import models
 
 logger = logging.getLogger(__name__)
 
+
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
 
+
 class OpportunityViewSet(viewsets.ModelViewSet):
-    queryset = Opportunity.objects.all().select_related('employer')
+    queryset = Opportunity.objects.all().select_related("employer")
     serializer_class = OpportunitySerializer
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['mode', 'time_commitment', 'experience_level', 'opportunity_type', 'location']
-    ordering_fields = ['created_at', 'date_posted']
-    ordering = ['-created_at']
+    filterset_fields = [
+        "mode",
+        "time_commitment",
+        "experience_level",
+        "opportunity_type",
+        "location",
+    ]
+    ordering_fields = ["created_at", "date_posted"]
+    ordering = ["-created_at"]
 
     def get_queryset(self):
         """
@@ -40,12 +50,12 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
 
         # Get query parameters
-        opportunity_type = self.request.query_params.get('opportunity_type', None)
-        mode = self.request.query_params.get('mode', None)
-        time_commitment = self.request.query_params.get('time_commitment', None)
-        experience_level = self.request.query_params.get('experience_level', None)
-        location = self.request.query_params.get('location', None)
-        ordering = self.request.query_params.get('ordering', None)
+        opportunity_type = self.request.query_params.get("opportunity_type", None)
+        mode = self.request.query_params.get("mode", None)
+        time_commitment = self.request.query_params.get("time_commitment", None)
+        experience_level = self.request.query_params.get("experience_level", None)
+        location = self.request.query_params.get("location", None)
+        ordering = self.request.query_params.get("ordering", None)
 
         # Apply filters
         if opportunity_type:
@@ -60,91 +70,95 @@ class OpportunityViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(location__icontains=location)
         if ordering:
             queryset = queryset.order_by(ordering)
-        
-        return queryset 
 
-    @action(detail=False, methods=['GET'], permission_classes=[IsAuthenticated])
+        return queryset
+
+    @action(detail=False, methods=["GET"], permission_classes=[IsAuthenticated])
     def recommended(self, request):
         """Get AI-powered job recommendations based on user's CV and preferences."""
         import traceback
         from .recommendation_engine import JobRecommendationEngine
-        
+
         try:
             logger.info(f"Recommendation Request - User: {request.user.username}")
-            
+
             # Get user's primary CV or the most recent CV
             try:
                 cv_queryset = CvWriter.objects.filter(user=request.user)
                 logger.info(f"Total CVs found for user: {cv_queryset.count()}")
-                
+
                 cv = cv_queryset.filter(is_primary=True).first()
-                
+
                 if not cv:
-                    cv = cv_queryset.order_by('-created_at').first()
-                
+                    cv = cv_queryset.order_by("-created_at").first()
+
                 if not cv:
                     logger.warning(f"No CV found for user {request.user.username}")
                     return Response(
-                        {"detail": "Please create a CV to get personalized job recommendations."},
-                        status=status.HTTP_404_NOT_FOUND
+                        {
+                            "detail": "Please create a CV to get personalized job recommendations."
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
                     )
-                
+
                 logger.info(f"Using CV: {cv} for recommendations")
             except Exception as cv_error:
                 logger.error(f"CV Retrieval Error: {cv_error}")
                 logger.error(traceback.format_exc())
                 return Response(
                     {"detail": "Error retrieving your CV. Please try again."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
             # Use AI-powered recommendation engine
             try:
                 engine = JobRecommendationEngine(user=request.user, cv=cv)
                 recommendations = engine.get_recommendations(limit=20)
-                
+
                 logger.info(f"Generated {len(recommendations)} recommendations")
-                
+
                 # Prepare response with scores and explanations
                 result_data = []
                 for rec in recommendations:
-                    job = rec['job']
-                    score = rec['score']
-                    component_scores = rec['component_scores']
-                    
+                    job = rec["job"]
+                    score = rec["score"]
+                    component_scores = rec["component_scores"]
+
                     # Serialize job data
                     job_serializer = self.get_serializer(job)
                     job_data = job_serializer.data
-                    
+
                     # Add recommendation metadata
-                    job_data['matching_score'] = score
-                    job_data['match_explanation'] = engine.explain_recommendation(
+                    job_data["matching_score"] = score
+                    job_data["match_explanation"] = engine.explain_recommendation(
                         job, score, component_scores
                     )
-                    job_data['component_scores'] = component_scores
-                    
+                    job_data["component_scores"] = component_scores
+
                     result_data.append(job_data)
-                
+
                 logger.info(f"Returning {len(result_data)} recommendations")
                 return Response(result_data)
-            
+
             except Exception as engine_error:
                 logger.error(f"Recommendation Engine Error: {engine_error}")
                 logger.error(traceback.format_exc())
                 return Response(
                     {"detail": "Error generating recommendations. Please try again."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
         except Exception as e:
             logger.error(f"Unexpected error in recommendations: {e}")
             logger.error(traceback.format_exc())
             return Response(
-                {"detail": "An unexpected error occurred while fetching recommendations."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    "detail": "An unexpected error occurred while fetching recommendations."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=True, methods=['POST'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=["POST"], permission_classes=[IsAuthenticated])
     def apply(self, request, pk=None):
         """Apply to a job opportunity."""
         opportunity = self.get_object()
@@ -154,15 +168,15 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         if JobApplication.objects.filter(user=user, opportunity=opportunity).exists():
             return Response(
                 {"detail": "You have already applied to this opportunity."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get the latest CV
-        cv = CvWriter.objects.filter(user=user).order_by('-updated_at').first()
+        cv = CvWriter.objects.filter(user=user).order_by("-updated_at").first()
         if not cv:
             return Response(
                 {"detail": "Please create a CV before applying."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Create application
@@ -170,90 +184,95 @@ class OpportunityViewSet(viewsets.ModelViewSet):
             user=user,
             opportunity=opportunity,
             cv_used=cv,
-            cover_letter=request.data.get('cover_letter', '')
+            cover_letter=request.data.get("cover_letter", ""),
         )
 
         # Create application event
         ApplicationEvent.objects.create(
             application=application,
-            event_type='status_change',
+            event_type="status_change",
             event_date=datetime.now(),
-            description='Application submitted'
+            description="Application submitted",
         )
 
         serializer = JobApplicationSerializer(application)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
 class JobApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = JobApplicationSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['status']
-    ordering_fields = ['applied_date', 'next_follow_up']
-    ordering = ['-applied_date']
+    filterset_fields = ["status"]
+    ordering_fields = ["applied_date", "next_follow_up"]
+    ordering = ["-applied_date"]
 
     def get_queryset(self):
-        return JobApplication.objects.filter(
-            user=self.request.user
-        ).select_related(
-            'opportunity', 'opportunity__employer', 'cv_used'
-        ).prefetch_related('events')
+        return (
+            JobApplication.objects.filter(user=self.request.user)
+            .select_related("opportunity", "opportunity__employer", "cv_used")
+            .prefetch_related("events")
+        )
 
-    @action(detail=True, methods=['POST'])
+    @action(detail=True, methods=["POST"])
     def add_event(self, request, pk=None):
         """Add a new event to the application."""
         application = self.get_object()
-        
-        serializer = ApplicationEventSerializer(data={
-            **request.data,
-            'application': application.id,
-            'event_date': datetime.now()
-        })
-        
+
+        serializer = ApplicationEventSerializer(
+            data={
+                **request.data,
+                "application": application.id,
+                "event_date": datetime.now(),
+            }
+        )
+
         if serializer.is_valid():
             event = serializer.save()
-            
+
             # Update application status if it's a status change event
-            if event.event_type == 'status_change':
-                new_status = request.data.get('new_status')
+            if event.event_type == "status_change":
+                new_status = request.data.get("new_status")
                 if new_status and new_status in dict(JobApplication.STATUS_CHOICES):
                     application.status = new_status
                     application.save()
-            
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['POST'])
+    @action(detail=True, methods=["POST"])
     def update_status(self, request, pk=None):
         """Update application status and create a status change event."""
         application = self.get_object()
-        new_status = request.data.get('status')
-        
+        new_status = request.data.get("status")
+
         if not new_status or new_status not in dict(JobApplication.STATUS_CHOICES):
             return Response(
                 {"detail": "Invalid status provided."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Update status
         application.status = new_status
         application.save()
-        
+
         # Create status change event
         ApplicationEvent.objects.create(
             application=application,
-            event_type='status_change',
+            event_type="status_change",
             event_date=datetime.now(),
-            description=f'Status updated to {application.get_status_display()}'
+            description=f"Status updated to {application.get_status_display()}",
         )
-        
+
         serializer = self.get_serializer(application)
         return Response(serializer.data)
+
 
 class EmployerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Employer.objects.all()
     serializer_class = EmployerSerializer
 
+
 def home(request):
     """Render the home page template"""
-    return render(request, 'jobstract/index.html')
+    return render(request, "jobstract/index.html")
