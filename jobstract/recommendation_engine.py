@@ -173,14 +173,22 @@ class JobRecommendationEngine:
             "career_change_field": None,  # Target field if user is a career changer
         }
 
-        # Get user skills
-        skills = Skill.objects.filter(user=self.user)
+        # Get user skills - try CV first, then fallback to user
+        if self.cv:
+            skills = Skill.objects.filter(cv=self.cv)
+        else:
+            skills = Skill.objects.filter(user=self.user)
         profile["skills"] = set(skill.skill_name.lower() for skill in skills)
 
-        # Get experience data
-        experiences = Experience.objects.filter(user=self.user).order_by(
-            "-end_date", "-start_date"
-        )
+        # Get experience data - try CV first, then fallback to user
+        if self.cv:
+            experiences = Experience.objects.filter(cv=self.cv).order_by(
+                "-end_date", "-start_date"
+            )
+        else:
+            experiences = Experience.objects.filter(user=self.user).order_by(
+                "-end_date", "-start_date"
+            )
 
         if experiences.exists():
             # Get job titles
@@ -468,7 +476,9 @@ class JobRecommendationEngine:
             allowed_fields.add(user_field)
             # Add related fields for better matching
             if user_field == "retail":
-                allowed_fields.add("business")  # Retail managers often manage business operations
+                allowed_fields.add(
+                    "business"
+                )  # Retail managers often manage business operations
         if change_field:
             allowed_fields.add(change_field)
 
@@ -501,7 +511,7 @@ class JobRecommendationEngine:
                             }
                         )
                     continue  # Skip other unknown field jobs
-                
+
                 # Skip jobs from completely different fields
                 if field not in allowed_fields:
                     continue

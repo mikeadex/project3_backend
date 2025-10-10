@@ -723,10 +723,10 @@ class WriterAlgorithm:
         # Split by "---" or "Enhancement Rationale" and take only the first part
         if "---" in response:
             response = response.split("---")[0].strip()
-        
+
         if "Enhancement Rationale" in response:
             response = response.split("Enhancement Rationale")[0].strip()
-        
+
         if "Rationale:" in response:
             response = response.split("Rationale:")[0].strip()
 
@@ -738,7 +738,7 @@ class WriterAlgorithm:
             response,
             flags=re.IGNORECASE,
         )
-        
+
         # Remove "Enhanced Professional Summary:" prefix
         response = re.sub(
             r"^(Enhanced\s+)?Professional\s+Summary:?\s*[-:]?\s*\n*",
