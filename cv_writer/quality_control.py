@@ -259,11 +259,13 @@ class WriterAlgorithm:
             logger.error(f"🖊️ {self.layer_name}: Error - {str(e)}")
             raise
 
-    def _generate_summary(self, original_summary: str, industry: str, cv_data: Dict = None) -> str:
+    def _generate_summary(
+        self, original_summary: str, industry: str, cv_data: Dict = None
+    ) -> str:
         """Generate professional summary with full CV context"""
         logger.info(f"📝 Generating professional summary for {industry} industry")
         logger.info(f"📄 Original summary: {original_summary[:100]}...")
-        
+
         # Extract context from CV data if available
         context_info = ""
         if cv_data:
@@ -274,15 +276,18 @@ class WriterAlgorithm:
                     title = exp.get("job_title") or exp.get("title", "")
                     if title:
                         job_titles.append(title)
-            
+
             # Get skills
             skills = []
             if cv_data.get("skills"):
                 if isinstance(cv_data["skills"], list):
-                    skills = [s.get("name", s) if isinstance(s, dict) else str(s) for s in cv_data["skills"][:10]]
+                    skills = [
+                        s.get("name", s) if isinstance(s, dict) else str(s)
+                        for s in cv_data["skills"][:10]
+                    ]
                 elif isinstance(cv_data["skills"], str):
                     skills = [s.strip() for s in cv_data["skills"].split(",")[:10]]
-            
+
             # Get education
             education = []
             if cv_data.get("education"):
@@ -291,7 +296,7 @@ class WriterAlgorithm:
                     field = edu.get("field_of_study", "")
                     if degree:
                         education.append(f"{degree} in {field}" if field else degree)
-            
+
             # Build context string
             if job_titles:
                 context_info += f"\nRecent Job Titles: {', '.join(job_titles)}"
@@ -323,7 +328,14 @@ class WriterAlgorithm:
         {original_summary}
         {context_info}
         
-        Write an enhanced professional summary that is SPECIFICALLY TAILORED to THIS candidate's unique background, making them MORE COMPETITIVE within their EXISTING career field:
+        IMPORTANT OUTPUT FORMAT:
+        - Return ONLY the enhanced professional summary text
+        - DO NOT include any explanations, rationale, or meta-commentary
+        - DO NOT include section headers like "Professional Summary:" or "Enhanced Professional Summary:"
+        - DO NOT include "---" separators or "Enhancement Rationale" sections
+        - Just the clean, polished summary text ready to use
+        
+        Write the enhanced professional summary now:
         """
 
         response = self._sync_generate(prompt)
@@ -707,10 +719,29 @@ class WriterAlgorithm:
         if not response:
             return ""
 
+        # 🚨 CRITICAL: Remove Enhancement Rationale and separator lines
+        # Split by "---" or "Enhancement Rationale" and take only the first part
+        if "---" in response:
+            response = response.split("---")[0].strip()
+        
+        if "Enhancement Rationale" in response:
+            response = response.split("Enhancement Rationale")[0].strip()
+        
+        if "Rationale:" in response:
+            response = response.split("Rationale:")[0].strip()
+
         # 🚨 CRITICAL: Remove section headers that LLM adds (e.g., "Professional Summary", "Experience")
         # This must be done FIRST before other cleaning to preserve content
         response = re.sub(
-            r"^(Professional Summary|Experience|Skills?|Education):?\s*\n*",
+            r"^(Professional Summary|Experience|Skills?|Education):?\s*[-:]?\s*\n*",
+            "",
+            response,
+            flags=re.IGNORECASE,
+        )
+        
+        # Remove "Enhanced Professional Summary:" prefix
+        response = re.sub(
+            r"^(Enhanced\s+)?Professional\s+Summary:?\s*[-:]?\s*\n*",
             "",
             response,
             flags=re.IGNORECASE,
