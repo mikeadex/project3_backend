@@ -11,8 +11,16 @@ from jobstract.utils.cleaner import Cleaner
    
 class Command(BaseCommand):
     """
-    Command to extract jobs from DMP website
-    """
+    Command to extract jobs from D                        else:
+                            job_obj = Opportunity.objects.create(**job_data)
+                            created = True
+                            self.stdout.write(self.style.SUCCESS(
+                                f'✅ Created new job: {job_data["title"][:60]} - {job_data["salary_range"]} ({job_data["experience_level"]})'
+                            ))
+                        
+                    except Exception as e:
+                        self.stdout.write(self.style.ERROR(f'Error processing job: {str(e)}'))
+                        logging.exception("Error processing job")  """
 
     help = "scrape Job from DMP website"
 
@@ -345,21 +353,24 @@ class Command(BaseCommand):
                         else:
                             job_data['time_commitment'] = 'full_time'
                         
-                        job_obj, created = Opportunity.objects.update_or_create(
-                            title=job_data['title'],
+                        # Better duplicate detection using title + location + employer
+                        # Case-insensitive matching to catch variations
+                        existing_job = Opportunity.objects.filter(
+                            title__iexact=job_data['title'],
                             employer=employer,
-                            source=job_data['source'],
-                            defaults=job_data
-                        )
+                            location__iexact=job_data['location'],
+                        ).first()
                         
-                        if created:
-                            self.stdout.write(self.style.SUCCESS(
-                                f'Created new job: {job_data["title"]} - {job_data["salary_range"]} ({job_data["experience_level"]})'
-                            ))
+                        if existing_job:
+                            created = False
+                            job_obj = existing_job
+                            self.stdout.write(f"⏭️  Skipped duplicate: {job_data['title'][:60]}")
                         else:
-                            self.stdout.write(
-                                f'Updated existing job: {job_data["title"]} - {job_data["salary_range"]} ({job_data["experience_level"]})'
-                            )
+                            job_obj = Opportunity.objects.create(**job_data)
+                            created = True
+                            self.stdout.write(self.style.SUCCESS(
+                                f'✅ Created new job: {job_data["title"][:60]} - {job_data["salary_range"]} ({job_data["experience_level"]})'
+                            ))
                         
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f'Error processing job: {str(e)}'))

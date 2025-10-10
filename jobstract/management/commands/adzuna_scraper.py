@@ -285,21 +285,29 @@ class Command(BaseCommand):
                     }
 
                     # Create or update job
+                    # Use title + location + employer for better duplicate detection
+                    # Many jobs have unique tracking URLs, so don't use application_url
                     if force_update:
                         job_obj, created = Opportunity.objects.update_or_create(
-                            title=job_data["title"],
+                            title__iexact=job_data["title"],  # Case-insensitive match
                             employer=employer,
-                            application_url=application_url,
+                            location__iexact=job_data["location"],
                             defaults=job_data,
                         )
                     else:
-                        # Only create if doesn't exist
-                        job_obj, created = Opportunity.objects.get_or_create(
-                            title=job_data["title"],
+                        # Check if job already exists (case-insensitive title and location)
+                        existing_job = Opportunity.objects.filter(
+                            title__iexact=job_data["title"],
                             employer=employer,
-                            application_url=application_url,
-                            defaults=job_data,
-                        )
+                            location__iexact=job_data["location"],
+                        ).first()
+                        
+                        if existing_job:
+                            created = False
+                            job_obj = existing_job
+                        else:
+                            job_obj = Opportunity.objects.create(**job_data)
+                            created = True
 
                     if created:
                         created_count += 1

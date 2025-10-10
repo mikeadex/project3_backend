@@ -241,12 +241,26 @@ class Command(BaseCommand):
                         ))
                         continue
 
-                    job_obj, created = Opportunity.objects.update_or_create(
-                        title=job_data['title'],
+                    # Better duplicate detection using title + location + employer
+                    # Case-insensitive matching to catch variations
+                    existing_job = Opportunity.objects.filter(
+                        title__iexact=job_data['title'],
                         employer=employer,
-                        source=job_data['source'],
-                        defaults=job_data
-                    )
+                        location__iexact=job_data['location'],
+                    ).first()
+                    
+                    if existing_job:
+                        created = False
+                        job_obj = existing_job
+                        self.stdout.write(f"⏭️  Skipped duplicate: {job_data['title'][:60]}")
+                    else:
+                        job_obj = Opportunity.objects.create(**job_data)
+                        created = True
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f"✅ Created new job: {job_data['title'][:60]}"
+                            )
+                        )
                     
                     if created:
                         self.stdout.write(self.style.SUCCESS(

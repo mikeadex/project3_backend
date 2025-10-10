@@ -80,6 +80,10 @@ class Opportunity(models.Model):
     class Meta:
         verbose_name_plural = 'Opportunities'
         ordering = ['-date_posted']
+        indexes = [
+            models.Index(fields=['title', 'employer', 'location'], name='job_duplicate_idx'),
+            models.Index(fields=['created_at'], name='job_created_idx'),
+        ]
 
 class JobApplication(models.Model):
     STATUS_CHOICES = (
