@@ -87,6 +87,12 @@ class JobRecommendationEngine:
             "sales associate",
             "cashier",
             "customer service",
+            "sales manager",
+            "regional manager",
+            "operations manager",
+            "distribution manager",
+            "warehouse",
+            "logistics",
         ],
         "healthcare": [
             "nurse",
@@ -460,6 +466,9 @@ class JobRecommendationEngine:
         allowed_fields = set()
         if user_field:
             allowed_fields.add(user_field)
+            # Add related fields for better matching
+            if user_field == "retail":
+                allowed_fields.add("business")  # Retail managers often manage business operations
         if change_field:
             allowed_fields.add(change_field)
 
@@ -477,12 +486,23 @@ class JobRecommendationEngine:
         for job in jobs:
             field = job_field(job)
 
-            # If user has a field, only allow jobs in that field (or target field for career changers)
+            # If user has a field, filter by it
             if allowed_fields:
-                # Skip jobs with no detected field (unknown category)
+                # For unknown field jobs, calculate score first and allow if high match
                 if field is None:
-                    continue
-                # Skip jobs from different fields
+                    overall_score, component_scores = self.calculate_overall_score(job)
+                    # Allow unknown field jobs only if they score very well (60%+)
+                    if overall_score >= 60:
+                        filtered_jobs.append(
+                            {
+                                "job": job,
+                                "score": overall_score,
+                                "component_scores": component_scores,
+                            }
+                        )
+                    continue  # Skip other unknown field jobs
+                
+                # Skip jobs from completely different fields
                 if field not in allowed_fields:
                     continue
 
