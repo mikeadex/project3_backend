@@ -78,6 +78,16 @@ class JobRecommendationEngine:
             "hr",
             "recruitment",
         ],
+        "retail": [
+            "retail",
+            "store manager",
+            "shop",
+            "merchandising",
+            "visual merchandiser",
+            "sales associate",
+            "cashier",
+            "customer service",
+        ],
         "healthcare": [
             "nurse",
             "doctor",
@@ -221,7 +231,7 @@ class JobRecommendationEngine:
                                 break
             except Exception:
                 pass  # If no professional summary, continue without career change detection
-        
+
         # Optionally, look for a 'target_field' attribute on the CV
         if hasattr(self.cv, "target_field") and self.cv.target_field:
             profile["career_change_field"] = self.cv.target_field.lower()
@@ -468,11 +478,17 @@ class JobRecommendationEngine:
         filtered_jobs = []
         for job in jobs:
             field = job_field(job)
+            
             # If user has a field, only allow jobs in that field (or target field for career changers)
             if allowed_fields:
+                # Skip jobs with no detected field (unknown category)
+                if field is None:
+                    continue
+                # Skip jobs from different fields
                 if field not in allowed_fields:
-                    continue  # Skip unrelated jobs
-            # Otherwise, allow all jobs
+                    continue
+            
+            # Calculate score for allowed jobs
             overall_score, component_scores = self.calculate_overall_score(job)
             if overall_score >= self.MIN_SCORE_THRESHOLD:
                 filtered_jobs.append(
