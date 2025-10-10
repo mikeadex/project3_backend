@@ -100,15 +100,15 @@ jobs:
           fi
           echo "✅ Job scraping completed successfully!"
 
-      - name: � Upload Scraper Logs
+      - name: 📤 Upload Scraper Logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: scraper-logs
           path: scraper_output.log
           retention-days: 7
 
-      - name: �📊 Summary Statistics
+      - name: 📊 Summary Statistics
         if: always()
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
