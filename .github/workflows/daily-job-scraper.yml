@@ -89,10 +89,26 @@ jobs:
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
         run: |
           echo "🚀 Starting job scrapers..."
-          python manage.py run_all_scrapers --days 1
-          echo "✅ Job scraping completed!"
+          set -e  # Exit on error
+          python manage.py run_all_scrapers --days 1 --debug 2>&1 | tee scraper_output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "📝 Scraper exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Job scraping failed with exit code $EXIT_CODE"
+            cat scraper_output.log
+            exit $EXIT_CODE
+          fi
+          echo "✅ Job scraping completed successfully!"
 
-      - name: 📊 Summary Statistics
+      - name: � Upload Scraper Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: scraper-logs
+          path: scraper_output.log
+          retention-days: 7
+
+      - name: �📊 Summary Statistics
         if: always()
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
