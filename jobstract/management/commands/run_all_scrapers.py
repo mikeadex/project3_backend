@@ -5,6 +5,8 @@ from django.db import transaction
 import logging
 import traceback
 from datetime import datetime
+import random
+from .job_keywords import PROFESSIONAL_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -53,46 +55,62 @@ class Command(BaseCommand):
             f"Starting all job scrapers with force={force}, location={location}, days={days}, debug={debug}"
         )
 
-        scrapers = [
-            # SME Scraper temporarily disabled - SMEScraper service not implemented
-            # {
-            #     'name': 'SME Scraper',
-            #     'command': 'scrape_jobs',
-            #     'args': {
-            #         'days': days,
-            #         'force': force
-            #     }
-            # },
-            {
-                "name": "Reed Scraper",
+        # Select 2-3 keywords from each professional category
+        # This ensures we get diverse professional jobs across ALL sectors
+        selected_keywords = []
+        for category, keywords in PROFESSIONAL_KEYWORDS.items():
+            # Pick 2 keywords from each category for variety
+            num_to_pick = min(2, len(keywords))
+            selected_keywords.extend(random.sample(keywords, num_to_pick))
+        
+        self.stdout.write(f"🎯 Targeting {len(selected_keywords)} professional keywords:")
+        self.stdout.write(f"   {', '.join(selected_keywords[:15])}...")
+        logger.info(f"Selected {len(selected_keywords)} professional keywords for this run")
+
+        # Run Reed with first 3 keywords (100 results each = 300 jobs)
+        # Run Adzuna with next 3 keywords (50 results each = 150 jobs)
+        # Run DWP without keywords (it has its own professional focus)
+        
+        scrapers = []
+        
+        # Reed Scraper - Run 3 times with different keywords
+        for i, keyword in enumerate(selected_keywords[:3]):
+            scrapers.append({
+                "name": f"Reed Scraper ({keyword})",
                 "command": "reed_scraper",
                 "args": {
                     "location": location,
-                    "distance": 10,  # Default distance
+                    "distance": 10,
+                    "keywords": keyword,
                     "debug": debug,
                 },
-            },
-            {
-                "name": "Adzuna Scraper",
+            })
+        
+        # Adzuna Scraper - Run 3 times with different keywords
+        for i, keyword in enumerate(selected_keywords[3:6]):
+            scrapers.append({
+                "name": f"Adzuna Scraper ({keyword})",
                 "command": "adzuna_scraper",
                 "args": {
                     "location": location if location else "UK",
                     "days": days,
-                    "results": 50,  # Max 50 per API call
+                    "results": 50,
+                    "keywords": keyword,
                     "force": force,
                     "debug": debug,
                 },
+            })
+        
+        # DWP Scraper - Professional civil service jobs
+        scrapers.append({
+            "name": "DWP Scraper",
+            "command": "dwp_scraper",
+            "args": {
+                "location": location,
+                "distance": 20,
+                "debug": debug,
             },
-            {
-                "name": "DWP Scraper",
-                "command": "dwp_scraper",
-                "args": {
-                    "location": location,
-                    "distance": 20,  # Default distance
-                    "debug": debug,
-                },
-            },
-        ]
+        })
 
         results = []
 
