@@ -202,16 +202,26 @@ class JobRecommendationEngine:
         # Detect primary career field from job titles and skills
         profile["career_field"] = self._detect_career_field(profile)
 
-        # Detect career change intent (simple: look for 'career change' or 'transition to X' in summary or skills)
-        if hasattr(self.cv, "summary") and self.cv.summary:
-            summary = self.cv.summary.lower()
-            for field, keywords in self.CAREER_FIELDS.items():
-                for keyword in keywords:
-                    if (
-                        f"transition to {keyword}" in summary
-                        or f"career change to {keyword}" in summary
-                    ):
-                        profile["career_change_field"] = field
+        # Detect career change intent (look for 'career change' or 'transition to X' in summary)
+        if self.cv:
+            # Get professional summary from the CV's related professional_summary
+            try:
+                professional_summary = self.cv.professional_summary.first()
+                if professional_summary and professional_summary.summary:
+                    summary = professional_summary.summary.lower()
+                    for field, keywords in self.CAREER_FIELDS.items():
+                        for keyword in keywords:
+                            if (
+                                f"transition to {keyword}" in summary
+                                or f"career change to {keyword}" in summary
+                                or f"moving to {keyword}" in summary
+                                or f"switching to {keyword}" in summary
+                            ):
+                                profile["career_change_field"] = field
+                                break
+            except Exception:
+                pass  # If no professional summary, continue without career change detection
+        
         # Optionally, look for a 'target_field' attribute on the CV
         if hasattr(self.cv, "target_field") and self.cv.target_field:
             profile["career_change_field"] = self.cv.target_field.lower()

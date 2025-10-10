@@ -212,10 +212,10 @@ class WriterAlgorithm:
 
             generated_content = {}
 
-            # Generate professional summary
+            # Generate professional summary with full CV context
             if cv_data.get("professional_summary"):
                 generated_content["professional_summary"] = self._generate_summary(
-                    cv_data["professional_summary"], industry
+                    cv_data["professional_summary"], industry, cv_data
                 )
 
             # Generate experience descriptions
@@ -259,23 +259,61 @@ class WriterAlgorithm:
             logger.error(f"🖊️ {self.layer_name}: Error - {str(e)}")
             raise
 
-    def _generate_summary(self, original_summary: str, industry: str) -> str:
-        """Generate professional summary"""
+    def _generate_summary(self, original_summary: str, industry: str, cv_data: Dict = None) -> str:
+        """Generate professional summary with full CV context"""
         logger.info(f"📝 Generating professional summary for {industry} industry")
         logger.info(f"📄 Original summary: {original_summary[:100]}...")
+        
+        # Extract context from CV data if available
+        context_info = ""
+        if cv_data:
+            # Get job titles from experience
+            job_titles = []
+            if cv_data.get("experience"):
+                for exp in cv_data["experience"][:3]:  # Top 3 most recent
+                    title = exp.get("job_title") or exp.get("title", "")
+                    if title:
+                        job_titles.append(title)
+            
+            # Get skills
+            skills = []
+            if cv_data.get("skills"):
+                if isinstance(cv_data["skills"], list):
+                    skills = [s.get("name", s) if isinstance(s, dict) else str(s) for s in cv_data["skills"][:10]]
+                elif isinstance(cv_data["skills"], str):
+                    skills = [s.strip() for s in cv_data["skills"].split(",")[:10]]
+            
+            # Get education
+            education = []
+            if cv_data.get("education"):
+                for edu in cv_data["education"][:2]:
+                    degree = edu.get("degree", "")
+                    field = edu.get("field_of_study", "")
+                    if degree:
+                        education.append(f"{degree} in {field}" if field else degree)
+            
+            # Build context string
+            if job_titles:
+                context_info += f"\nRecent Job Titles: {', '.join(job_titles)}"
+            if skills:
+                context_info += f"\nKey Skills: {', '.join(skills)}"
+            if education:
+                context_info += f"\nEducation: {', '.join(education)}"
 
         prompt = f"""
         You are an expert CV writer specializing in ATS-optimized professional summaries. Enhance the following professional summary while STRICTLY preserving the candidate's authentic career field and experience context.
 
         CRITICAL PRESERVATION RULES:
-        - PRESERVE the candidate's actual job title, industry, and field (e.g., retail stays retail, healthcare stays healthcare)
-        - DO NOT fabricate achievements, metrics, or responsibilities not implied in the original
+        - PRESERVE the candidate's actual job title, industry, and field (e.g., retail stays retail, finance stays finance, tech stays tech)
+        - DO NOT fabricate achievements, metrics, or responsibilities not implied in the original or CV data
         - DO NOT transform them into a different profession or industry
         - MAINTAIN all specific experience areas, company types, and role contexts mentioned
+        - USE the candidate's actual job titles, skills, and education to make the summary SPECIFIC to them
         
         ENHANCEMENT GUIDELINES:
         - Strengthen action verbs within their ACTUAL responsibilities and achievements
         - Improve professional language and ATS keyword optimization for their EXISTING field
+        - Incorporate their REAL skills and job titles from the CV data below
         - Quantify implied achievements using realistic language ("drive sales growth" vs specific fake numbers)
         - Enhance sentence flow and impact while staying authentic to their experience
         - Use confident, results-driven tone without first person (I, my, me)
@@ -283,8 +321,9 @@ class WriterAlgorithm:
         
         Original Summary:
         {original_summary}
+        {context_info}
         
-        Write an enhanced professional summary that makes this candidate MORE COMPETITIVE within their EXISTING career field:
+        Write an enhanced professional summary that is SPECIFICALLY TAILORED to THIS candidate's unique background, making them MORE COMPETITIVE within their EXISTING career field:
         """
 
         response = self._sync_generate(prompt)
