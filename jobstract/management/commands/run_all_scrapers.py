@@ -33,17 +33,24 @@ class Command(BaseCommand):
             help="Number of days of jobs to scrape (for SME scraper)",
         )
 
+        parser.add_argument(
+            "--debug",
+            action="store_true",
+            help="Enable debug mode for verbose output",
+        )
+
     def handle(self, *args, **options):
         force = options["force"]
         location = options["location"]
         days = options["days"]
+        debug = options.get("debug", False)
 
         start_time = datetime.now()
         self.stdout.write(
             f"===== Starting all job scrapers at {start_time.strftime('%Y-%m-%d %H:%M:%S')} ====="
         )
         logger.info(
-            f"Starting all job scrapers with force={force}, location={location}, days={days}"
+            f"Starting all job scrapers with force={force}, location={location}, days={days}, debug={debug}"
         )
 
         scrapers = [
@@ -62,7 +69,7 @@ class Command(BaseCommand):
                 "args": {
                     "location": location,
                     "distance": 10,  # Default distance
-                    "debug": False,  # Set to True for debugging
+                    "debug": debug,
                 },
             },
             {
@@ -73,7 +80,7 @@ class Command(BaseCommand):
                     "days": days,
                     "results": 50,  # Max 50 per API call
                     "force": force,
-                    "debug": False,
+                    "debug": debug,
                 },
             },
             {
@@ -82,7 +89,7 @@ class Command(BaseCommand):
                 "args": {
                     "location": location,
                     "distance": 20,  # Default distance
-                    "debug": False,  # Set to True for debugging
+                    "debug": debug,
                 },
             },
         ]
