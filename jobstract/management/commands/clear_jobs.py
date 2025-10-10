@@ -41,9 +41,7 @@ class Command(BaseCommand):
         # Ask for confirmation if not provided
         if not confirm:
             self.stdout.write(
-                self.style.WARNING(
-                    "⚠️  This will DELETE all jobs from the database!"
-                )
+                self.style.WARNING("⚠️  This will DELETE all jobs from the database!")
             )
             if application_count > 0 and not keep_applications:
                 self.stdout.write(
@@ -68,9 +66,7 @@ class Command(BaseCommand):
                     self.stdout.write("")
                     self.stdout.write(self.style.SUCCESS("✅ Deletion complete!"))
                     self.stdout.write(f"   - Deleted {deleted_jobs[0]} jobs")
-                    self.stdout.write(
-                        f"   - Kept {application_count} job applications"
-                    )
+                    self.stdout.write(f"   - Kept {application_count} job applications")
                 else:
                     # Delete applications first, then jobs
                     if application_count > 0:
@@ -86,12 +82,16 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS("✅ Deletion complete!"))
                     self.stdout.write(f"   - Deleted {deleted_jobs[0]} jobs")
                     if application_count > 0:
-                        self.stdout.write(f"   - Deleted {application_count} applications")
+                        self.stdout.write(
+                            f"   - Deleted {application_count} applications"
+                        )
 
                 self.stdout.write("")
                 self.stdout.write("📊 Final database state:")
                 self.stdout.write(f"   - Jobs: {Opportunity.objects.count()}")
-                self.stdout.write(f"   - Applications: {JobApplication.objects.count()}")
+                self.stdout.write(
+                    f"   - Applications: {JobApplication.objects.count()}"
+                )
                 self.stdout.write("")
                 self.stdout.write(
                     self.style.SUCCESS(

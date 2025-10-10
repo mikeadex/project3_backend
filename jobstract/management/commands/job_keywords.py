@@ -131,9 +131,9 @@ def should_exclude_job(title, description=""):
     """Check if job should be excluded based on keywords"""
     title_lower = title.lower()
     description_lower = description.lower()
-    
+
     for excluded in EXCLUDED_KEYWORDS:
         if excluded in title_lower or excluded in description_lower:
             return True
-    
+
     return False

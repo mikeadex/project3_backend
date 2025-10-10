@@ -301,7 +301,7 @@ class Command(BaseCommand):
                             employer=employer,
                             location__iexact=job_data["location"],
                         ).first()
-                        
+
                         if existing_job:
                             created = False
                             job_obj = existing_job

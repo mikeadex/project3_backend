@@ -65,23 +65,20 @@ class OpportunityViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'], permission_classes=[IsAuthenticated])
     def recommended(self, request):
-        """Get job recommendations based on user's CV and preferences."""
+        """Get AI-powered job recommendations based on user's CV and preferences."""
         import traceback
+        from .recommendation_engine import JobRecommendationEngine
         
         try:
-            # Detailed logging of user and request context
             logger.info(f"Recommendation Request - User: {request.user.username}")
-            logger.info(f"User ID: {request.user.id}")
-
+            
             # Get user's primary CV or the most recent CV
             try:
-                # First try to get the primary CV
                 cv_queryset = CvWriter.objects.filter(user=request.user)
                 logger.info(f"Total CVs found for user: {cv_queryset.count()}")
                 
                 cv = cv_queryset.filter(is_primary=True).first()
                 
-                # If no primary CV, get the most recent CV
                 if not cv:
                     cv = cv_queryset.order_by('-created_at').first()
                 
@@ -101,93 +98,41 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # Get user's skills with detailed logging
+            # Use AI-powered recommendation engine
             try:
-                user_skills = set(
-                    skill.skill_name.lower() 
-                    for skill in Skill.objects.filter(user=request.user)
-                )
-                logger.info(f"Found {len(user_skills)} skills for user: {user_skills}")
-            except Exception as skill_error:
-                logger.error(f"Skill Retrieval Error: {skill_error}")
-                logger.error(traceback.format_exc())
-                user_skills = set()
-
-            # Get user's experience level from most recent experience
-            try:
-                latest_experience = (
-                    Experience.objects
-                    .filter(user=request.user)
-                    .order_by('-end_date', '-start_date')
-                    .first()
-                )
-                experience_level = 'entry_level'  # Default
+                engine = JobRecommendationEngine(user=request.user, cv=cv)
+                recommendations = engine.get_recommendations(limit=20)
                 
-                if latest_experience:
-                    logger.info(f"Latest experience: {latest_experience.job_title}")
-                    # Calculate years of experience
-                    years_of_experience = 0
-                    if latest_experience.start_date:
-                        from datetime import date
-                        years_of_experience = (date.today() - latest_experience.start_date).days / 365.25
+                logger.info(f"Generated {len(recommendations)} recommendations")
+                
+                # Prepare response with scores and explanations
+                result_data = []
+                for rec in recommendations:
+                    job = rec['job']
+                    score = rec['score']
+                    component_scores = rec['component_scores']
                     
-                    if years_of_experience > 5:
-                        experience_level = 'senior'
-                    elif years_of_experience > 2:
-                        experience_level = 'mid'
-                    else:
-                        experience_level = 'entry_level'
+                    # Serialize job data
+                    job_serializer = self.get_serializer(job)
+                    job_data = job_serializer.data
                     
-                    logger.info(f"Calculated Experience Level: {experience_level} (Years: {years_of_experience:.2f})")
-                else:
-                    logger.warning("No experience found for user")
-            except Exception as exp_error:
-                logger.error(f"Experience Retrieval Error: {exp_error}")
-                logger.error(traceback.format_exc())
-                experience_level = 'entry_level'
-
-            # Base queryset with skill and experience matching
-            try:
-                queryset = Opportunity.objects.filter(
-                    opportunity_type='job'
-                ).select_related('employer')
-                
-                logger.info(f"Total job opportunities before filtering: {queryset.count()}")
-                
-                # Skill-based filtering
-                if user_skills:
-                    # Create a Q object to check for each skill
-                    skill_query = models.Q()
-                    for skill in user_skills:
-                        skill_query |= models.Q(skills_required__icontains=skill) | \
-                                       models.Q(skills_gained__icontains=skill)
+                    # Add recommendation metadata
+                    job_data['matching_score'] = score
+                    job_data['match_explanation'] = engine.explain_recommendation(
+                        job, score, component_scores
+                    )
+                    job_data['component_scores'] = component_scores
                     
-                    skill_matched_jobs = queryset.filter(skill_query)
-                    
-                    if skill_matched_jobs.exists():
-                        queryset = skill_matched_jobs
-                        logger.info(f"Skill-matched jobs: {queryset.count()}")
+                    result_data.append(job_data)
                 
-                # Experience level filtering
-                queryset = queryset.filter(
-                    experience_level__icontains=experience_level
-                )
-                
-                logger.info(f"Jobs after experience level filtering: {queryset.count()}")
-
-                # Limit recommendations
-                queryset = queryset[:20]  # Limit to 20 recommendations
-                logger.info(f"Final recommendations count: {queryset.count()}")
-                
-                # Serialize and return
-                serializer = self.get_serializer(queryset, many=True)
-                return Response(serializer.data)
+                logger.info(f"Returning {len(result_data)} recommendations")
+                return Response(result_data)
             
-            except Exception as query_error:
-                logger.error(f"Query Processing Error: {query_error}")
+            except Exception as engine_error:
+                logger.error(f"Recommendation Engine Error: {engine_error}")
                 logger.error(traceback.format_exc())
                 return Response(
-                    {"detail": "Error processing job recommendations."},
+                    {"detail": "Error generating recommendations. Please try again."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
