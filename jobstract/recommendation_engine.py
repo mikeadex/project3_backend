@@ -204,10 +204,8 @@ class JobRecommendationEngine:
             else:
                 profile["experience_level"] = "entry_level"
 
-            # Get most recent location
-            latest_exp = experiences.first()
-            if latest_exp and latest_exp.location:
-                profile["location"] = latest_exp.location.lower()
+            # Note: Location is stored in User profile or separate model, not in Experience
+            # Skip location extraction from experience for now
 
         # Detect primary career field from job titles and skills
         profile["career_field"] = self._detect_career_field(profile)
@@ -478,7 +476,7 @@ class JobRecommendationEngine:
         filtered_jobs = []
         for job in jobs:
             field = job_field(job)
-            
+
             # If user has a field, only allow jobs in that field (or target field for career changers)
             if allowed_fields:
                 # Skip jobs with no detected field (unknown category)
@@ -487,7 +485,7 @@ class JobRecommendationEngine:
                 # Skip jobs from different fields
                 if field not in allowed_fields:
                     continue
-            
+
             # Calculate score for allowed jobs
             overall_score, component_scores = self.calculate_overall_score(job)
             if overall_score >= self.MIN_SCORE_THRESHOLD:

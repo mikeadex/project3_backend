@@ -137,8 +137,22 @@ class OpportunityViewSet(viewsets.ModelViewSet):
 
                     result_data.append(job_data)
 
+                # If no recommendations found, return empty array with helpful metadata
+                if len(result_data) == 0:
+                    logger.info("No matching jobs found for user's profile")
+                    return Response({
+                        "recommendations": [],
+                        "message": "No matching jobs available right now. Check back later for new opportunities!",
+                        "user_field": engine.user_profile.get("career_field"),
+                        "total_jobs_in_db": Opportunity.objects.filter(opportunity_type="job").count()
+                    })
+
                 logger.info(f"Returning {len(result_data)} recommendations")
-                return Response(result_data)
+                return Response({
+                    "recommendations": result_data,
+                    "message": None,
+                    "total": len(result_data)
+                })
 
             except Exception as engine_error:
                 logger.error(f"Recommendation Engine Error: {engine_error}")
