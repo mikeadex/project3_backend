@@ -205,6 +205,9 @@ class JobRecommendationEngine:
                     total_days += max(days, 0)
 
             profile["years_experience"] = total_days / 365.25
+            profile["total_years_experience"] = (
+                total_days / 365.25
+            )  # Store total for reference
 
             # Determine experience level
             if profile["years_experience"] >= 16:
@@ -223,6 +226,74 @@ class JobRecommendationEngine:
 
         # Detect primary career field from job titles and skills
         profile["career_field"] = self._detect_career_field(profile)
+
+        # CAREER CHANGER DETECTION: Calculate field-specific experience
+        # If user has experience in multiple fields, only count experience in their current field
+        if profile["career_field"] and experiences:
+            field_specific_days = 0
+            field_keywords = self.CAREER_FIELDS.get(profile["career_field"], [])
+
+            # Filter keywords: Remove overly generic terms that cause false positives
+            # For tech field, prioritize specific tech role keywords
+            if profile["career_field"] == "technology":
+                # Use only specific tech keywords, exclude generic terms like "analyst", "manager", "systems"
+                tech_specific_keywords = [
+                    "developer",
+                    "engineer",
+                    "programmer",
+                    "software",
+                    "devops",
+                    "data scientist",
+                    "machine learning",
+                    "ai",
+                    "cybersecurity",
+                    "architect",
+                    "coding",
+                ]
+                field_keywords = tech_specific_keywords
+
+            for exp in experiences:
+                # Check if this experience matches the current career field
+                # STRICT MATCHING: Only check JOB TITLE, not description (to avoid false positives)
+                job_title_lower = exp.job_title.lower() if exp.job_title else ""
+
+                # Check if job title contains field-specific keywords
+                is_in_field = any(
+                    keyword in job_title_lower for keyword in field_keywords
+                )
+
+                if is_in_field and exp.start_date:
+                    end = exp.end_date or datetime.now().date()
+                    days = (end - exp.start_date).days
+                    field_specific_days += max(days, 0)
+
+            # Calculate field-specific years
+            field_specific_years = field_specific_days / 365.25
+
+            # If field-specific experience is significantly less than total (career changer)
+            # Use field-specific years instead
+            if field_specific_years < profile["total_years_experience"] * 0.7:
+                # Career changer detected! Use relevant experience only
+                profile["years_experience"] = field_specific_years
+                profile["is_career_changer"] = True
+                profile["career_change_note"] = (
+                    f"Career changer: {field_specific_years:.1f} years in {profile['career_field']}, "
+                    f"{profile['total_years_experience']:.1f} years total"
+                )
+
+                # Recalculate experience level based on field-specific years
+                if profile["years_experience"] >= 16:
+                    profile["experience_level"] = "executive"
+                elif profile["years_experience"] >= 8:
+                    profile["experience_level"] = "senior"
+                elif profile["years_experience"] >= 3:
+                    profile["experience_level"] = "mid"
+                elif profile["years_experience"] >= 1:
+                    profile["experience_level"] = "junior"
+                else:
+                    profile["experience_level"] = "entry_level"
+            else:
+                profile["is_career_changer"] = False
 
         # Detect career change intent (look for 'career change' or 'transition to X' in summary)
         if self.cv:
