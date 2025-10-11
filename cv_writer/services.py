@@ -2079,6 +2079,24 @@ def save_rewritten_cv_to_database(rewritten_cv_data, user, cv_writer_instance=No
         logger.error("Invalid rewritten CV data format")
         return None
 
+    # CLEAR OLD DATA: Delete existing Experience and Skill records for this CV
+    # This ensures new CV uploads completely replace old data
+    try:
+        old_exp_count = Experience.objects.filter(cv=cv_writer_instance).count()
+        old_skill_count = Skill.objects.filter(cv=cv_writer_instance).count()
+
+        if old_exp_count > 0 or old_skill_count > 0:
+            logger.info(
+                f"🗑️  Clearing old data for CV {cv_writer_instance.id}: {old_exp_count} experiences, {old_skill_count} skills"
+            )
+            Experience.objects.filter(cv=cv_writer_instance).delete()
+            Skill.objects.filter(cv=cv_writer_instance).delete()
+            logger.info(f"✅ Old data cleared successfully")
+    except Exception as clear_error:
+        logger.warning(f"Error clearing old CV data: {str(clear_error)}")
+        # Continue anyway - might be first time population
+        pass
+
     # Save professional summary (if present)
     try:
         professional_summary_text = None

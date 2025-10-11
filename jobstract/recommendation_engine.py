@@ -73,10 +73,8 @@ class JobRecommendationEngine:
             "business",
             "operations",
             "coordinator",
-            "administrator",
             "executive assistant",
             "hr",
-            "recruitment",
         ],
         "retail": [
             "retail",
@@ -135,7 +133,17 @@ class JobRecommendationEngine:
             "legal",
             "attorney",
             "barrister",
+            "conveyancing",
+        ],
+        "compliance": [
             "compliance",
+            "risk management",
+            "risk analyst",
+            "compliance officer",
+            "risk officer",
+            "audit",
+            "regulatory",
+            "governance",
         ],
         "creative": [
             "designer",
@@ -143,13 +151,323 @@ class JobRecommendationEngine:
             "creative",
             "copywriter",
             "content writer",
-            "marketing",
             "graphic",
             "ux",
             "ui",
             "brand",
-            "media",
+            "illustrator",
+            "animator",
+            "video editor",
+        ],
+        "marketing": [
+            "marketing",
+            "digital marketing",
+            "seo",
+            "sem",
+            "social media",
+            "content marketing",
+            "brand manager",
+            "marketing manager",
+            "campaigns",
+            "email marketing",
+            "growth hacker",
+            "marketing strategist",
+        ],
+        "photography": [
             "photographer",
+            "photography",
+            "videographer",
+            "cinematographer",
+            "photo editor",
+            "camera operator",
+            "video production",
+        ],
+        "media": [
+            "journalist",
+            "reporter",
+            "editor",
+            "producer",
+            "broadcaster",
+            "media",
+            "communications",
+            "public relations",
+            "pr",
+            "press officer",
+        ],
+        "hospitality": [
+            "hotel",
+            "hospitality",
+            "restaurant",
+            "chef",
+            "cook",
+            "waiter",
+            "bartender",
+            "catering",
+            "tourism",
+            "front desk",
+            "concierge",
+            "housekeeper",
+            "sommelier",
+        ],
+        "construction": [
+            "construction",
+            "builder",
+            "carpenter",
+            "plumber",
+            "electrician",
+            "foreman",
+            "site manager",
+            "surveyor",
+            "bricklayer",
+            "joiner",
+            "contractor",
+            "scaffolder",
+            "roofer",
+        ],
+        "manufacturing": [
+            "production",
+            "manufacturing",
+            "assembly",
+            "machinist",
+            "quality control",
+            "factory",
+            "plant manager",
+            "operations",
+            "process engineer",
+            "production supervisor",
+        ],
+        "sales": [
+            "sales",
+            "account manager",
+            "business development",
+            "sales representative",
+            "account executive",
+            "sales director",
+            "commercial",
+            "sales consultant",
+        ],
+        "transport": [
+            "driver",
+            "transport",
+            "delivery",
+            "logistics",
+            "courier",
+            "haulage",
+            "fleet",
+            "dispatcher",
+            "truck driver",
+            "van driver",
+            "taxi driver",
+        ],
+        "public_sector": [
+            "government",
+            "public sector",
+            "civil service",
+            "local authority",
+            "council",
+            "policy",
+            "public administration",
+            "parliament",
+        ],
+        "charity": [
+            "charity",
+            "nonprofit",
+            "non-profit",
+            "fundraising",
+            "community",
+            "volunteer coordinator",
+            "social work",
+            "outreach",
+            "ngo",
+        ],
+        "agriculture": [
+            "farmer",
+            "agriculture",
+            "farm manager",
+            "agricultural",
+            "livestock",
+            "horticulture",
+            "gardener",
+            "landscape",
+            "groundskeeper",
+            "arborist",
+        ],
+        "sports": [
+            "coach",
+            "personal trainer",
+            "fitness",
+            "sports",
+            "athlete",
+            "physiotherapist",
+            "sports coach",
+            "gym instructor",
+            "wellness",
+        ],
+        "beauty": [
+            "hairdresser",
+            "beautician",
+            "beauty therapist",
+            "barber",
+            "nail technician",
+            "makeup artist",
+            "aesthetician",
+            "spa",
+            "salon",
+        ],
+        "science": [
+            "scientist",
+            "researcher",
+            "laboratory",
+            "research",
+            "biologist",
+            "chemist",
+            "physicist",
+            "lab technician",
+            "research assistant",
+        ],
+        "environmental": [
+            "environmental",
+            "sustainability",
+            "conservation",
+            "ecologist",
+            "environmental consultant",
+            "renewable energy",
+            "waste management",
+        ],
+        "property": [
+            "estate agent",
+            "property",
+            "real estate",
+            "lettings",
+            "property manager",
+            "surveyor",
+            "valuer",
+            "facilities manager",
+        ],
+        "security": [
+            "security",
+            "security guard",
+            "security officer",
+            "door supervisor",
+            "surveillance",
+            "loss prevention",
+            "bodyguard",
+        ],
+        "customer_service": [
+            "customer service",
+            "call centre",
+            "contact centre",
+            "customer support",
+            "helpdesk",
+            "support specialist",
+            "customer care",
+        ],
+        "admin": [
+            "administrative",
+            "secretary",
+            "receptionist",
+            "office manager",
+            "pa",
+            "personal assistant",
+            "clerk",
+            "data entry",
+        ],
+        "aviation": [
+            "pilot",
+            "cabin crew",
+            "flight attendant",
+            "aviation",
+            "aircraft",
+            "air traffic",
+            "aerospace",
+        ],
+        "maritime": [
+            "maritime",
+            "marine",
+            "seafarer",
+            "ship",
+            "vessel",
+            "port",
+            "offshore",
+            "naval",
+        ],
+        "insurance": [
+            "insurance",
+            "underwriter",
+            "claims",
+            "actuary",
+            "insurance broker",
+            "risk assessor",
+        ],
+        "telecommunications": [
+            "telecommunications",
+            "telecom",
+            "network engineer",
+            "telecommunications engineer",
+            "fiber optic",
+            "broadband",
+        ],
+        "automotive": [
+            "mechanic",
+            "automotive",
+            "motor",
+            "car technician",
+            "vehicle",
+            "mot tester",
+            "auto electrician",
+        ],
+        "energy": [
+            "energy",
+            "utilities",
+            "power",
+            "electrical grid",
+            "gas engineer",
+            "renewable",
+        ],
+        "veterinary": [
+            "veterinary",
+            "vet",
+            "animal care",
+            "veterinarian",
+            "vet nurse",
+            "animal welfare",
+        ],
+        "pharmacy": [
+            "pharmacist",
+            "pharmacy",
+            "pharmaceutical",
+            "pharmacy technician",
+            "dispenser",
+        ],
+        "architecture": [
+            "architect",
+            "architecture",
+            "architectural",
+            "urban planning",
+            "town planner",
+        ],
+        "performing_arts": [
+            "actor",
+            "performer",
+            "musician",
+            "dancer",
+            "theatre",
+            "drama",
+            "entertainment",
+            "stage manager",
+        ],
+        "library": [
+            "librarian",
+            "library",
+            "archivist",
+            "information specialist",
+        ],
+        "recruitment": [
+            "recruiter",
+            "recruitment",
+            "talent acquisition",
+            "headhunter",
+            "recruitment consultant",
         ],
     }
 
@@ -325,25 +643,41 @@ class JobRecommendationEngine:
         """Detect user's primary career field from titles and skills"""
         field_scores = {field: 0 for field in self.CAREER_FIELDS}
 
-        # Analyze job titles
+        # Analyze job titles (HEAVILY WEIGHTED - most important indicator)
         for title in profile["job_titles"]:
             title_lower = title.lower()
             for field, keywords in self.CAREER_FIELDS.items():
                 for keyword in keywords:
                     if keyword in title_lower:
-                        field_scores[field] += 2  # Job titles weighted higher
+                        # Job titles get MUCH higher weight (10 points)
+                        # This ensures job title is primary indicator
+                        field_scores[field] += 10
 
-        # Analyze skills
+        # Analyze skills (lower weight to avoid false positives)
         for skill in profile["skills"]:
             skill_lower = skill.lower()
             for field, keywords in self.CAREER_FIELDS.items():
                 for keyword in keywords:
                     if keyword in skill_lower:
+                        # Skills only add 1 point (10x less than job title)
                         field_scores[field] += 1
 
         # Return field with highest score (or None if no clear match)
         if max(field_scores.values()) > 0:
-            return max(field_scores, key=field_scores.get)
+            detected_field = max(field_scores, key=field_scores.get)
+
+            # Debug logging
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"🎯 Career field detection scores: {dict(sorted(field_scores.items(), key=lambda x: x[1], reverse=True)[:5])}"
+            )
+            logger.info(
+                f"✅ Detected career field: {detected_field} (score: {field_scores[detected_field]})"
+            )
+
+            return detected_field
         return None
 
     def calculate_skills_score(self, job):

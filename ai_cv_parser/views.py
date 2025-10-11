@@ -2656,6 +2656,46 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         logger.info(
                             f"ParsedCV {cv_id} processing completed with errors in {parsed_cv.processing_time:.2f} seconds"
                         )
+
+                        # AUTO-POPULATE Experience and Skill tables even with fallback data
+                        try:
+                            logger.info(
+                                f"🔄 Auto-populating Experience/Skill tables from fallback data for CV {cv_id}"
+                            )
+                            from cv_writer.services import save_rewritten_cv_to_database
+                            from cv_writer.models import CvWriter
+
+                            # Get or create CvWriter instance
+                            cv_writer, created = CvWriter.objects.get_or_create(
+                                user=parsed_cv.user,
+                                defaults={"status": "completed", "is_primary": True},
+                            )
+
+                            if not created and not cv_writer.is_primary:
+                                CvWriter.objects.filter(
+                                    user=parsed_cv.user, is_primary=True
+                                ).update(is_primary=False)
+                                cv_writer.is_primary = True
+                                cv_writer.save()
+
+                            # Use fallback data
+                            save_rewritten_cv_to_database(
+                                rewritten_cv_data=parsed_data.get(
+                                    "parsed_data_fallback", {}
+                                ),
+                                user=parsed_cv.user,
+                                cv_writer_instance=cv_writer,
+                            )
+                            logger.info(
+                                f"✅ Populated Experience/Skill tables from fallback data for CV {cv_id}"
+                            )
+
+                        except Exception as pop_error:
+                            logger.error(
+                                f"⚠️ Error auto-populating from fallback data: {str(pop_error)}"
+                            )
+                            pass
+
                         return
                     else:
                         # No fallback data, mark as failed
@@ -2685,6 +2725,47 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 logger.info(
                     f"ParsedCV {cv_id} processing completed successfully in {parsed_cv.processing_time:.2f} seconds"
                 )
+
+                # AUTO-POPULATE Experience and Skill tables for recommendations
+                try:
+                    logger.info(
+                        f"🔄 Auto-populating Experience/Skill tables for CV {cv_id}"
+                    )
+                    from cv_writer.services import save_rewritten_cv_to_database
+                    from cv_writer.models import CvWriter
+
+                    # Get or create CvWriter instance for this user
+                    cv_writer, created = CvWriter.objects.get_or_create(
+                        user=parsed_cv.user,
+                        defaults={"status": "completed", "is_primary": True},
+                    )
+
+                    if not created:
+                        # If CV already exists, make sure it's set as primary
+                        if not cv_writer.is_primary:
+                            CvWriter.objects.filter(
+                                user=parsed_cv.user, is_primary=True
+                            ).update(is_primary=False)
+                            cv_writer.is_primary = True
+                            cv_writer.save()
+
+                    # Populate Experience and Skill tables from parsed data
+                    save_rewritten_cv_to_database(
+                        rewritten_cv_data=parsed_data,
+                        user=parsed_cv.user,
+                        cv_writer_instance=cv_writer,
+                    )
+                    logger.info(
+                        f"✅ Successfully populated Experience/Skill tables for CV {cv_id}"
+                    )
+
+                except Exception as pop_error:
+                    logger.error(
+                        f"⚠️ Error auto-populating Experience/Skill tables: {str(pop_error)}"
+                    )
+                    logger.error(traceback.format_exc())
+                    # Don't fail the entire CV parsing if this fails
+                    pass
 
                 # Add career trajectory analysis
                 try:
