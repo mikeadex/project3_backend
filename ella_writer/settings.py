@@ -253,6 +253,11 @@ if os.environ.get("DJANGO_SETTINGS_MODULE", "").endswith("production"):
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    
+    # Force HTTPS for all URLs including media files
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
 
     # Keep CORS settings permissive in production for now
     # We'll maintain CORS_ALLOW_ALL_ORIGINS = True from above
@@ -655,13 +660,15 @@ if os.environ.get("DJANGO_SETTINGS_MODULE", "").endswith("production"):
     # Security settings
     DEBUG = False
 
-    # Use environment variable for secret key in production
-    # SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', SECRET_KEY)
-
     # Enforce HTTPS and secure cookies
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    
+    # Force HTTPS for all URLs including media files
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
 
     # Database configuration for Render
     DATABASES = {
