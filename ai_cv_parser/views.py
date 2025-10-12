@@ -4012,3 +4012,45 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 {"exists": False, "data": None, "type": "ai_cv_parser"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    @action(detail=False, methods=["DELETE"], url_path="clear-all")
+    def clear_all(self, request):
+        """
+        Clear all parsed CV data for the authenticated user.
+        Requires confirmation token to prevent accidental deletion.
+        """
+        try:
+            # Check for confirmation token
+            confirmation = request.data.get("confirmation", "")
+            if confirmation != "CONFIRMED":
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Confirmation token required to clear all CV data",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get all CVs for the user
+            user_cvs = self.get_queryset()
+            count = user_cvs.count()
+
+            # Delete all CVs
+            user_cvs.delete()
+
+            logger.info(f"Cleared {count} parsed CV(s) for user {request.user.id}")
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Successfully deleted {count} parsed CV(s)",
+                    "count": count,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"Error clearing parsed CV data: {e}")
+            return Response(
+                {"success": False, "message": f"Failed to clear CV data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
