@@ -11,6 +11,7 @@ Once you've created your CV with Ella, export it in multiple formats for differe
 ## Available Export Formats
 
 ### PDF (Recommended)
+
 **Best for:** Most job applications, email submissions
 
 - Maintains precise layout and design
@@ -19,6 +20,7 @@ Once you've created your CV with Ella, export it in multiple formats for differe
 - Professional appearance guaranteed
 
 ### DOCX (Microsoft Word)
+
 **Best for:** Recruiters requesting editable files, recruitment agencies
 
 - Fully editable by recipients
@@ -26,6 +28,7 @@ Once you've created your CV with Ella, export it in multiple formats for differe
 - Common in recruitment agencies
 
 ### TXT (Plain Text)
+
 **Best for:** Strict ATS systems, web form applications
 
 - 100% ATS-readable
@@ -45,12 +48,15 @@ Once you've created your CV with Ella, export it in multiple formats for differe
 ## Best Practices
 
 ### File Naming
+
 Use professional names:
+
 - ✅ `FirstName_LastName_CV_2025.pdf`
 - ✅ `John_Smith_Resume_Software_Engineer.pdf`
 - ❌ `my_cv_final_FINAL_v3.pdf`
 
 ### Format Selection
+
 - **PDF:** Default for most applications
 - **DOCX:** When explicitly requested
 - **TXT:** Government or strict ATS systems
@@ -58,6 +64,7 @@ Use professional names:
 ## Template Compatibility
 
 All [Ella templates](/help/choosing-cv-templates) export perfectly in all formats while maintaining:
+
 - ATS compatibility across major systems
 - Professional appearance
 - Proper section hierarchy

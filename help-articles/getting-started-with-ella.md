@@ -11,9 +11,11 @@ Welcome to Ella! Creating a professional, ATS-optimized CV has never been easier
 ## Two Ways to Start
 
 ### Option 1: Upload Your Existing CV
+
 Already have a CV? Upload it (PDF or DOCX format) and let Ella's AI parse and optimize it automatically. Our intelligent system extracts your information, suggests improvements, and ensures ATS compatibility.
 
 **How it works:**
+
 1. Click "Create CV" in the navigation menu
 2. Choose "Upload Existing CV"
 3. Select your file and upload
@@ -21,9 +23,11 @@ Already have a CV? Upload it (PDF or DOCX format) and let Ella's AI parse and op
 5. Click "Analyze CV" to get AI-powered insights
 
 ### Option 2: Start From Scratch
+
 Prefer a fresh start? Use our step-by-step wizard to build your CV section by section with real-time AI suggestions.
 
 **Steps:**
+
 1. Navigate to "Create CV"
 2. Select "Build from Scratch"
 3. Choose from our [professional ATS-friendly templates](/help/choosing-cv-templates)
@@ -33,6 +37,7 @@ Prefer a fresh start? Use our step-by-step wizard to build your CV section by se
 ## What Happens After Upload?
 
 Once uploaded, Ella automatically:
+
 - Extracts your professional information
 - Identifies your experience level
 - Suggests suitable job roles

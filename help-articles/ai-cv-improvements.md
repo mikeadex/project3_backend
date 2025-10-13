@@ -33,13 +33,17 @@ Marketing Manager → "SEO, conversion optimization, A/B testing, ROI"
 ## Using AI Features
 
 ### Real-Time Assistance
+
 As you type, Ella highlights improvements:
+
 - 🟡 Yellow: Minor improvements
 - 🟠 Orange: Significant optimization needed
 - 🔴 Red: Critical ATS issues
 
 ### AI Rewrite (Premium)
+
 For major improvements:
+
 1. Upload your CV
 2. Select "Improve with AI"
 3. AI rewrites each section professionally
@@ -60,6 +64,7 @@ For major improvements:
 ## Success Metrics
 
 Users applying AI suggestions report:
+
 - 3x more interview callbacks
 - +25 points average ATS improvement
 - 40% faster CV completion

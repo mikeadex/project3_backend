@@ -17,6 +17,7 @@ Welcome to Ella! Creating a professional, ATS-optimized CV has never been easier
 Already have a CV? Upload it (PDF or DOCX format) and let Ella's AI parse and optimize it automatically. Our intelligent system extracts your information, suggests improvements, and ensures ATS compatibility.
 
 **How it works:**
+
 1. Click "Create CV" in the navigation menu
 2. Choose "Upload Existing CV"
 3. Select your file and upload
@@ -27,26 +28,28 @@ Already have a CV? Upload it (PDF or DOCX format) and let Ella's AI parse and op
 Prefer a fresh start? Use our step-by-step wizard to build your CV section by section with real-time AI suggestions.
 
 **Steps:**
+
 1. Navigate to "Create CV"
 2. Select "Build from Scratch"
-3. Choose from our [professional ATS-friendly templates](#) *(links to Article 2)*
+3. Choose from our [professional ATS-friendly templates](#) _(links to Article 2)_
 4. Fill in your details with AI assistance
 5. Preview and export
 
 ### What Happens After Upload?
 
 Once uploaded, Ella automatically:
+
 - Extracts your professional information
 - Identifies your experience level
 - Suggests suitable job roles
-- Provides an [ATS compatibility analysis](#) *(links to Article 3)*
+- Provides an [ATS compatibility analysis](#) _(links to Article 3)_
 - Highlights areas for improvement
 
 ### Next Steps
 
-- [Choose the Right CV Template](#) *(links to Article 2)* for your industry
-- [Download Your CV](#) *(links to Article 4)* in PDF, DOCX, or TXT format
-- Get [AI-Powered Improvements](#) *(links to Article 5)* to boost your interview chances
+- [Choose the Right CV Template](#) _(links to Article 2)_ for your industry
+- [Download Your CV](#) _(links to Article 4)_ in PDF, DOCX, or TXT format
+- Get [AI-Powered Improvements](#) _(links to Article 5)_ to boost your interview chances
 
 **Pro Tip:** All your CVs are automatically saved to your dashboard. You can edit, update, or create new versions anytime!
 
@@ -60,11 +63,12 @@ Once uploaded, Ella automatically:
 
 👍 Yes | 👎 No
 
-*Share your feedback to help us improve our guides*
+_Share your feedback to help us improve our guides_
 
 ---
 
 **Related Articles:**
+
 - [Choosing the Right CV Template](#)
 - [Understanding Your ATS Score](#)
 - [AI-Powered CV Improvements](#)
@@ -72,4 +76,4 @@ Once uploaded, Ella automatically:
 
 ---
 
-*Last updated: October 12, 2025*
+_Last updated: October 12, 2025_

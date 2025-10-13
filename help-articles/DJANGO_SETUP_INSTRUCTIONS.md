@@ -3,8 +3,9 @@
 ## 📋 Quick Summary
 
 5 Help Center articles created (max 350 words each) covering Ella CV's core features:
+
 1. **Getting Started with Ella** - CV creation basics
-2. **Choosing CV Templates** - Template selection guide  
+2. **Choosing CV Templates** - Template selection guide
 3. **Understanding ATS Analysis** - Score interpretation
 4. **Download & Export Options** - Format guide (PDF/DOCX/TXT)
 5. **AI-Powered Improvements** - Smart suggestions usage
@@ -21,10 +22,12 @@
 ### Step 1: Create "Help" Category
 
 1. **Login to Django Admin:**
+
    - URL: `https://ella-backend.onrender.com/admin/`
    - Navigate to: **Blog → Categories**
 
 2. **Add Category:**
+
    - Click **"Add Category"** button
    - Fill in:
      - **Name:** `Help`
@@ -48,11 +51,13 @@ For each article, follow this process:
 2. Fill in the form:
 
 **Title:**
+
 ```
 Getting Started with Ella: Create Your First Professional CV
 ```
 
 **Slug:**
+
 ```
 getting-started-with-ella
 ```
@@ -60,17 +65,20 @@ getting-started-with-ella
 **Category:** Select `Help` (from dropdown)
 
 **Tags:** Create and select:
+
 - `getting-started`
 - `beginner`
 - `cv-creation`
 - `tutorial`
 
 **Excerpt:**
+
 ```
 Learn how to create your first professional CV with Ella's AI-powered CV builder in just a few simple steps.
 ```
 
 **Content:** (Copy from file)
+
 ```markdown
 [Copy entire content from: /Users/michaeladeleye/Documents/Coding/ella/Ella-backend/help-articles/getting-started-with-ella.md]
 
@@ -78,12 +86,14 @@ Learn how to create your first professional CV with Ella's AI-powered CV builder
 ```
 
 **Featured Image:** (Optional)
+
 - Upload screenshot of CV creation page or Ella dashboard
 - Recommended size: 1200x630px
 
 **Status:** Published
 
 **Meta Description (SEO):**
+
 ```
 Step-by-step guide to creating your first CV with Ella. Learn to upload existing CVs or build from scratch with AI assistance.
 ```
@@ -95,11 +105,13 @@ Step-by-step guide to creating your first CV with Ella. Learn to upload existing
 #### Article 2: Choosing CV Templates
 
 **Title:**
+
 ```
 Choosing the Right CV Template: Your Guide to ATS-Friendly Designs
 ```
 
 **Slug:**
+
 ```
 choosing-cv-templates
 ```
@@ -107,17 +119,20 @@ choosing-cv-templates
 **Category:** `Help`
 
 **Tags:**
+
 - `templates`
 - `design`
 - `ats`
 - `professional`
 
 **Excerpt:**
+
 ```
 Learn how to select the perfect ATS-compliant CV template for your industry and career level with Ella's professional template library.
 ```
 
 **Content:**
+
 ```markdown
 [Copy from: choosing-cv-templates.md]
 ```
@@ -127,6 +142,7 @@ Learn how to select the perfect ATS-compliant CV template for your industry and 
 **Status:** Published
 
 **Meta Description:**
+
 ```
 Complete guide to choosing ATS-friendly CV templates. Explore Modern, Professional, and Creative designs for every industry.
 ```
@@ -136,11 +152,13 @@ Complete guide to choosing ATS-friendly CV templates. Explore Modern, Profession
 #### Article 3: Understanding ATS Analysis
 
 **Title:**
+
 ```
 Understanding Your CV Analysis Report: ATS Score Explained
 ```
 
 **Slug:**
+
 ```
 understanding-ats-analysis
 ```
@@ -148,17 +166,20 @@ understanding-ats-analysis
 **Category:** `Help`
 
 **Tags:**
+
 - `ats`
 - `analysis`
 - `optimization`
 - `score`
 
 **Excerpt:**
+
 ```
 Decode your CV analysis report and learn how to improve your ATS compatibility score to get past automated screening systems.
 ```
 
 **Content:**
+
 ```markdown
 [Copy from: understanding-ats-analysis.md]
 ```
@@ -168,6 +189,7 @@ Decode your CV analysis report and learn how to improve your ATS compatibility s
 **Status:** Published
 
 **Meta Description:**
+
 ```
 Learn how to interpret your ATS score (0-100) and understand what makes your CV pass automated screening systems.
 ```
@@ -177,11 +199,13 @@ Learn how to interpret your ATS score (0-100) and understand what makes your CV 
 #### Article 4: Download & Export Options
 
 **Title:**
+
 ```
 Downloading and Exporting Your CV: Format Guide
 ```
 
 **Slug:**
+
 ```
 download-export-options
 ```
@@ -189,6 +213,7 @@ download-export-options
 **Category:** `Help`
 
 **Tags:**
+
 - `export`
 - `download`
 - `pdf`
@@ -196,11 +221,13 @@ download-export-options
 - `formats`
 
 **Excerpt:**
+
 ```
 Learn how to download your CV in different formats (PDF, DOCX, TXT) and when to use each format for maximum compatibility.
 ```
 
 **Content:**
+
 ```markdown
 [Copy from: download-export-options.md]
 ```
@@ -210,6 +237,7 @@ Learn how to download your CV in different formats (PDF, DOCX, TXT) and when to 
 **Status:** Published
 
 **Meta Description:**
+
 ```
 Complete guide to exporting CVs in PDF, DOCX, and TXT formats. Learn when to use each format for job applications.
 ```
@@ -219,11 +247,13 @@ Complete guide to exporting CVs in PDF, DOCX, and TXT formats. Learn when to use
 #### Article 5: AI CV Improvements
 
 **Title:**
+
 ```
 Using AI-Powered CV Improvements: Smart Suggestions That Get Results
 ```
 
 **Slug:**
+
 ```
 ai-cv-improvements
 ```
@@ -231,6 +261,7 @@ ai-cv-improvements
 **Category:** `Help`
 
 **Tags:**
+
 - `ai`
 - `improvement`
 - `suggestions`
@@ -238,11 +269,13 @@ ai-cv-improvements
 - `writing`
 
 **Excerpt:**
+
 ```
 Discover how Ella's AI analyzes your CV and provides intelligent suggestions to improve content, formatting, and ATS compatibility.
 ```
 
 **Content:**
+
 ```markdown
 [Copy from: ai-cv-improvements.md]
 ```
@@ -252,6 +285,7 @@ Discover how Ella's AI analyzes your CV and provides intelligent suggestions to 
 **Status:** Published
 
 **Meta Description:**
+
 ```
 Master Ella's AI writing assistant. Get intelligent suggestions for content, keywords, and ATS optimization that boost interview chances.
 ```
@@ -261,11 +295,13 @@ Master Ella's AI writing assistant. Get intelligent suggestions for content, key
 ## 📝 Article Content Reference
 
 All article markdown files are located at:
+
 ```
 /Users/michaeladeleye/Documents/Coding/ella/Ella-backend/help-articles/
 ```
 
 Files:
+
 1. `getting-started-with-ella.md` (346 words)
 2. `choosing-cv-templates.md` (348 words)
 3. `understanding-ats-analysis.md` (339 words)
@@ -279,7 +315,7 @@ Files:
 Each article links to related articles for better navigation:
 
 ```
-Getting Started 
+Getting Started
     ↓ links to → Templates, ATS Analysis, Download, AI Improvements
 
 Templates
@@ -296,8 +332,9 @@ AI Improvements
 ```
 
 **All articles also link to:**
+
 - Help Center home: `/help`
-- Contact Support: `/contact`  
+- Contact Support: `/contact`
 - Templates page: `/templates`
 - Dashboard: `/dashboard`
 - CV Writer: `/cv-writer`
@@ -336,6 +373,7 @@ After adding all articles, verify:
 ### Additional Tags to Create
 
 Consider adding these tags for better organization:
+
 - `troubleshooting` (for future FAQ articles)
 - `account-management` (for future account help)
 - `pricing-plans` (for subscription help)
@@ -348,18 +386,21 @@ Consider adding these tags for better organization:
 Once all articles are published:
 
 ### Help Center Page (`/help`)
+
 - **Quick Links section:** Shows 4 cards (Getting Started links to category page)
 - **Articles Grid:** Displays all 5 help articles with images, dates, excerpts
 - **Search:** Real-time filtering by title/excerpt/tags
 - **FAQ Section:** 6 expandable Q&A items
 
 ### User Experience
+
 - Users can browse all help content in one place
 - Search functionality helps find specific topics quickly
 - Internal links guide users to related articles
 - Mobile-friendly responsive design
 
 ### SEO Benefits
+
 - All articles indexed under `/blog/category/help`
 - Proper meta descriptions for search engines
 - Structured internal linking boosts page authority
@@ -370,16 +411,21 @@ Once all articles are published:
 ## 🐛 Troubleshooting
 
 ### "Category not found" error on frontend
+
 **Solution:** Ensure category slug is exactly `help` (lowercase, no spaces)
 
 ### Articles not showing on Help page
-**Solution:** 
+
+**Solution:**
+
 1. Verify articles have Category = "Help"
 2. Check articles are Published (not Draft)
 3. Clear frontend cache/rebuild
 
 ### Internal links broken
+
 **Solution:** Update article slugs to match exactly:
+
 - `/help/getting-started-with-ella`
 - `/help/choosing-cv-templates`
 - `/help/understanding-ats-analysis`
@@ -387,7 +433,9 @@ Once all articles are published:
 - `/help/ai-cv-improvements`
 
 ### Search not working
+
 **Solution:** Ensure articles have proper excerpt and tags. Search filters by:
+
 - `title`
 - `excerpt`
 - `tags.name`
@@ -397,16 +445,19 @@ Once all articles are published:
 ## 🚀 Next Steps After Setup
 
 1. **Test Help Center:**
+
    - Visit `/help` and verify all 5 articles display
    - Test search with keywords like "template", "ats", "download"
    - Click through all internal links
 
 2. **Monitor Analytics:**
+
    - Track page views for `/help` and each article
    - Monitor search queries (what users search for)
    - Identify most popular articles
 
 3. **Create More Content:**
+
    - FAQ compilations (from support tickets)
    - Video tutorials (link to YouTube)
    - Advanced feature guides (premium features)
@@ -423,6 +474,7 @@ Once all articles are published:
 ## 📞 Need Help?
 
 If you encounter issues during setup:
+
 1. Check Django Admin logs for errors
 2. Verify database migrations are applied
 3. Ensure blog app is properly configured

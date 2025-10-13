@@ -11,25 +11,32 @@ Choosing the right template is crucial for making a strong first impression whil
 ## Our Template Categories
 
 ### Modern Templates (Free & Premium)
+
 **Best for:** Tech, startups, creative fields
+
 - **Minimalist Pro** (Free): Clean, ATS-optimized layout
 - **Tech Focus** (Free): Ideal for IT professionals
 - **Nordic** (Premium): Scandinavian-inspired design
 
 ### Professional Templates (Premium)
+
 **Best for:** Finance, consulting, corporate roles
+
 - **Executive**: Senior-level positions
 - **Corporate**: Traditional industries
 - **Finance Focus**: Banking and financial services
 
 ### Creative Templates (Free & Premium)
+
 **Best for:** Marketing, design, media
+
 - **Creative** (Free): Bold, colorful design
 - **Portfolio** (Premium): Showcase your work visually
 
 ## What Makes Our Templates ATS-Friendly?
 
 All templates feature:
+
 - ✅ Standard section headings (ATS recognizes "Experience", "Education", etc.)
 - ✅ Simple, clean formatting (no complex graphics or tables)
 - ✅ Machine-readable fonts
@@ -49,6 +56,7 @@ All templates feature:
 ## Template Customization
 
 Premium users can customize:
+
 - Colors and fonts (while maintaining ATS compatibility)
 - Section order and visibility
 - Spacing and margins
@@ -57,6 +65,7 @@ Premium users can customize:
 ## Export Compatibility
 
 All templates export perfectly in:
+
 - **PDF**: Best for email and most applications
 - **DOCX**: Editable Word format
 - **TXT**: Plain text for strict ATS systems

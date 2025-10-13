@@ -28,19 +28,24 @@ After [uploading your CV](/help/getting-started-with-ella), click "Analyze CV" t
 ## Analysis Components
 
 ### Keyword Analysis
+
 Identifies missing industry terms and suggests relevant additions.
 
 ### Formatting Check
+
 Flags ATS-unfriendly elements:
+
 - Complex tables/graphics
 - Unusual section headings
 - Non-standard fonts
 - Images in critical areas
 
 ### Content Assessment
+
 Evaluates action verbs, quantifiable achievements, date consistency, and professional summary strength.
 
 ### Role Suggestions
+
 Recommends suitable job titles you qualify for.
 
 ## Improvement Steps
