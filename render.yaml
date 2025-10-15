@@ -18,6 +18,8 @@ services:
         value: www.ellacvwriter.com,ellacvwriter.com,ella-backend-gw8c.onrender.com,www.ellacv.com,ellacv.com,ellacvwriter.vercel.app,www.ellacvwriter.vercel.app
       - key: CORS_ALLOWED_ORIGINS
         value: https://www.ellacvwriter.com,https://ellacvwriter.com,https://www.ellacv.com,https://ellacv.com,https://ellacvwriter.vercel.app,https://www.ellacvwriter.vercel.app
+      - key: FRONTEND_URL
+        value: https://ellacv.com
       - key: DATABASE_URL
         fromDatabase:
           name: ella-postgres

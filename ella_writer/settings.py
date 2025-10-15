@@ -307,8 +307,8 @@ REST_AUTH = {
     "JWT_AUTH_HTTPONLY": False,
 }
 
-# Frontend URL (without trailing slash) - Use environment variable or default to production
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ellacv.com")
+# Frontend URL (without trailing slash) - default to apex domain for canonical consistency
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ellacv.com")
 
 # OAuth redirect URLs should point to production frontend
 LOGIN_REDIRECT_URL = f"{FRONTEND_URL}/auth/social-callback"
