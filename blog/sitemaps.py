@@ -22,7 +22,7 @@ class BlogPostSitemap(Sitemap):
 
     def get_urls(self, site=None, **kwargs):
         """Override to use production domain"""
-        site = type('obj', (object,), {'domain': 'ellacv.com'})()
+        site = type("obj", (object,), {"domain": "ellacv.com"})()
         return super().get_urls(site=site, **kwargs)
 
     def items(self):
@@ -51,7 +51,7 @@ class CategorySitemap(Sitemap):
 
     def get_urls(self, site=None, **kwargs):
         """Override to use production domain"""
-        site = type('obj', (object,), {'domain': 'ellacv.com'})()
+        site = type("obj", (object,), {"domain": "ellacv.com"})()
         return super().get_urls(site=site, **kwargs)
 
     def items(self):
@@ -76,7 +76,7 @@ class StaticViewSitemap(Sitemap):
 
     def get_urls(self, site=None, **kwargs):
         """Override to use production domain"""
-        site = type('obj', (object,), {'domain': 'ellacv.com'})()
+        site = type("obj", (object,), {"domain": "ellacv.com"})()
         return super().get_urls(site=site, **kwargs)
 
     def items(self):
