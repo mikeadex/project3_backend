@@ -108,6 +108,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "django.contrib.sitemaps",  # For XML sitemap generation
     "allauth",
     "allauth.account",
     "allauth.socialaccount",

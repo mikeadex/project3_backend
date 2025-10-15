@@ -5,6 +5,8 @@ from django.conf.urls.static import static
 from django.views.generic import TemplateView
 from django.shortcuts import redirect
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.contrib.sitemaps.views import sitemap
+from blog.sitemaps import BlogPostSitemap, CategorySitemap, StaticViewSitemap
 from api.views import (
     CreateUserView,
     CustomConfirmEmailView,
@@ -21,6 +23,13 @@ from rest_framework.permissions import AllowAny
 from django.db import connection
 from django.conf import settings
 import time
+
+# Sitemap configuration
+sitemaps = {
+    "blog": BlogPostSitemap,
+    "categories": CategorySitemap,
+    "static": StaticViewSitemap,
+}
 
 
 # Enhanced health check view with service status details
@@ -91,6 +100,13 @@ def health_check(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Sitemap
+    path(
+        "sitemap.xml",
+        sitemap,
+        {"sitemaps": sitemaps},
+        name="django.contrib.sitemaps.views.sitemap",
+    ),
     # ⚠️  CRITICAL: Custom social auth overrides MUST come BEFORE allauth.urls
     # Override specific allauth URLs with our SPA-compatible handlers
     path(
