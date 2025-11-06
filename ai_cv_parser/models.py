@@ -65,8 +65,55 @@ class ParsedCV(models.Model):
         null=True, blank=True
     )  # Track when analysis was performed
 
+    # Version tracking for rewrites (for LLM training)
+    original_parsed_cv = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='improved_versions',
+        help_text='Original CV this is an improved version of'
+    )
+    version_number = models.IntegerField(default=1, help_text='Version number in rewrite chain')
+    
+    # User feedback for LLM training
+    user_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        choices=[(i, i) for i in range(1, 6)],
+        help_text='User rating 1-5 (for future LLM training)'
+    )
+    
+    # AI metadata for training
+    ai_model_used = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='AI model used for generation/improvement'
+    )
+    quality_score = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Quality score from 3-Layer QC'
+    )
+    
+    # Template selection
+    template = models.CharField(
+        max_length=50,
+        blank=True,
+        default='executive',
+        help_text='Selected CV template (executive, modern, tech-focus, etc.)'
+    )
+    
+    # Primary CV designation
+    is_primary = models.BooleanField(
+        default=False,
+        help_text='Whether this is the user\'s primary/default CV'
+    )
+
     def __str__(self):
-        return f"{self.file_name} - {self.user.username} ({self.status})"
+        version_info = f" v{self.version_number}" if self.version_number > 1 else ""
+        user_display = self.user.username if self.user else "Guest"
+        return f"{self.file_name}{version_info} - {user_display} ({self.status})"
 
     class Meta:
         verbose_name = "Parsed CV"

@@ -499,6 +499,11 @@ class AdvancedDocumentParser:
             "phone": "",
             "location": "",
             "linkedin": "",
+            "github": "",
+            "portfolio": "",
+            "website": "",
+            "twitter": "",
+            "instagram": "",
         }
 
         # Try to find a personal info section first
@@ -785,6 +790,109 @@ class AdvancedDocumentParser:
                         )
                     else:
                         result["linkedin"] = linkedin_match.group(1)
+                    break
+        
+        # Extract GitHub if available
+        if not result["github"]:
+            github_patterns = [
+                r"(?:GitHub|Github):\s*((?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_-]+/?)",
+                r"\b((?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9_-]+/?)\b",
+                r"github\.com/([A-Za-z0-9_-]+)",
+            ]
+
+            for pattern in github_patterns:
+                github_match = re.search(pattern, text, re.IGNORECASE)
+                if github_match:
+                    github_url = github_match.group(1) if github_match.lastindex >= 1 else github_match.group(0)
+                    # Normalize to full URL
+                    if not github_url.startswith('http'):
+                        github_url = 'https://' + github_url
+                    result["github"] = github_url
+                    break
+        
+        # Extract Twitter/X if available
+        if not result["twitter"]:
+            twitter_patterns = [
+                r"(?:Twitter|X):\s*((?:https?://)?(?:www\.)?(?:twitter|x)\.com/[A-Za-z0-9_]+/?)",
+                r"\b((?:https?://)?(?:www\.)?(?:twitter|x)\.com/[A-Za-z0-9_]+/?)\b",
+                r"@([A-Za-z0-9_]+)\s*(?:on Twitter|on X)?",
+            ]
+
+            for pattern in twitter_patterns:
+                twitter_match = re.search(pattern, text, re.IGNORECASE)
+                if twitter_match:
+                    twitter_url = twitter_match.group(1) if twitter_match.lastindex >= 1 else twitter_match.group(0)
+                    # Normalize to full URL
+                    if twitter_url.startswith('@'):
+                        twitter_url = 'https://twitter.com/' + twitter_url[1:]
+                    elif not twitter_url.startswith('http'):
+                        twitter_url = 'https://' + twitter_url
+                    result["twitter"] = twitter_url
+                    break
+        
+        # Extract Instagram if available
+        if not result["instagram"]:
+            instagram_patterns = [
+                r"(?:Instagram):\s*((?:https?://)?(?:www\.)?instagram\.com/[A-Za-z0-9_.-]+/?)",
+                r"\b((?:https?://)?(?:www\.)?instagram\.com/[A-Za-z0-9_.-]+/?)\b",
+                r"@([A-Za-z0-9_.-]+)\s*(?:on Instagram)?",
+            ]
+
+            for pattern in instagram_patterns:
+                instagram_match = re.search(pattern, text, re.IGNORECASE)
+                if instagram_match:
+                    instagram_url = instagram_match.group(1) if instagram_match.lastindex >= 1 else instagram_match.group(0)
+                    # Normalize to full URL
+                    if instagram_url.startswith('@'):
+                        instagram_url = 'https://instagram.com/' + instagram_url[1:]
+                    elif not instagram_url.startswith('http'):
+                        instagram_url = 'https://' + instagram_url
+                    result["instagram"] = instagram_url
+                    break
+        
+        # Extract portfolio/website URLs
+        # Look for portfolio-specific keywords first (including Pexels, Behance, Dribbble, etc.)
+        if not result["portfolio"]:
+            portfolio_patterns = [
+                r"(?:Portfolio|Website|Personal Site):\s*((?:https?://)?(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s,]*)",
+                r"\b((?:https?://)?(?:www\.)?pexels\.com/@[A-Za-z0-9_-]+/?[^\s,]*)\b",
+                r"\b((?:https?://)?(?:www\.)?behance\.net/[A-Za-z0-9_-]+/?[^\s,]*)\b",
+                r"\b((?:https?://)?(?:www\.)?dribbble\.com/[A-Za-z0-9_-]+/?[^\s,]*)\b",
+            ]
+            
+            for pattern in portfolio_patterns:
+                portfolio_match = re.search(pattern, text, re.IGNORECASE)
+                if portfolio_match:
+                    portfolio_url = portfolio_match.group(1)
+                    if not portfolio_url.startswith('http'):
+                        portfolio_url = 'https://' + portfolio_url
+                    # Accept portfolio platforms like Pexels, Behance, Dribbble directly
+                    # Exclude only social media that aren't portfolio platforms
+                    if any(portfolio_platform in portfolio_url.lower() for portfolio_platform in ['pexels', 'behance', 'dribbble', 'artstation', 'flickr']):
+                        result["portfolio"] = portfolio_url
+                        break
+                    # Exclude general social media
+                    if not any(social in portfolio_url.lower() for social in ['linkedin', 'github', 'twitter', 'facebook', 'instagram']):
+                        result["portfolio"] = portfolio_url
+                        break
+        
+        # Extract general website (even if portfolio was found)
+        if not result["website"]:
+            # Find all URLs
+            url_pattern = r'((?:https?://)?(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s]*)'
+            url_matches = re.findall(url_pattern, text)
+            
+            # Exclude social media and portfolio platforms that have dedicated fields
+            social_media_domains = ['linkedin', 'github', 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube', 'pexels', 'behance', 'dribbble']
+            
+            for url in url_matches:
+                # Skip social media URLs and already extracted portfolio
+                if (not any(social in url.lower() for social in social_media_domains) and 
+                    url != result.get("portfolio", "")):
+                    # Normalize URL
+                    if not url.startswith('http'):
+                        url = 'https://' + url
+                    result["website"] = url
                     break
 
         return result

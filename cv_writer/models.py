@@ -12,67 +12,99 @@ User = get_user_model()
 
 class CvWriter(models.Model):
     STATUS_CHOICES = (
-        ('draft', 'Draft'),
-        ('published', 'Published'),
-        ('archived', 'Archived'),
+        ("draft", "Draft"),
+        ("published", "Published"),
+        ("archived", "Archived"),
     )
-    
+
     VISIBILITY_CHOICES = (
-        ('private', 'Private'),
-        ('public', 'Public'),
-        ('shared', 'Shared'),
+        ("private", "Private"),
+        ("public", "Public"),
+        ("shared", "Shared"),
     )
-    
-    user = models.ForeignKey(
-        User, 
-        on_delete=models.CASCADE, 
-        related_name="cv_versions"
-    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cv_versions")
     # Personal Information from CV Parser
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    address = models.CharField(max_length=100)
-    city = models.CharField(max_length=100)
-    country = models.CharField(max_length=100)
+    address = models.CharField(max_length=100, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
     contact_number = models.CharField(max_length=100)
     additional_information = models.TextField(null=True, blank=True)
-    
+
     # New fields for LinkedIn integration
     title = models.CharField(max_length=200, null=True, blank=True)
     slug = models.SlugField(max_length=200, null=True, blank=True, unique=True)
     description = models.TextField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', null=True, blank=True)
-    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private', null=True, blank=True)
-    
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="draft", null=True, blank=True
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=VISIBILITY_CHOICES,
+        default="private",
+        null=True,
+        blank=True,
+    )
+
     # Template selection
-    template = models.ForeignKey('CVTemplate', null=True, blank=True, on_delete=models.SET_NULL, related_name='cvs')
-    
+    template = models.ForeignKey(
+        "CVTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cvs",
+    )
+
+    # Track original ParsedCV for re-rewrites
+    # This allows users to iteratively improve rewritten CVs by referencing the source
+    original_parsed_cv = models.ForeignKey(
+        "ai_cv_parser.ParsedCV",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rewritten_versions",
+        help_text="Original uploaded CV that was rewritten to create this CvWriter record",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    parent_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='variants')
-    version_name = models.CharField(max_length=100, blank=True, null=True, default='Version 1')
+    parent_version = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="variants",
+    )
+    version_name = models.CharField(
+        max_length=100, blank=True, null=True, default="Version 1"
+    )
     version_purpose = models.CharField(max_length=200, blank=True, null=True)
     is_primary = models.BooleanField(default=False)
 
     def __str__(self):
         version_info = f" - {self.version_name}" if self.version_name else ""
         return f"{self.first_name} {self.last_name}'s CV{version_info}"
-        
+
     def save(self, *args, **kwargs):
         # Check if this is a new CV (no ID yet)
         is_new = self.pk is None
-        
+
         if is_new:
             try:
                 # Get count of existing CVs for this user
+                from django.db import close_old_connections
                 close_old_connections()
-                
+
                 try:
                     # Use transaction to ensure atomicity
                     with transaction.atomic():
-                        existing_versions = CvWriter.objects.filter(user=self.user).count()
-                        
-                        # Set title to include version number if not already set 
+                        existing_versions = CvWriter.objects.filter(
+                            user=self.user
+                        ).count()
+
+                        # Set title to include version number if not already set
                         if not self.title or self.title == "Untitled":
                             self.title = f"My CV #{existing_versions + 1}"
                 except OperationalError:
@@ -80,12 +112,12 @@ class CvWriter(models.Model):
                     self.title = f"My CV ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
             except Exception as e:
                 # Fallback in case of any other errors
-                logger = logging.getLogger('cv_writer')
+                logger = logging.getLogger("cv_writer")
                 logger.error(f"Error setting CV title: {str(e)}")
-                
+
                 if not self.title or self.title == "Untitled":
                     self.title = f"My CV ({int(time.time())})"
-        
+
         try:
             if not self.version_name:
                 # If no version name is set, try to set a default one
@@ -93,32 +125,33 @@ class CvWriter(models.Model):
                     # Make sure title is set to something valid
                     if not self.title or len(self.title.strip()) == 0:
                         self.title = f"My CV ({int(time.time())})"
-                    
+
                     # Use timestamp to ensure uniqueness
                     timestamp = int(time.time())
                     self.version_name = f"{self.title} ({timestamp})"
                 except Exception as e:
                     # Log error but don't stop saving
                     logger.error(f"Error setting CV title: {str(e)}")
-                    
+
                     if not self.title or self.title == "Untitled":
                         self.title = f"My CV ({int(time.time())})"
         except Exception as e:
             # Log but continue with save
             logger.warning(f"Error in pre-save processing: {str(e)}")
-        
+
         # Call the original save method with retry logic
         max_retries = 3
         retry_count = 0
         last_error = None
-        
+
         while retry_count < max_retries:
             try:
                 # Make sure we have a fresh connection before saving
                 # Import at the module level to avoid scope issues
                 from django.db import close_old_connections
+
                 close_old_connections()
-                
+
                 # Attempt the save
                 super().save(*args, **kwargs)
                 return  # Success, exit the retry loop
@@ -126,21 +159,28 @@ class CvWriter(models.Model):
                 # Handle "connection already closed" errors
                 retry_count += 1
                 last_error = e
-                
+
                 if retry_count < max_retries:
-                    logger.warning(f"Database connection error in CV save, retrying ({retry_count}/{max_retries}): {str(e)}")
+                    logger.warning(
+                        f"Database connection error in CV save, retrying ({retry_count}/{max_retries}): {str(e)}"
+                    )
                     time.sleep(0.5 * retry_count)  # Small delay before retry
-                    
+
                     # Try to reconnect explicitly
                     from django.db import connection
+
                     connection.close()
                     try:
                         connection.connect()
                     except Exception as conn_err:
-                        logger.warning(f"Error reconnecting to database: {str(conn_err)}")
+                        logger.warning(
+                            f"Error reconnecting to database: {str(conn_err)}"
+                        )
                 else:
                     # Final retry failed
-                    logger.error(f"Failed to save CV after {max_retries} attempts: {str(e)}")
+                    logger.error(
+                        f"Failed to save CV after {max_retries} attempts: {str(e)}"
+                    )
                     raise
             except Exception as e:
                 # For other exceptions, don't retry
@@ -149,10 +189,14 @@ class CvWriter(models.Model):
 
     def clone(self):
         # Create a new version based on this CV
-        base_name = f"{self.version_name} - Copy" if self.version_name else "New Version"
+        base_name = (
+            f"{self.version_name} - Copy" if self.version_name else "New Version"
+        )
         counter = 1
         unique_name = base_name
-        while CvWriter.objects.filter(user=self.user, version_name=unique_name).exists():
+        while CvWriter.objects.filter(
+            user=self.user, version_name=unique_name
+        ).exists():
             unique_name = f"{base_name} {counter}"
             counter += 1
 
@@ -172,108 +216,127 @@ class CvWriter(models.Model):
             parent_version=self,
             version_name=unique_name,
             version_purpose=self.version_purpose,
-            is_primary=False
+            is_primary=False,
         )
 
     class Meta:
-        verbose_name_plural = 'CV Writers'
-        ordering = ['-created_at']
+        verbose_name_plural = "CV Writers"
+        ordering = ["-created_at"]
         # Remove unique constraint on user
         # unique_together = ['user']  # Commented out to allow multiple versions
 
 
 class CVTemplate(models.Model):
     """Model for CV templates available in the system"""
+
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     preview_image = models.URLField(blank=True)
-    
+
     # Template configuration - could be extended with specific options
     is_active = models.BooleanField(default=True)
     order = models.PositiveIntegerField(default=0)
-    
+
     # Template category/classification
-    category = models.CharField(max_length=50, blank=True, choices=[
-        ('modern', 'Modern'),
-        ('classic', 'Classic'),
-        ('creative', 'Creative'),
-        ('professional', 'Professional'),
-        ('technical', 'Technical')
-    ])
-    
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        choices=[
+            ("modern", "Modern"),
+            ("classic", "Classic"),
+            ("creative", "Creative"),
+            ("professional", "Professional"),
+            ("technical", "Technical"),
+        ],
+    )
+
     # Template customization options
     has_color_options = models.BooleanField(default=False)
     has_font_options = models.BooleanField(default=False)
     has_layout_options = models.BooleanField(default=False)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     def __str__(self):
         return self.name
-    
+
     class Meta:
-        ordering = ['order', 'name']
+        ordering = ["order", "name"]
         verbose_name = "CV Template"
         verbose_name_plural = "CV Templates"
 
 
 class CVTemplateSelection(models.Model):
     """Model to store user's template selections and preferences"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='template_selections')
-    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name='template_selections')
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="template_selections"
+    )
+    cv = models.ForeignKey(
+        CvWriter, on_delete=models.CASCADE, related_name="template_selections"
+    )
     template = models.ForeignKey(CVTemplate, on_delete=models.CASCADE)
-    
+
     # Template customization preferences
     color_scheme = models.CharField(max_length=50, blank=True)
     font_choice = models.CharField(max_length=50, blank=True)
     layout_option = models.CharField(max_length=50, blank=True)
-    
+
     # Additional customizations
     custom_css = models.TextField(blank=True)
     custom_settings = models.JSONField(default=dict, blank=True)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     def __str__(self):
         return f"{self.user.username}'s template selection for CV #{self.cv.id}"
-    
+
     class Meta:
-        unique_together = ['user', 'cv']
+        unique_together = ["user", "cv"]
         verbose_name = "Template Selection"
         verbose_name_plural = "Template Selections"
 
 
 class CVImprovement(models.Model):
-    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name='improvements')
-    section = models.CharField(max_length=50, choices=[
-        ('professional_summary', 'Professional Summary'),
-        ('experience', 'Experience'),
-        ('education', 'Education'),
-        ('skills', 'Skills'),
-        ('certifications', 'Certifications'),
-        ('languages', 'Languages'),
-        ('interests', 'Interests')
-    ])
+    cv = models.ForeignKey(
+        CvWriter, on_delete=models.CASCADE, related_name="improvements"
+    )
+    section = models.CharField(
+        max_length=50,
+        choices=[
+            ("professional_summary", "Professional Summary"),
+            ("experience", "Experience"),
+            ("education", "Education"),
+            ("skills", "Skills"),
+            ("certifications", "Certifications"),
+            ("languages", "Languages"),
+            ("interests", "Interests"),
+        ],
+    )
     original_content = models.TextField()
     improved_content = models.TextField()
-    improvement_type = models.CharField(max_length=20, choices=[
-        ('minimal', 'Quick Improvement'),
-        ('full', 'Deep Improvement')
-    ])
+    improvement_type = models.CharField(
+        max_length=20,
+        choices=[("minimal", "Quick Improvement"), ("full", "Deep Improvement")],
+    )
     tokens_used = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=[
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed')
-    ], default='pending')
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending"),
+            ("completed", "Completed"),
+            ("failed", "Failed"),
+        ],
+        default="pending",
+    )
     error_message = models.TextField(null=True, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.cv.user.email} - {self.section} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
@@ -281,10 +344,16 @@ class CVImprovement(models.Model):
 
 class Education(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="education")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="education", null=True, blank=True)
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="education",
+        null=True,
+        blank=True,
+    )
     school_name = models.CharField(max_length=100)
     degree = models.CharField(max_length=100)
-    field_of_study = models.CharField(max_length=100)
+    field_of_study = models.CharField(max_length=100, blank=True, null=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     current = models.BooleanField(default=False)
@@ -296,8 +365,16 @@ class Education(models.Model):
 
 
 class ProfessionalSummary(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="professional_summary")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="professional_summary", blank=True, null=True)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="professional_summary"
+    )
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="professional_summary",
+        blank=True,
+        null=True,
+    )
     summary = models.TextField(help_text="Professional summary of the CV")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -308,7 +385,13 @@ class ProfessionalSummary(models.Model):
 
 class Interest(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="interest")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="interests", null=True, blank=True)
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="interests",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -322,18 +405,29 @@ class Experience(models.Model):
         ("Full-time", "Full-time"),
         ("Part-time", "Part-time"),
         ("Contract", "Contract"),
-        ("Internship", "Internship"),
+        ("Temporary", "Temporary"),
         ("Freelance", "Freelance"),
+        ("Self-employed", "Self-employed"),
+        ("Internship", "Internship"),
+        ("Apprenticeship", "Apprenticeship"),
+        ("Volunteer", "Volunteer"),
+        ("Seasonal", "Seasonal"),
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="experience")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="experience", null=True, blank=True)
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="experience",
+        null=True,
+        blank=True,
+    )
     company_name = models.CharField(max_length=100)
     job_title = models.CharField(max_length=100)
     job_description = models.TextField()
-    achievements = models.TextField()
+    achievements = models.TextField(blank=True, null=True, default="")
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
-    employment_type = models.CharField(max_length=100, choices=EMPLOYMENT_TYPE)
+    employment_type = models.CharField(max_length=100, choices=EMPLOYMENT_TYPE, blank=True, null=True)
     current = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -344,7 +438,9 @@ class Experience(models.Model):
 
 class Skill(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill")
-    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="skills", null=True, blank=True)
+    cv = models.ForeignKey(
+        CvWriter, on_delete=models.CASCADE, related_name="skills", null=True, blank=True
+    )
     skill_name = models.CharField(max_length=100)
     skill_level = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -356,7 +452,13 @@ class Skill(models.Model):
 
 class Language(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="language")
-    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="languages", null=True, blank=True)
+    cv = models.ForeignKey(
+        CvWriter,
+        on_delete=models.CASCADE,
+        related_name="languages",
+        null=True,
+        blank=True,
+    )
     language = models.CharField(max_length=100)
     proficiency = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -370,10 +472,18 @@ class Certification(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="certification"
     )
-    cv = models.ForeignKey(CvWriter, on_delete=models.CASCADE, related_name="certifications", null=True, blank=True)
-    certificate_name = models.CharField(max_length=100)
+    cv = models.ForeignKey(
+        CvWriter,
+        on_delete=models.CASCADE,
+        related_name="certifications",
+        null=True,
+        blank=True,
+    )
+    certificate_name = models.CharField(max_length=200)  # Increased from 100 to 200
     certificate_date = models.DateField(null=True, blank=True)
-    certificate_link = models.URLField(null=True, blank=True)
+    certificate_link = models.CharField(
+        max_length=500, null=True, blank=True
+    )  # Changed from URLField to CharField
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -388,9 +498,15 @@ class Reference(models.Model):
         ("Personal", "Personal"),
         ("Character", "Character"),
     )
-    
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reference")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="references", null=True, blank=True)
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="references",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=100)
     title = models.CharField(max_length=100)
     company = models.CharField(max_length=100)
@@ -413,16 +529,24 @@ class SocialMedia(models.Model):
         ("Behance", "Behance"),
         ("Dribbble", "Dribbble"),
     )
-    
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="social_media")
-    cv = models.ForeignKey('CvWriter', on_delete=models.CASCADE, related_name="social_media", null=True, blank=True)
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="social_media"
+    )
+    cv = models.ForeignKey(
+        "CvWriter",
+        on_delete=models.CASCADE,
+        related_name="social_media",
+        null=True,
+        blank=True,
+    )
     platform = models.CharField(max_length=50, choices=PLATFORM_CHOICES)
     url = models.URLField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'platform')
+        unique_together = ("user", "platform")
 
     def __str__(self):
         return f"{self.user.username} - {self.platform}"

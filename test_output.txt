@@ -1,0 +1,139 @@
+WARNING 2025-11-02 14:35:17,570 services 68559 8690518016 Failed to initialize local Llama model: Model file not found at /Users/michaeladeleye/Documents/Coding/ella/Ella-backend/models/llama-2-7b-chat.gguf
+2025-11-02 14:35:17,570 - cv_writer.services - WARNING - Failed to initialize local Llama model: Model file not found at /Users/michaeladeleye/Documents/Coding/ella/Ella-backend/models/llama-2-7b-chat.gguf
+DEBUG 2025-11-02 14:35:17,570 services 68559 8690518016 LLaMA API key from settings: 4a873636-3...
+2025-11-02 14:35:17,570 - cv_writer.services - DEBUG - LLaMA API key from settings: 4a873636-3...
+DEBUG 2025-11-02 14:35:17,570 services 68559 8690518016 LLaMA API URL: https://api.llama-api.com/chat/completions
+2025-11-02 14:35:17,570 - cv_writer.services - DEBUG - LLaMA API URL: https://api.llama-api.com/chat/completions
+DEBUG 2025-11-02 14:35:17,570 services 68559 8690518016 LLaMA Model: llama3.1-8b
+2025-11-02 14:35:17,570 - cv_writer.services - DEBUG - LLaMA Model: llama3.1-8b
+INFO 2025-11-02 14:35:17,570 services 68559 8690518016 LLaMA API initialized successfully
+2025-11-02 14:35:17,570 - cv_writer.services - INFO - LLaMA API initialized successfully
+INFO 2025-11-02 14:35:17,570 services 68559 8690518016 Successfully initialized LLaMA API service
+2025-11-02 14:35:17,570 - cv_writer.services - INFO - Successfully initialized LLaMA API service
+INFO 2025-11-02 14:35:17,570 services 68559 8690518016 Initialized CV Improvement Service with services: Llama, DeepSeek
+2025-11-02 14:35:17,570 - cv_writer.services - INFO - Initialized CV Improvement Service with services: Llama, DeepSeek
+INFO 2025-11-02 14:35:19,147 views 68559 8690518016 🚀 Starting CV rewrite for CvWriter ID: 403, User: lolo
+2025-11-02 14:35:19,147 - cv_writer.views - INFO - 🚀 Starting CV rewrite for CvWriter ID: 403, User: lolo
+INFO 2025-11-02 14:35:19,960 views 68559 8690518016 ✅ Converted CvWriter #403 to ParsedCV format
+2025-11-02 14:35:19,960 - cv_writer.views - INFO - ✅ Converted CvWriter #403 to ParsedCV format
+2025-11-02 14:35:19,961 - ai_cv_parser - INFO - Initialized DeepSeekService with model: deepseek-chat
+2025-11-02 14:35:19,962 - ai_cv_parser - INFO - ✅ Initialized OpenAIService with model: gpt-4-turbo-preview
+2025-11-02 14:35:19,962 - ai_cv_parser.services - INFO - 🤖 OpenAI service initialized for CV rewriting
+DEBUG 2025-11-02 14:35:19,962 services 68559 8690518016 LLaMA API key from settings: 4a873636-3...
+2025-11-02 14:35:19,962 - cv_writer.services - DEBUG - LLaMA API key from settings: 4a873636-3...
+DEBUG 2025-11-02 14:35:19,962 services 68559 8690518016 LLaMA API URL: https://api.llama-api.com/chat/completions
+2025-11-02 14:35:19,962 - cv_writer.services - DEBUG - LLaMA API URL: https://api.llama-api.com/chat/completions
+DEBUG 2025-11-02 14:35:19,962 services 68559 8690518016 LLaMA Model: llama3.1-8b
+2025-11-02 14:35:19,962 - cv_writer.services - DEBUG - LLaMA Model: llama3.1-8b
+INFO 2025-11-02 14:35:19,962 services 68559 8690518016 LLaMA API initialized successfully
+2025-11-02 14:35:19,962 - cv_writer.services - INFO - LLaMA API initialized successfully
+2025-11-02 14:35:19,962 - ai_cv_parser.services - INFO - 🦙 LLaMA service initialized for quality review
+INFO 2025-11-02 14:35:19,965 quality_control 68559 8690518016 🎯 Initialized 3-Layer QC: Layer1(OpenAIService) → Layer2(LlamaAPIService) → Layer3(OpenAIService)
+2025-11-02 14:35:19,965 - cv_writer.quality_control - INFO - 🎯 Initialized 3-Layer QC: Layer1(OpenAIService) → Layer2(LlamaAPIService) → Layer3(OpenAIService)
+2025-11-02 14:35:19,965 - ai_cv_parser.services - INFO - 🎯 Initialized 3-Layer Quality Control System: Layer1(OpenAI) + Layer2(LLaMA) + Layer3(OpenAI)
+INFO 2025-11-02 14:35:19,965 views 68559 8690518016 ✅ CVRewriteService initialized with 3-Layer QC
+2025-11-02 14:35:19,965 - cv_writer.views - INFO - ✅ CVRewriteService initialized with 3-Layer QC
+INFO 2025-11-02 14:35:19,965 views 68559 8690518016 🎯 Processing CV through 3-Layer Quality Control...
+2025-11-02 14:35:19,965 - cv_writer.views - INFO - 🎯 Processing CV through 3-Layer Quality Control...
+2025-11-02 14:35:19,965 - ai_cv_parser.services - INFO - ====================================================================================================
+2025-11-02 14:35:19,965 - ai_cv_parser.services - INFO - 🚀🚀🚀 [SYNC] rewrite_cv_sync() METHOD CALLED!
+2025-11-02 14:35:19,965 - ai_cv_parser.services - INFO - 🔍 [SYNC] Has quality_controller: True
+2025-11-02 14:35:19,965 - ai_cv_parser.services - INFO - 🔍 [SYNC] quality_controller type: ThreeLayerQualityController
+2025-11-02 14:35:19,966 - ai_cv_parser.services - INFO - 🔍 [SYNC] CV data type: <class 'dict'>
+2025-11-02 14:35:19,966 - ai_cv_parser.services - INFO - 🔍 [SYNC] User: lolo
+2025-11-02 14:35:19,966 - ai_cv_parser.services - INFO - ====================================================================================================
+/Users/michaeladeleye/Documents/Coding/ella/Ella-backend/ai_cv_parser/services.py:1402: RuntimeWarning: coroutine 'SyncToAsync.__call__' was never awaited
+  refresh_db_connection()
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+2025-11-02 14:35:19,970 - ai_cv_parser.services - INFO - [SYNC] Found parsed_cv.parsed_data with keys: dict_keys(['personal_info', 'professional_summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'interests']), ParsedCV ID: 403
+2025-11-02 14:35:19,970 - ai_cv_parser.services - INFO - 🔍 Industry detection matches: {'finance': 0, 'technology': 5, 'healthcare': 0, 'marketing': 0, 'education': 1, 'sales': 1, 'legal': 0, 'hr': 0}
+2025-11-02 14:35:19,970 - ai_cv_parser.services - INFO - 🎯 Detected industry: technology
+2025-11-02 14:35:19,970 - ai_cv_parser.services - INFO - 🎯 [SYNC] Processing through 3-Layer Quality Control (Industry: technology)
+INFO 2025-11-02 14:35:19,970 quality_control 68559 8690518016 🚀 Starting 3-Layer Quality Control for user lolo
+2025-11-02 14:35:19,970 - cv_writer.quality_control - INFO - 🚀 Starting 3-Layer Quality Control for user lolo
+INFO 2025-11-02 14:35:19,970 quality_control 68559 8690518016 📝 Layer 1: Writer Algorithm
+2025-11-02 14:35:19,970 - cv_writer.quality_control - INFO - 📝 Layer 1: Writer Algorithm
+INFO 2025-11-02 14:35:19,970 quality_control 68559 8690518016 🖊️ Writer Algorithm: Starting content generation
+2025-11-02 14:35:19,970 - cv_writer.quality_control - INFO - 🖊️ Writer Algorithm: Starting content generation
+INFO 2025-11-02 14:35:19,971 quality_control 68559 8690518016 📝 Generating professional summary for technology industry
+2025-11-02 14:35:19,971 - cv_writer.quality_control - INFO - 📝 Generating professional summary for technology industry
+INFO 2025-11-02 14:35:19,971 quality_control 68559 8690518016 📄 Original summary: Results-driven freelance software developer with 10 years of experience delivering high-quality solu...
+2025-11-02 14:35:19,971 - cv_writer.quality_control - INFO - 📄 Original summary: Results-driven freelance software developer with 10 years of experience delivering high-quality solu...
+INFO 2025-11-02 14:35:19,971 quality_control 68559 8690518016 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:19,971 - cv_writer.quality_control - INFO - 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:19,971 - ai_cv_parser - INFO - 🤖 Sending request to OpenAI API with model: gpt-4-turbo-preview (attempt 1/3)
+2025-11-02 14:35:24,986 - ai_cv_parser - INFO - ✅ Successfully received response from OpenAI API
+INFO 2025-11-02 14:35:24,989 quality_control 68559 8690518016 ✨ Generated summary: Accomplished Fullstack Developer with a decade of proven expertise in delivering robust, high-qualit...
+2025-11-02 14:35:24,989 - cv_writer.quality_control - INFO - ✨ Generated summary: Accomplished Fullstack Developer with a decade of proven expertise in delivering robust, high-qualit...
+INFO 2025-11-02 14:35:24,989 quality_control 68559 8690518016 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:24,989 - cv_writer.quality_control - INFO - 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:24,989 - ai_cv_parser - INFO - 🤖 Sending request to OpenAI API with model: gpt-4-turbo-preview (attempt 1/3)
+2025-11-02 14:35:30,254 - ai_cv_parser - INFO - ✅ Successfully received response from OpenAI API
+INFO 2025-11-02 14:35:30,255 quality_control 68559 8690518016 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:30,255 - cv_writer.quality_control - INFO - 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:30,256 - ai_cv_parser - INFO - 🤖 Sending request to OpenAI API with model: gpt-4-turbo-preview (attempt 1/3)
+2025-11-02 14:35:40,652 - ai_cv_parser - INFO - ✅ Successfully received response from OpenAI API
+INFO 2025-11-02 14:35:40,653 quality_control 68559 8690518016 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:40,653 - cv_writer.quality_control - INFO - 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:40,654 - ai_cv_parser - INFO - 🤖 Sending request to OpenAI API with model: gpt-4-turbo-preview (attempt 1/3)
+2025-11-02 14:35:43,437 - ai_cv_parser - INFO - ✅ Successfully received response from OpenAI API
+INFO 2025-11-02 14:35:43,438 quality_control 68559 8690518016 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:43,438 - cv_writer.quality_control - INFO - 🔧 Layer 1 (Writer): Using OpenAIService
+2025-11-02 14:35:43,438 - ai_cv_parser - INFO - 🤖 Sending request to OpenAI API with model: gpt-4-turbo-preview (attempt 1/3)
+2025-11-02 14:35:45,592 - ai_cv_parser - INFO - ✅ Successfully received response from OpenAI API
+INFO 2025-11-02 14:35:45,593 quality_control 68559 8690518016 🖊️ Writer Algorithm: Completed in 25.62s, Score: 5.0
+2025-11-02 14:35:45,593 - cv_writer.quality_control - INFO - 🖊️ Writer Algorithm: Completed in 25.62s, Score: 5.0
+INFO 2025-11-02 14:35:45,594 quality_control 68559 8690518016 🔍 Layer 2: Reviewer Algorithm
+2025-11-02 14:35:45,594 - cv_writer.quality_control - INFO - 🔍 Layer 2: Reviewer Algorithm
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 🔍 Reviewer Algorithm: Starting content review
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - 🔍 Reviewer Algorithm: Starting content review
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 🔍 Reviewer Algorithm: Completed in 0.00s, Score improved to: 5.0
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - 🔍 Reviewer Algorithm: Completed in 0.00s, Score improved to: 5.0
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 ✅ Layer 3: Approver Algorithm
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - ✅ Layer 3: Approver Algorithm
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 ✅ Approver Algorithm: Starting final approval process
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - ✅ Approver Algorithm: Starting final approval process
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 🔍 Approver validation results: {'summary_length': True, 'experience_count': True, 'skills_count': True, 'no_forbidden_phrases': True, 'has_action_verbs': True, 'professional_tone': True, 'industry_keywords': True, 'structure_consistency': True, 'content_completeness': True, 'career_consistency': True}
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - 🔍 Approver validation results: {'summary_length': True, 'experience_count': True, 'skills_count': True, 'no_forbidden_phrases': True, 'has_action_verbs': True, 'professional_tone': True, 'industry_keywords': True, 'structure_consistency': True, 'content_completeness': True, 'career_consistency': True}
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 ✅ Approver Algorithm: APPROVED in 0.00s, Final Score: 5.0
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - ✅ Approver Algorithm: APPROVED in 0.00s, Final Score: 5.0
+INFO 2025-11-02 14:35:45,595 quality_control 68559 8690518016 ✅ Preserved 8 skills in structured format for DB
+2025-11-02 14:35:45,595 - cv_writer.quality_control - INFO - ✅ Preserved 8 skills in structured format for DB
+INFO 2025-11-02 14:35:45,596 quality_control 68559 8690518016 🎯 3-Layer QC Complete: APPROVED | Score: 5.00 | Time: 25.63s
+2025-11-02 14:35:45,596 - cv_writer.quality_control - INFO - 🎯 3-Layer QC Complete: APPROVED | Score: 5.00 | Time: 25.63s
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - 📊 [SYNC] Quality Score: 5.00
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - ✅ [SYNC] Approved: True
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - ✅ [SYNC] Returning rewritten CV without auto-save (user-initiated save only)
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - 🎉 [SYNC] 3-Layer CV Rewrite Success: Score 5.00, Approved: True - Awaiting user save action
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - 🔍 [SYNC] Final response keys: ['status', 'message', 'rewritten_cv', 'quality_report', 'approved', 'quality_score']
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - 🔍 [SYNC] Response approved: True
+2025-11-02 14:35:45,596 - ai_cv_parser.services - INFO - 🔍 [SYNC] Response quality_score: 5.0
+INFO 2025-11-02 14:35:45,596 views 68559 8690518016 📋 Original sections: ['personal_info', 'professional_summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'interests']
+2025-11-02 14:35:45,596 - cv_writer.views - INFO - 📋 Original sections: ['personal_info', 'professional_summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'interests']
+INFO 2025-11-02 14:35:45,596 views 68559 8690518016 ✨ Improved sections: ['professional_summary', 'experience', 'skills', 'education']
+2025-11-02 14:35:45,596 - cv_writer.views - INFO - ✨ Improved sections: ['professional_summary', 'experience', 'skills', 'education']
+INFO 2025-11-02 14:35:45,596 views 68559 8690518016 🎯 Merged sections: ['personal_info', 'professional_summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'interests']
+2025-11-02 14:35:45,596 - cv_writer.views - INFO - 🎯 Merged sections: ['personal_info', 'professional_summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'interests']
+INFO 2025-11-02 14:35:45,596 views 68559 8690518016 📝 Creating new CvWriter from improved content...
+2025-11-02 14:35:45,596 - cv_writer.views - INFO - 📝 Creating new CvWriter from improved content...
+INFO 2025-11-02 14:35:48,042 views 68559 8690518016 💾 Created new CvWriter ID: 404
+2025-11-02 14:35:48,042 - cv_writer.views - INFO - 💾 Created new CvWriter ID: 404
+INFO 2025-11-02 14:35:48,044 views 68559 8690518016 ✅ 3-Layer CV Rewrite Success!
+2025-11-02 14:35:48,044 - cv_writer.views - INFO - ✅ 3-Layer CV Rewrite Success!
+INFO 2025-11-02 14:35:48,044 views 68559 8690518016 📊 Quality Score: 5.00/5.0
+2025-11-02 14:35:48,044 - cv_writer.views - INFO - 📊 Quality Score: 5.00/5.0
+INFO 2025-11-02 14:35:48,044 views 68559 8690518016 🎯 Approved: True
+2025-11-02 14:35:48,044 - cv_writer.views - INFO - 🎯 Approved: True
+INFO 2025-11-02 14:35:48,044 views 68559 8690518016 📝 New CV ID: 404
+2025-11-02 14:35:48,044 - cv_writer.views - INFO - 📝 New CV ID: 404
+INFO 2025-11-02 14:35:48,044 views 68559 8690518016 🔧 Sections Improved: professional_summary, experience, skills, education
+2025-11-02 14:35:48,044 - cv_writer.views - INFO - 🔧 Sections Improved: professional_summary, experience, skills, education
+Testing rewrite for CV #403
+User: lolo
+CV Data:
+  - first_name: Michael
+  - last_name: Adex
+  - additional_information: Results-driven freelance software developer with 1...
+
+✅ Response status: 200
+Response data: {'status': 'completed', 'new_cv_id': 404, 'quality_scores': {'content_quality': 5.0, 'language_quality': 5.0, 'structure': 5.0, 'ats_compatibility': 5.0, 'overall': 5.0}, 'sections_improved': ['professional_summary', 'experience', 'skills', 'education'], 'approved': True, 'quality_report': {'layer_results': [{'layer': 'Writer Algorithm', 'score': 5.0, 'passed': True, 'processing_time': 25.62283229827881}, {'layer': 'Reviewer Algorithm', 'score': 5.0, 'passed': True, 'processing_time': 0.0009260177612304688}, {'layer': 'Approver Algorithm', 'score': 5.0, 'passed': True, 'processing_time': 0.0003299713134765625}], 'final_metrics': {'content_score': 5, 'language_score': 5, 'structure_score': 5, 'ats_score': 5, 'overall_score': 5.0, 'standards_met': True}, 'recommendations': ['✅ Content meets all quality standards and is ready for publication', '🎯 ATS-optimized for maximum visibility', '🏆 Professional language and structure validated'], 'total_processing_time': 25.625099897384644}, 'message': 'CV rewritten successfully through 3-Layer Quality Control (Score: 5.00/5.0)'}

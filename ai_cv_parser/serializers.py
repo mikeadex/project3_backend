@@ -6,6 +6,7 @@ class ParsedCVSerializer(serializers.ModelSerializer):
     """Serializer for the ParsedCV model"""
 
     username = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ParsedCV
@@ -24,6 +25,11 @@ class ParsedCVSerializer(serializers.ModelSerializer):
             "processing_time",
             "status",
             "error_message",
+            "template",
+            "version_number",
+            "original_parsed_cv",
+            "quality_score",
+            "is_primary",
         ]
         read_only_fields = [
             "id",
@@ -36,3 +42,7 @@ class ParsedCVSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj):
         return obj.user.username if obj.user else None
+
+    def get_file_name(self, obj):
+        # Return file_name if present, else fallback to empty string
+        return getattr(obj, "file_name", "") or ""

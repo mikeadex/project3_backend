@@ -98,7 +98,10 @@ class DeepSeekService:
                - phone: The candidate's phone number with country code if available
                - location: The candidate's location or address
                - linkedin: LinkedIn profile URL if present
-               - website: Personal or portfolio website if present
+               - github: GitHub profile URL if present
+               - portfolio: Portfolio website URL if present
+               - website: Personal or other website if present
+               - twitter: Twitter/X profile URL if present
             
             2. professional_summary: A brief summary of the candidate's professional background
             
@@ -126,12 +129,13 @@ class DeepSeekService:
             {text}
             
             IMPORTANT INSTRUCTIONS:
-            1. Pay special attention to extracting ALL contact information correctly
+            1. Pay special attention to extracting ALL contact information correctly, including LinkedIn, GitHub, portfolio sites, and any personal websites
             2. Make sure to extract the full name correctly
             3. Ensure email and phone number are accurately identified
-            4. Format dates consistently
-            5. Provide the information in a valid JSON format with these exact keys
-            6. If you can't find information for a specific field, include it as null or an empty array"""
+            4. Look for GitHub URLs (github.com/username), portfolio sites, and Twitter handles
+            5. Format dates consistently
+            6. Provide the information in a valid JSON format with these exact keys
+            7. If you can't find information for a specific field, include it as null or an empty array"""
             
             # Make the API request with improved error handling
             try:
@@ -387,6 +391,8 @@ class DeepSeekService:
             'phone': None,
             'location': None,
             'linkedin': None,
+            'github': None,
+            'portfolio': None,
             'website': None
         }
         
@@ -424,15 +430,68 @@ class DeepSeekService:
             if linkedin_matches:
                 contact_info['linkedin'] = linkedin_matches[0]
                 break
-                
-        # Website pattern
+        
+        # GitHub pattern
+        github_patterns = [
+            r'github\.com/[\w-]+',
+            r'github:?\s*[\w-]+',
+            r'(?:https?://)?(?:www\.)?github\.com/[\w-]+',
+        ]
+        
+        for pattern in github_patterns:
+            github_matches = re.findall(pattern, text, re.IGNORECASE)
+            if github_matches:
+                github_url = github_matches[0]
+                # Normalize to full URL format
+                if not github_url.startswith('http'):
+                    github_url = 'https://' + github_url
+                contact_info['github'] = github_url
+                break
+        
+        # Portfolio/Personal website patterns (excluding social media)
         website_pattern = r'(https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*))'
         website_matches = re.findall(website_pattern, text)
+        
+        social_media_domains = ['linkedin', 'github', 'twitter', 'facebook', 'instagram']
+        
         if website_matches:
-            # Filter out LinkedIn URLs as they're already handled
-            non_linkedin_sites = [site for site in website_matches if 'linkedin' not in site.lower()]
-            if non_linkedin_sites:
-                contact_info['website'] = non_linkedin_sites[0]
+            # First pass: Look for portfolio keywords
+            portfolio_keywords = ['portfolio', 'website', 'personal site', 'homepage']
+            for site in website_matches:
+                # Check if the site is preceded by portfolio keywords
+                site_context = text[max(0, text.find(site) - 50):text.find(site)].lower()
+                if any(keyword in site_context for keyword in portfolio_keywords):
+                    if not any(domain in site.lower() for domain in social_media_domains):
+                        contact_info['portfolio'] = site
+                        break
+            
+            # Second pass: Filter out social media and use the first remaining site
+            if not contact_info['portfolio']:
+                non_social_sites = [
+                    site for site in website_matches 
+                    if not any(domain in site.lower() for domain in social_media_domains)
+                ]
+                if non_social_sites:
+                    contact_info['website'] = non_social_sites[0]
+        
+        # Twitter/X pattern
+        twitter_patterns = [
+            r'twitter\.com/[\w-]+',
+            r'x\.com/[\w-]+',
+            r'@[\w]+\s*(?:on Twitter|Twitter)',
+        ]
+        
+        for pattern in twitter_patterns:
+            twitter_matches = re.findall(pattern, text, re.IGNORECASE)
+            if twitter_matches:
+                twitter_url = twitter_matches[0]
+                if not twitter_url.startswith('http'):
+                    if twitter_url.startswith('@'):
+                        twitter_url = 'https://twitter.com/' + twitter_url[1:]
+                    else:
+                        twitter_url = 'https://' + twitter_url
+                contact_info['twitter'] = twitter_url
+                break
                 
         # Name extraction strategy - look at first few lines for prominent names
         lines = text.strip().split('\n')

@@ -1,5 +1,5 @@
 from tokenize import Pointfloat
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.views.generic.edit import model_forms
 from django.core.mail import send_mail
 from django.http import Http404
@@ -88,10 +88,30 @@ class BaseListCreateAPIView(ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        return self.model.objects.filter(user=user)
+        queryset = self.model.objects.filter(user=user)
+
+        # Filter by CV if cv parameter is provided
+        cv_id = self.request.query_params.get("cv", None)
+        if cv_id:
+            queryset = queryset.filter(cv_id=cv_id)
+
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Override to add better error logging"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error creating {self.model.__name__}: {str(e)}")
+            logger.error(f"Request data: {request.data}")
+            raise
 
 
 class BaseRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
@@ -111,16 +131,18 @@ class CvWriterListCreate(BaseListCreateAPIView):
     model = CvWriter
 
     def perform_create(self, serializer):
-        # Check if user already has a CV
-        try:
-            existing_cv = CvWriter.objects.get(user=self.request.user)
-            # Update existing CV
-            for attr, value in serializer.validated_data.items():
-                setattr(existing_cv, attr, value)
-            existing_cv.save()
-        except CvWriter.DoesNotExist:
-            # Create new CV
-            serializer.save(user=self.request.user)
+        """
+        Create a new CV for the authenticated user.
+        
+        ⚠️ IMPORTANT: This method now ONLY creates new CVs.
+        No automatic updating of existing CVs to prevent duplicate/overwrite issues.
+        
+        Per user requirement: "No new cv is saved until user trigger save action"
+        """
+        # Always create a new CV - user has explicitly triggered save
+        serializer.save(user=self.request.user)
+        
+        logger.info(f"✅ Created new CV for user {self.request.user.username}: CV #{serializer.instance.id}")
 
 
 class CvWriterDetailView(BaseRetrieveUpdateDestroyAPIView):
@@ -258,8 +280,19 @@ class ExperienceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
 
 class SkillListCreateView(ListCreateAPIView):
-    queryset = Skill.objects.all()
     serializer_class = SkillSerializer
+
+    def get_queryset(self):
+        queryset = Skill.objects.all()
+        user_id = self.request.query_params.get("user", None)
+        cv_id = self.request.query_params.get("cv", None)
+
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        if cv_id:
+            queryset = queryset.filter(cv_id=cv_id)
+
+        return queryset
 
 
 class SkillRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
@@ -869,6 +902,66 @@ def apply_improvement(request):
                 "error": "An unexpected error occurred while applying improvement",
                 "details": str(e),
             },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def ai_generate_text(request):
+    """
+    Generic AI text generation endpoint for CV builder.
+    Takes a prompt and returns AI-generated text.
+    
+    Request body:
+    - prompt: The text generation prompt
+    """
+    try:
+        prompt = request.data.get("prompt")
+        
+        if not prompt:
+            return Response(
+                {"error": "Prompt is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Use the improvement service's AI to generate text
+        improvement_service = CVImprovementService()
+        generated_text = async_to_sync(
+            improvement_service.primary_service.improve_text
+        )(prompt)
+        
+        if generated_text:
+            # Clean up common AI response patterns
+            generated_text = generated_text.strip()
+            patterns_to_remove = [
+                "Here is the text:",
+                "Here's the text:",
+                "Generated text:",
+                "Response:",
+            ]
+            
+            for pattern in patterns_to_remove:
+                if generated_text.lower().startswith(pattern.lower()):
+                    generated_text = generated_text[len(pattern):].strip()
+            
+            return Response(
+                {
+                    "response": generated_text,
+                    "status": "success"
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {"error": "AI generation failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in ai_generate_text: {str(e)}")
+        return Response(
+            {"error": "AI generation failed", "details": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -1972,6 +2065,10 @@ def get_cv(request, cv_id):
             "references": ReferenceSerializer(references, many=True).data,
             # Add extracted email for the frontend form
             "email": email_from_additional,
+            # Add original_parsed_cv_id for re-rewrites
+            "original_parsed_cv_id": (
+                cv.original_parsed_cv_id if cv.original_parsed_cv else None
+            ),
         }
         cv_data.update(response_data)
 
@@ -1983,6 +2080,194 @@ def get_cv(request, cv_id):
 
         logger.error(f"Error in get_cv for CV {cv_id}: {str(e)}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_experiences(request):
+    """Clear all experiences for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify CV ownership
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Delete all experiences for this CV
+        deleted_count = Experience.objects.filter(cv=cv, user=request.user).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} experience(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing experiences: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_education(request):
+    """Clear all education for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = Education.objects.filter(cv=cv, user=request.user).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} education(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing education: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_certifications(request):
+    """Clear all certifications for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = Certification.objects.filter(cv=cv, user=request.user).delete()[
+            0
+        ]
+        return Response(
+            {"message": f"Deleted {deleted_count} certification(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing certifications: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_references(request):
+    """Clear all references for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = Reference.objects.filter(cv=cv, user=request.user).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} reference(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing references: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_professional_summary(request):
+    """Clear professional summary for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = ProfessionalSummary.objects.filter(
+            cv=cv, user=request.user
+        ).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} professional summary"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing professional summary: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_social_media(request):
+    """Clear all social media for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = SocialMedia.objects.filter(cv=cv, user=request.user).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} social media link(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing social media: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_skills(request):
+    """Clear all skills for a specific CV"""
+    try:
+        cv_id = request.GET.get("cv")
+        if not cv_id:
+            return Response(
+                {"error": "cv parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cv = CvWriter.objects.filter(id=cv_id, user=request.user).first()
+        if not cv:
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_count = Skill.objects.filter(cv=cv, user=request.user).delete()[0]
+        return Response(
+            {"message": f"Deleted {deleted_count} skill(s)"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing skills: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -2838,5 +3123,129 @@ def clear_all_cv_data(request):
         )
         return Response(
             {"error": "Failed to clear CV data", "details": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def simple_cv_rewrite(request):
+    """
+    CV rewrite endpoint using ParsedCV data and 3-Layer Quality Control System.
+    This processes synchronously for immediate frontend feedback.
+    
+    Expected request body:
+    {
+        "cv_id": 136  # ParsedCV ID only (CvWriter deprecated)
+    }
+    
+    Returns immediately with real quality scores from 3-Layer QC and new_cv_id.
+    The improved CV is automatically saved as a new ParsedCV record.
+    """
+    try:
+        from ai_cv_parser.models import ParsedCV
+        from ai_cv_parser.services import CVRewriteService
+        from django.db import close_old_connections
+
+        cv_id = request.data.get("cv_id")
+
+        if not cv_id:
+            logger.error("CV ID is required for rewrite")
+            return Response(
+                {"error": "cv_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Fetch ParsedCV
+        try:
+            parsed_cv = ParsedCV.objects.get(id=cv_id, user=request.user)
+            logger.info(
+                f"🚀 Starting CV rewrite for ParsedCV ID: {cv_id}, User: {request.user.username}"
+            )
+            logger.info(f"📄 CV File: {parsed_cv.file_name}")
+        except ParsedCV.DoesNotExist:
+            logger.error(f"ParsedCV {cv_id} not found for user {request.user.username}")
+            return Response({"error": "CV not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Validate that we have parsed data
+        if not parsed_cv.parsed_data or not isinstance(parsed_cv.parsed_data, dict):
+            logger.error(f"ParsedCV {cv_id} has no valid parsed_data")
+            return Response(
+                {"error": "CV has no parsed data. Please upload and parse a CV first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Close old connections to avoid threading issues
+        close_old_connections()
+
+        # Initialize the CV Rewrite Service with 3-Layer Quality Control
+        try:
+            rewrite_service = CVRewriteService()
+            logger.info("✅ CVRewriteService initialized with 3-Layer QC")
+        except Exception as init_error:
+            logger.error(f"Failed to initialize CVRewriteService: {str(init_error)}")
+            return Response(
+                {
+                    "error": "Failed to initialize rewrite service. Please try again later."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Prepare CV data for rewriting
+        cv_data = {
+            "parsed_cv": {
+                "id": parsed_cv.id,
+                "file_name": parsed_cv.file_name,
+                "parsed_data": parsed_cv.parsed_data,
+            }
+        }
+
+        # Process through 3-Layer Quality Control System
+        logger.info(f"🎯 Processing CV through 3-Layer Quality Control...")
+        rewrite_result = rewrite_service.rewrite_cv_sync(cv_data, request.user)
+
+        # Check for errors
+        if rewrite_result.get("status") == "error":
+            error_msg = rewrite_result.get("error", "Unknown error during rewrite")
+            logger.error(f"❌ 3-Layer QC Error: {error_msg}")
+            return Response(
+                {"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Extract results - new_cv_id is now auto-created by the service
+        new_cv_id = rewrite_result.get("new_cv_id")
+        quality_score = rewrite_result.get("quality_score", 0.0)
+        approved = rewrite_result.get("approved", False)
+        quality_report = rewrite_result.get("quality_report", {})
+        sections_improved = rewrite_result.get("sections_improved", [])
+        
+        if not new_cv_id:
+            logger.error("❌ Rewrite service did not create a new CV")
+            return Response(
+                {"error": "Failed to create improved CV"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        logger.info(
+            f"✅ CV rewrite complete! New ParsedCV ID: {new_cv_id}, Quality Score: {quality_score:.2f}, Approved: {approved}"
+        )
+
+        # Return the result with new_cv_id
+        return Response(
+            {
+                "status": "completed",
+                "message": "CV improved successfully",
+                "new_cv_id": new_cv_id,
+                "quality_score": quality_score,
+                "approved": approved,
+                "quality_report": quality_report,
+                "sections_improved": sections_improved,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in simple_cv_rewrite: {str(e)}", exc_info=True)
+        return Response(
+            {"error": f"An unexpected error occurred: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

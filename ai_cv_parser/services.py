@@ -11,6 +11,7 @@ from cv_writer.models import (
     Certification,
 )
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from asgiref.sync import sync_to_async
 import asyncio
 from django.db import (
@@ -208,11 +209,19 @@ def refresh_db_connection():
     return True
 
 
-def create_cv_with_sections_sync(user, cv_data, improved_sections):
+def create_cv_with_sections_sync(
+    user, cv_data, improved_sections, original_parsed_cv_id=None
+):
     """
     Create a complete CV with all sections in a single synchronous transaction.
     This function is NOT decorated with sync_to_async on purpose - it's meant to be
     called directly from synchronous code.
+
+    Args:
+        user: The user who owns the CV
+        cv_data: Original CV data structure
+        improved_sections: Improved content from 3-Layer QC
+        original_parsed_cv_id: ID of the original ParsedCV record (for re-rewrites)
     """
     # Import inside function to avoid circular imports
     from django.db import close_old_connections, connection, transaction
@@ -227,6 +236,25 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
     )
     import time
     import random
+    from dateutil import parser as date_parser
+    from datetime import datetime
+
+    def parse_date_flexible(date_str):
+        """Parse date string in various formats to YYYY-MM-DD"""
+        if not date_str or date_str.lower() in ["present", "current", "now", "n/a", ""]:
+            return None
+
+        try:
+            # Try parsing with dateutil (handles "January 2016", "2016", "01/2016", etc.)
+            parsed_date = date_parser.parse(date_str, default=datetime(2000, 1, 1))
+            # Return in YYYY-MM-DD format
+            return parsed_date.strftime("%Y-%m-%d")
+        except Exception as e:
+            logger.warning(f"Could not parse date '{date_str}': {e}")
+            # If it's just a year, return as YYYY-01-01
+            if date_str.isdigit() and len(date_str) == 4:
+                return f"{date_str}-01-01"
+            return None
 
     # Always close connections at the start of this function
     close_old_connections()
@@ -272,19 +300,38 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
             title = f"Improved CV ({int(time.time())})"
 
         # Create the CV - the model has its own retry logic now
-        logger.info("Creating new CV record in database")
-        new_cv = CvWriter(
-            user=user,
-            first_name=first_name or "First",
-            last_name=last_name or "Last",
-            title=title,
-            address=address,
-            city=city,
-            country=country,
-            contact_number=phone,
-            status="draft",
-            visibility="private",
+        logger.info(
+            f"Creating new CV record in database (original ParsedCV ID: {original_parsed_cv_id})"
         )
+
+        # Build CvWriter kwargs
+        cv_kwargs = {
+            "user": user,
+            "first_name": first_name or "First",
+            "last_name": last_name or "Last",
+            "title": title,
+            "address": address,
+            "city": city,
+            "country": country,
+            "contact_number": phone,
+            "status": "draft",
+            "visibility": "private",
+        }
+
+        # Add original_parsed_cv_id if provided (enables re-rewrites)
+        if original_parsed_cv_id:
+            from ai_cv_parser.models import ParsedCV
+
+            try:
+                original_cv = ParsedCV.objects.get(id=original_parsed_cv_id)
+                cv_kwargs["original_parsed_cv"] = original_cv
+                logger.info(f"✅ Linked to original ParsedCV #{original_parsed_cv_id}")
+            except ParsedCV.DoesNotExist:
+                logger.warning(
+                    f"⚠️ ParsedCV #{original_parsed_cv_id} not found, proceeding without link"
+                )
+
+        new_cv = CvWriter(**cv_kwargs)
         new_cv.save()
         logger.info(f"CV record created with ID: {new_cv.id}")
 
@@ -306,6 +353,10 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
             or improved_sections.get("experience")
             or []
         )
+
+        # Log the type to verify we're getting a list, not a string
+        logger.info(f"📋 Experience data type: {type(experiences)}")
+
         if experiences and isinstance(experiences, list):
             logger.info(f"Adding {len(experiences)} experience items")
             for exp in experiences:
@@ -318,12 +369,21 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                         job_description=exp.get("description", ""),
                         achievements="",
                         employment_type=exp.get("employment_type", "Full-time"),
-                        start_date=exp.get("start_date"),
-                        end_date=exp.get("end_date"),
+                        start_date=parse_date_flexible(exp.get("start_date")),
+                        end_date=parse_date_flexible(exp.get("end_date")),
                         current=exp.get("current", False),
+                    )
+                    logger.info(
+                        f"✅ Added experience: {exp.get('job_title', 'Unknown')} at {exp.get('company_name', 'Unknown')}"
                     )
                 except Exception as e:
                     logger.error(f"Error adding experience: {str(e)}")
+        elif experiences and isinstance(experiences, str):
+            logger.error(
+                f"❌ Experience is a STRING (not list)! This means structured_content wasn't used. Length: {len(experiences)} chars"
+            )
+        else:
+            logger.warning(f"⚠️ No experience data to add (type: {type(experiences)})")
 
         # Add education - check for education sections
         education_list = cv_data.get("education", []) or cv_data.get("educations", [])
@@ -338,9 +398,12 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                         degree=edu.get("degree", ""),
                         field_of_study=edu.get("field_of_study", "")
                         or edu.get("major", ""),
-                        start_date=edu.get("start_date"),
-                        end_date=edu.get("end_date"),
+                        start_date=parse_date_flexible(edu.get("start_date")),
+                        end_date=parse_date_flexible(edu.get("end_date")),
                         current=edu.get("current", False),
+                    )
+                    logger.info(
+                        f"✅ Added education: {edu.get('degree')} from {edu.get('school_name', edu.get('institution'))}"
                     )
                 except Exception as e:
                     logger.error(f"Error adding education: {str(e)}")
@@ -348,7 +411,10 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
         # Add skills - handle both object format and string format
         skills_data = improved_sections.get("skills")
         if skills_data:
-            logger.info("Processing and adding skills")
+            logger.info(
+                f"📋 Processing skills - Type: {type(skills_data)}, Count/Length: {len(skills_data) if isinstance(skills_data, (list, str)) else 'N/A'}"
+            )
+            logger.info(f"📋 Skills data preview: {str(skills_data)[:200]}...")
             try:
                 # If skills is a list of objects, use that directly
                 if isinstance(skills_data, list):
@@ -356,7 +422,7 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                         try:
                             if isinstance(skill_item, dict):
                                 skill_name = skill_item.get("name", "")
-                                skill_level = skill_item.get("level", "Intermediate")
+                                skill_level = skill_item.get("level") or "Intermediate"
                             else:
                                 skill_name = str(skill_item)
                                 skill_level = "Intermediate"
@@ -364,8 +430,12 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                             if skill_name:
                                 Skill.objects.create(
                                     user=user,
+                                    cv=new_cv,
                                     skill_name=skill_name[:100],
                                     skill_level=skill_level[:100],
+                                )
+                                logger.info(
+                                    f"✅ Added skill: {skill_name} ({skill_level})"
                                 )
                         except Exception as e:
                             logger.error(f"Error creating skill from list: {str(e)}")
@@ -434,11 +504,13 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                         try:
                             Skill.objects.create(
                                 user=user,
+                                cv=new_cv,
                                 skill_name=skill_name[:100],
                                 skill_level=skill_level[:100],
                             )
                             created_skills.add(skill_name.lower())
                             skill_count += 1
+                            logger.info(f"✅ Added skill: {skill_name} ({skill_level})")
                         except Exception as e:
                             logger.error(
                                 f"Error creating skill '{skill_name}': {str(e)}"
@@ -446,6 +518,8 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                             continue
             except Exception as e:
                 logger.error(f"Error processing skills: {str(e)}")
+        else:
+            logger.warning("⚠️ No skills data found in improved_sections")
 
         # Add languages if available
         languages = cv_data.get("languages", []) or cv_data.get("language", [])
@@ -481,9 +555,11 @@ def create_cv_with_sections_sync(user, cv_data, improved_sections):
                             certificate_name=name,
                             certificate_link=cert.get("issuer", "")
                             or cert.get("organization", ""),
-                            certificate_date=cert.get("issue_date", None)
-                            or cert.get("date", None),
+                            certificate_date=parse_date_flexible(
+                                cert.get("issue_date", None) or cert.get("date", None)
+                            ),
                         )
+                        logger.info(f"✅ Added certification: {name}")
                 except Exception as e:
                     logger.error(f"Error adding certification: {str(e)}")
 
@@ -601,32 +677,51 @@ class CVRewriteService:
 
     def __init__(self, deepseek_service=None):
         try:
+            # Keep DeepSeek for parsing (fast)
             self.deepseek_service = (
                 deepseek_service if deepseek_service is not None else DeepSeekService()
             )
 
-            # Initialize LLaMA service for advanced content review
+            # Initialize OpenAI service for CV rewriting (high quality)
+            from ai_cv_parser.openai_service import OpenAIService
+            
+            self.openai_service = None
+            try:
+                self.openai_service = OpenAIService()
+                logger.info("🤖 OpenAI service initialized for CV rewriting")
+            except Exception as openai_error:
+                logger.warning(
+                    f"OpenAI service initialization failed: {str(openai_error)}"
+                )
+                logger.info("Will use DeepSeek as fallback")
+
+            # Initialize LLaMA service for middle-layer review
             self.llama_service = None
             try:
                 from cv_writer.services import LlamaAPIService
 
                 self.llama_service = LlamaAPIService()
-                logger.info("🦙 LLaMA service initialized for quality control")
+                logger.info("🦙 LLaMA service initialized for quality review")
             except Exception as llama_error:
                 logger.warning(
                     f"LLaMA service initialization failed: {str(llama_error)}"
                 )
-                logger.info("Will use DeepSeek for all quality control stages")
+                logger.info("Will use fallback for review layer")
 
             # Initialize 3-Layer Quality Control System with hybrid LLM approach
             from cv_writer.quality_control import ThreeLayerQualityController
 
             self.quality_controller = ThreeLayerQualityController(
-                writer_llm_service=self.deepseek_service,  # Stage 1: DeepSeek for initial generation
-                reviewer_llm_service=self.llama_service,  # Stage 2 & 3: LLaMA for review & approval
+                writer_llm_service=self.openai_service or self.deepseek_service,  # Layer 1: OpenAI (or DeepSeek fallback)
+                reviewer_llm_service=self.llama_service,  # Layer 2: LLaMA for review
+                approver_llm_service=self.openai_service or self.deepseek_service,  # Layer 3: OpenAI for final approval
             )
 
-            services_used = f"Writer(DeepSeek) + Reviewer({'LLaMA' if self.llama_service else 'DeepSeek'})"
+            layer1 = "OpenAI" if self.openai_service else "DeepSeek"
+            layer2 = "LLaMA" if self.llama_service else "Fallback"
+            layer3 = "OpenAI" if self.openai_service else "DeepSeek"
+            
+            services_used = f"Layer1({layer1}) + Layer2({layer2}) + Layer3({layer3})"
             logger.info(
                 f"🎯 Initialized 3-Layer Quality Control System: {services_used}"
             )
@@ -645,17 +740,23 @@ class CVRewriteService:
                 Original Summary:
                 {content}
 
+                CRITICAL CONTENT REQUIREMENTS:
+                - RETAIN ALL key skills, technologies, and competencies mentioned
+                - RETAIN ALL areas of specialization and expertise
+                - RETAIN ALL metrics, years of experience, and achievements
+                - DO NOT remove or omit important qualifications
+                - 4-6 sentences (allow more if needed to capture all key information)
+                
                 CRITICAL FORMATTING REQUIREMENTS:
                 - Return ONLY the improved summary text
                 - NO markdown formatting (no **, ##, •, etc.)
                 - NO explanatory text or commentary
                 - NO section headers or labels
-                - NO bullet points or lists
+                - NO bullet points or lists in the summary itself
                 - NO extra characters, symbols, or arrows
-                - 3-4 sentences maximum
-                - Include metrics and achievements where possible
                 - Use active voice and professional language
                 - Optimize for ATS keywords
+                - Keep the summary comprehensive but concise
 
                 Improved Summary:"""
             },
@@ -667,19 +768,22 @@ class CVRewriteService:
                 {content}
 
                 CRITICAL FORMATTING REQUIREMENTS:
-                - Return ONLY the improved bullet points
+                - Return as a JSON array of strings: ["point 1", "point 2", "point 3"]
+                - Each array item should be one bullet point/achievement
                 - NO markdown formatting (no **, ##, •, ###, *, `, etc.)
                 - NO explanatory text, commentary, or section headers
                 - NO phrases like "Of course" or "Here are the improved points"
-                - NO extra characters, symbols, or arrows (→, ⇒, ➤, etc.)
-                - Use plain text bullet points with simple dashes (-)
+                - NO extra characters, symbols, arrows, or bullet symbols
+                - NO dashes (-) or asterisks (*) - just plain text in array format
                 - Start each point with a strong action verb
                 - Include specific metrics and achievements (%, numbers, timelines)
                 - Focus on business impact and results
                 - Maximum 6 bullet points
-                - Each bullet point should be on its own line
+                - Return ONLY the JSON array, nothing else
 
-                Improved Experience:"""
+                Example format: ["Managed team of 10 engineers", "Increased sales by 50% in Q1 2023", "Led 3 major projects"]
+
+                Improved Experience (JSON array only):"""
             },
             "skills": {
                 "template": """
@@ -940,53 +1044,24 @@ class CVRewriteService:
             logger.info(f"📊 Quality Score: {quality_result['quality_score']:.2f}")
             logger.info(f"✅ Approved: {approved}")
 
-            # Try to save the improved CV - but don't fail if saving fails
-            try:
-                # Create new CV version with quality-controlled content
-                new_cv_id = await self._create_cv_version(
-                    cv_content, improved_content, user
-                )
+            # ⚠️ DO NOT AUTO-SAVE - Return improved content only
+            # User will explicitly save when they're satisfied with the rewrite
+            logger.info("✅ Returning rewritten CV without auto-save (user-initiated save only)")
+            
+            response = {
+                "status": "success",
+                "message": "CV rewritten successfully through 3-Layer Quality Control - Ready for user review",
+                "rewritten_cv": improved_content,
+                "quality_report": quality_report,
+                "approved": approved,
+                "quality_score": quality_result["quality_score"],
+                # No new_cv_id - not saved yet
+            }
 
-                if not new_cv_id:
-                    logger.warning("⚠️ Failed to create new CV version")
-                    # Return partial success - improved content but no database save
-                    return {
-                        "status": "partial_success",
-                        "message": "CV content improved through 3-layer QC but could not be saved",
-                        "rewritten_cv": improved_content,
-                        "quality_report": quality_report,
-                        "approved": approved,
-                        "quality_score": quality_result["quality_score"],
-                    }
-
-                # Full success - improved content and database save
-                response = {
-                    "status": "success",
-                    "message": "CV rewritten successfully through 3-Layer Quality Control",
-                    "rewritten_cv": improved_content,
-                    "quality_report": quality_report,
-                    "approved": approved,
-                    "quality_score": quality_result["quality_score"],
-                    "new_cv_id": new_cv_id,
-                }
-
-                logger.info(
-                    f"🎉 3-Layer CV Rewrite Success: Score {quality_result['quality_score']:.2f}, Approved: {approved}"
-                )
-                return response
-
-            except Exception as save_error:
-                # Log saving error but return improved content as partial success
-                logger.error(f"💾 Error saving CV: {str(save_error)}")
-                return {
-                    "status": "partial_success",
-                    "message": "CV content improved through 3-layer QC but could not be saved",
-                    "rewritten_cv": improved_content,
-                    "quality_report": quality_report,
-                    "approved": approved,
-                    "quality_score": quality_result["quality_score"],
-                    "error": str(save_error),
-                }
+            logger.info(
+                f"🎉 3-Layer CV Rewrite Success: Score {quality_result['quality_score']:.2f}, Approved: {approved} - Awaiting user save action"
+            )
+            return response
 
         except Exception as e:
             logger.error(f"❌ Error in 3-Layer CV rewrite: {str(e)}", exc_info=True)
@@ -1330,16 +1405,19 @@ class CVRewriteService:
             try:
                 # Extract the actual CV data - check multiple possible locations
                 cv_content = None
+                original_parsed_cv_id = None
 
                 # Option 1: Frontend sends parsed_cv.parsed_data structure
                 if "parsed_cv" in cv_data and isinstance(cv_data["parsed_cv"], dict):
                     parsed_cv = cv_data["parsed_cv"]
+                    # Extract ParsedCV ID for tracking re-rewrites
+                    original_parsed_cv_id = parsed_cv.get("id")
                     if "parsed_data" in parsed_cv and isinstance(
                         parsed_cv["parsed_data"], dict
                     ):
                         cv_content = parsed_cv["parsed_data"]
                         logger.info(
-                            f"[SYNC] Found parsed_cv.parsed_data with keys: {cv_content.keys()}"
+                            f"[SYNC] Found parsed_cv.parsed_data with keys: {cv_content.keys()}, ParsedCV ID: {original_parsed_cv_id}"
                         )
 
                 # Option 2: Legacy 'data' key structure
@@ -1397,7 +1475,12 @@ class CVRewriteService:
                     }
 
                 # Extract improved content and quality metrics
-                improved_content = quality_result["content"]
+                # Use structured_content for database saving (experience as list)
+                # Use content for frontend display (experience as formatted string)
+                structured_content = quality_result.get(
+                    "structured_content", quality_result["content"]
+                )
+                improved_content = quality_result["content"]  # Formatted for frontend
                 quality_report = quality_result["quality_report"]
                 approved = quality_result["approved"]
 
@@ -1406,61 +1489,119 @@ class CVRewriteService:
                 )
                 logger.info(f"✅ [SYNC] Approved: {approved}")
 
-                # Try to save the improved CV - but don't fail if saving fails
+                # 🚀 AUTO-SAVE improved CV as new ParsedCV record
+                logger.info("💾 [SYNC] Auto-saving improved CV as new ParsedCV record")
+                
                 try:
-                    # Create new CV version with quality-controlled content
-                    new_cv_id = self._create_cv_version_sync(
-                        cv_content, improved_content, user
-                    )
-
-                    if not new_cv_id:
-                        logger.warning("⚠️ [SYNC] Failed to create new CV version")
-                        # Return partial success - improved content but no database save
-                        return {
-                            "status": "partial_success",
-                            "message": "CV content improved through 3-layer QC but could not be saved",
-                            "rewritten_cv": improved_content,
-                            "quality_report": quality_report,
-                            "approved": approved,
-                            "quality_score": quality_result["quality_score"],
-                        }
-
-                    # Full success - improved content and database save
+                    # Get the original CV for version tracking
+                    original_cv = ParsedCV.objects.filter(
+                        id=original_parsed_cv_id
+                    ).first() if original_parsed_cv_id else None
+                    
+                    # Calculate version number
+                    version_number = 1
+                    if original_cv:
+                        # If this is a rewrite, increment version
+                        version_number = (original_cv.version_number or 1) + 1
+                    
+                    # ✅ CHECK: Does an improved version already exist for this CV?
+                    # If yes, UPDATE it instead of creating a duplicate
+                    existing_improved_cv = None
+                    if original_cv:
+                        existing_improved_cv = ParsedCV.objects.filter(
+                            user=user,
+                            original_parsed_cv_id=original_cv.id,
+                            version_number=version_number
+                        ).first()
+                        
+                        if existing_improved_cv:
+                            logger.info(f"♻️ [SYNC] Found existing v{version_number} (ID: {existing_improved_cv.id}), will UPDATE instead of creating duplicate")
+                    
+                    # ✅ CRITICAL: Preserve personal_info from original CV
+                    # The 3-Layer QC only improves content sections, not personal details
+                    merged_data = {}
+                    if original_cv and original_cv.parsed_data:
+                        # Start with original data (includes personal_info)
+                        merged_data = dict(original_cv.parsed_data)
+                        logger.info(f"📋 [SYNC] Preserving personal_info from original CV #{original_cv.id}")
+                    elif cv_content:
+                        # Fallback to cv_content if no original_cv
+                        merged_data = dict(cv_content)
+                        logger.info(f"📋 [SYNC] Using personal_info from cv_content")
+                    
+                    # Overlay improved content (professional_summary, experience, skills, etc.)
+                    for key, value in structured_content.items():
+                        if value:  # Only update non-empty values
+                            merged_data[key] = value
+                            logger.info(f"✅ [SYNC] Updated section: {key}")
+                    
+                    # Ensure personal_info is present
+                    if 'personal_info' not in merged_data or not merged_data['personal_info']:
+                        logger.warning("⚠️ [SYNC] personal_info missing! Using cv_content as fallback")
+                        if cv_content and 'personal_info' in cv_content:
+                            merged_data['personal_info'] = cv_content['personal_info']
+                    
+                    # UPDATE existing or CREATE new ParsedCV
+                    if existing_improved_cv:
+                        # UPDATE existing improved CV
+                        existing_improved_cv.parsed_data = merged_data
+                        existing_improved_cv.analysis_data = quality_report
+                        existing_improved_cv.quality_score = quality_result['quality_score']
+                        existing_improved_cv.ai_model_used = '3-Layer-QC (DeepSeek+GPT4+Llama)'
+                        existing_improved_cv.processed_at = timezone.now()
+                        existing_improved_cv.save(update_fields=[
+                            'parsed_data', 
+                            'analysis_data', 
+                            'quality_score', 
+                            'ai_model_used', 
+                            'processed_at'
+                        ])
+                        new_cv = existing_improved_cv
+                        logger.info(f"♻️ [SYNC] UPDATED existing ParsedCV ID: {new_cv.id}, Version: {version_number}")
+                    else:
+                        # CREATE new ParsedCV with merged content
+                        new_cv = ParsedCV.objects.create(
+                            user=user,
+                            file_name=f"{original_cv.file_name.replace('.json', '')}_v{version_number}.json" if original_cv else f"improved_cv_v{version_number}.json",
+                            parsed_data=merged_data,  # ✅ Use merged data (includes personal_info + improvements)
+                            status='completed',
+                            raw_text=f"Improved CV v{version_number} via 3-Layer QC",
+                            analysis_data=quality_report,
+                            quality_score=quality_result['quality_score'],
+                            ai_model_used='3-Layer-QC (DeepSeek+GPT4+Llama)',
+                            version_number=version_number,
+                            original_parsed_cv=original_cv,
+                        )
+                        logger.info(f"✅ [SYNC] CREATED new ParsedCV with ID: {new_cv.id}, Version: {version_number}")
+                    
+                    logger.info(f"📊 [SYNC] Merged data keys: {list(merged_data.keys())}")
+                    
+                    # 🔧 CRITICAL: Return merged_data for frontend (includes personal_info), plus new_cv_id
                     response = {
-                        "status": "success",
+                        "status": "completed",
                         "message": "CV rewritten successfully through 3-Layer Quality Control",
-                        "rewritten_cv": improved_content,
+                        "rewritten_cv": merged_data,  # ✅ Return complete CV data
                         "quality_report": quality_report,
                         "approved": approved,
                         "quality_score": quality_result["quality_score"],
-                        "new_cv_id": new_cv_id,
+                        "new_cv_id": new_cv.id,  # ✅ Return new CV ID
+                        "version_number": version_number,
+                        "sections_improved": quality_result.get("sections_improved", []),
                     }
 
                     logger.info(
-                        f"🎉 [SYNC] 3-Layer CV Rewrite Success: Score {quality_result['quality_score']:.2f}, Approved: {approved}"
-                    )
-                    logger.info(
-                        f"🔍 [SYNC] Final response keys: {list(response.keys())}"
-                    )
-                    logger.info(
-                        f"🔍 [SYNC] Response approved: {response.get('approved')}"
-                    )
-                    logger.info(
-                        f"🔍 [SYNC] Response quality_score: {response.get('quality_score')}"
+                        f"🎉 [SYNC] 3-Layer CV Rewrite Success: Score {quality_result['quality_score']:.2f}, Approved: {approved}, New CV ID: {new_cv.id}"
                     )
                     return response
-
+                    
                 except Exception as save_error:
-                    # Log saving error but return improved content as partial success
-                    logger.error(f"💾 [SYNC] Error saving CV: {str(save_error)}")
+                    logger.error(f"❌ [SYNC] Failed to save improved CV: {str(save_error)}", exc_info=True)
+                    # Return without new_cv_id if save fails (use merged_data if available)
                     return {
-                        "status": "partial_success",
-                        "message": "CV content improved through 3-layer QC but could not be saved",
-                        "rewritten_cv": improved_content,
-                        "quality_report": quality_report,
-                        "approved": approved,
+                        "status": "error",
+                        "error": f"Failed to save improved CV: {str(save_error)}",
+                        "rewritten_cv": merged_data if 'merged_data' in locals() else structured_content,
                         "quality_score": quality_result["quality_score"],
-                        "error": str(save_error),
                     }
 
             except Exception as e:
@@ -1475,12 +1616,17 @@ class CVRewriteService:
             )
             return {"status": "error", "error": str(e)}
 
-    def _create_cv_version_sync(self, original_content, improved_content, user):
+    def _create_cv_version_sync(
+        self, original_content, improved_content, user, original_parsed_cv_id=None
+    ):
         """Synchronous version of _create_cv_version"""
         try:
-            # This would create a new CV version in the database
-            # For now, return a dummy ID
-            return 999
+            # Create CV with improved sections using the synchronous function
+            new_cv_id = create_cv_with_sections_sync(
+                user, original_content, improved_content, original_parsed_cv_id
+            )
+            logger.info(f"Successfully created CV version (ID: {new_cv_id})")
+            return new_cv_id
         except Exception as e:
             logger.error(f"Error creating CV version: {str(e)}")
             return None
@@ -1544,9 +1690,10 @@ class CVRewriteService:
             # Format prompt with context
             prompt = prompt_template.format(industry=industry, content=content)
 
-            # Get improvement from DeepSeek
+            # Get improvement from DeepSeek using reasoning model for better quality
+            logger.info(f"🧠 Using DeepSeek Reasoner for {section_type} improvement")
             response = await self.deepseek_service.generate(
-                prompt, max_tokens=1000, temperature=0.7, top_p=0.9
+                prompt, max_tokens=1000, temperature=0.7, top_p=0.9, model="deepseek-reasoner"
             )
 
             if not response:

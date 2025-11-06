@@ -174,7 +174,7 @@ class WriterAlgorithm:
         try:
             # Try to call the LLM service synchronously
             if hasattr(self.llm_service, "generate_completion_sync"):
-                logger.info("🔧 Using generate_completion_sync method")
+                logger.info(f"🔧 Layer 1 (Writer): Using {type(self.llm_service).__name__}")
                 return self.llm_service.generate_completion_sync(
                     prompt, max_tokens=1000, temperature=0.7
                 )
@@ -885,12 +885,15 @@ class ReviewerAlgorithm:
         try:
             # Try to call the LLM service synchronously
             if hasattr(self.llm_service, "generate_completion_sync"):
+                logger.info(f"🔧 Layer 2 (Reviewer): Using {type(self.llm_service).__name__}")
                 return self.llm_service.generate_completion_sync(
                     prompt, max_tokens=1000, temperature=0.7
                 )
             elif hasattr(self.llm_service, "generate_with_system_prompt"):
+                logger.info(f"🔧 Layer 2 (Reviewer): Using generate_with_system_prompt method")
                 return self.llm_service.generate_with_system_prompt(prompt)
             elif hasattr(self.llm_service, "generate_response"):
+                logger.info(f"🔧 Layer 2 (Reviewer): Using generate_response method")
                 return self.llm_service.generate_response(prompt)
             else:
                 # Fallback mock response
@@ -901,6 +904,25 @@ class ReviewerAlgorithm:
         except Exception as e:
             logger.warning(f"LLM service call failed: {str(e)}, using fallback")
             return "Enhanced professional content with quality improvements."
+
+    def _clean_job_title(self, job_title: str, company_name: str) -> str:
+        """Clean job title by removing company information that might be appended"""
+        if not job_title or not company_name:
+            return job_title
+
+        title_lower = job_title.lower()
+        company_lower = company_name.lower()
+
+        # Remove patterns like "Job Title at Company" or "Job Title - Company"
+        separators = [" at ", " - ", " @ ", " | ", ", "]
+        for sep in separators:
+            if sep in title_lower:
+                parts = job_title.split(sep, 1)
+                # Only clean if the second part matches the company name
+                if len(parts) == 2 and company_lower in parts[1].lower():
+                    return parts[0].strip()
+
+        return job_title
 
     def review_content(
         self, writer_result: LayerResult, industry: str = "technology"
@@ -1227,7 +1249,8 @@ class ApproverAlgorithm:
     Responsible for standards validation and final approval
     """
 
-    def __init__(self):
+    def __init__(self, llm_service=None):
+        self.llm_service = llm_service
         self.layer_name = "Approver Algorithm"
         self.standards = CVQualityStandards()
 
@@ -1627,27 +1650,70 @@ class ThreeLayerQualityController:
     Orchestrates Writer → Reviewer → Approver workflow
     """
 
-    def __init__(self, writer_llm_service, reviewer_llm_service=None):
+    def __init__(self, writer_llm_service, reviewer_llm_service=None, approver_llm_service=None):
         """
         Initialize 3-layer quality control with different LLM services for each stage
 
         Args:
-            writer_llm_service: LLM service for Writer Algorithm (Stage 1) - typically DeepSeek
-            reviewer_llm_service: LLM service for Reviewer Algorithm (Stage 2) - typically LLaMA
+            writer_llm_service: LLM service for Writer Algorithm (Layer 1) - OpenAI for quality rewrites
+            reviewer_llm_service: LLM service for Reviewer Algorithm (Layer 2) - LLaMA for review
+            approver_llm_service: LLM service for Approver Algorithm (Layer 3) - OpenAI for final approval
         """
         self.writer = WriterAlgorithm(writer_llm_service)
 
-        # Use LLaMA for reviewer if provided, otherwise fall back to writer service
+        # Use provided reviewer service or fall back to writer service
         review_service = (
             reviewer_llm_service if reviewer_llm_service else writer_llm_service
         )
         self.reviewer = ReviewerAlgorithm(review_service)
 
-        self.approver = ApproverAlgorithm()
-
-        logger.info(
-            f"🎯 Initialized 3-Layer QC: Writer({type(writer_llm_service).__name__}), Reviewer({type(review_service).__name__})"
+        # Use provided approver service or fall back to writer service
+        approval_service = (
+            approver_llm_service if approver_llm_service else writer_llm_service
         )
+        self.approver = ApproverAlgorithm(approval_service)
+
+        writer_name = type(writer_llm_service).__name__
+        reviewer_name = type(review_service).__name__
+        approver_name = type(approval_service).__name__
+        
+        logger.info(
+            f"🎯 Initialized 3-Layer QC: Layer1({writer_name}) → Layer2({reviewer_name}) → Layer3({approver_name})"
+        )
+
+    def _clean_job_title(self, job_title: str, company_name: str) -> str:
+        """Clean job title by removing company information that might be appended"""
+        if not job_title or not company_name:
+            return job_title
+
+        title_lower = job_title.lower()
+        company_lower = company_name.lower()
+
+        # Common separators that might indicate company is appended to title
+        separators = [" – ", " - ", " at ", " with ", " for ", " in "]
+
+        for sep in separators:
+            if sep in title_lower:
+                parts = title_lower.split(sep)
+                # Check if the part after separator matches company
+                if len(parts) >= 2:
+                    potential_company = parts[-1].strip()
+                    if (
+                        potential_company in company_lower
+                        or company_lower in potential_company
+                    ):
+                        # Remove the company part and preserve original casing
+                        original_parts = job_title.split(sep)
+                        return sep.join(original_parts[:-1]).strip()
+
+        # If no separator found but company appears at end, try to remove it
+        if company_lower in title_lower:
+            # Find the position and remove it
+            idx = title_lower.find(company_lower)
+            if idx > 0:
+                return job_title[:idx].strip()
+
+        return job_title
 
     def _format_experience_for_frontend(self, experiences: List[Dict]) -> str:
         """Format experience list as frontend-friendly string"""
@@ -1669,8 +1735,11 @@ class ThreeLayerQualityController:
             )
 
             # Build date range from start_date and end_date - ENSURE DATES ARE ALWAYS INCLUDED
-            start_date = exp.get("start_date", "").strip()
-            end_date = exp.get("end_date", "").strip()
+            # Convert date objects to strings before calling .strip()
+            start_date_raw = exp.get("start_date", "")
+            end_date_raw = exp.get("end_date", "")
+            start_date = str(start_date_raw).strip() if start_date_raw else ""
+            end_date = str(end_date_raw).strip() if end_date_raw else ""
 
             # Handle different date scenarios - be more aggressive about finding dates
             dates = ""
@@ -1992,8 +2061,47 @@ class ThreeLayerQualityController:
 
             total_time = time.time() - start_time
 
-            # Format experience data for frontend display
-            formatted_content = approver_result.content.copy()
+            # Keep BOTH structured content (for database) and formatted content (for frontend)
+            structured_content = (
+                approver_result.content.copy()
+            )  # Keep original list format for DB
+            formatted_content = (
+                approver_result.content.copy()
+            )  # Format for frontend display
+
+            # 🔧 FIX: Preserve original skills list for database
+            # The _generate_skills method returns formatted text, but DB needs list of objects
+            if "skills" in cv_data and isinstance(cv_data["skills"], list):
+                # Convert original skills to proper format for database
+                original_skills = []
+                for skill in cv_data["skills"]:
+                    if isinstance(skill, dict):
+                        # Already in correct format
+                        skill_level = (
+                            skill.get("skill_level")
+                            or skill.get("level")
+                            or "Intermediate"
+                        )
+                        original_skills.append(
+                            {
+                                "name": skill.get("skill_name")
+                                or skill.get("name", ""),
+                                "level": skill_level,
+                            }
+                        )
+                    elif isinstance(skill, str):
+                        # Convert string to dict format
+                        original_skills.append(
+                            {"name": skill.strip(), "level": "Intermediate"}
+                        )
+
+                if original_skills:
+                    structured_content["skills"] = original_skills
+                    logger.info(
+                        f"✅ Preserved {len(original_skills)} skills in structured format for DB"
+                    )
+
+            # Format experience data for frontend display ONLY
             if "experience" in formatted_content and isinstance(
                 formatted_content["experience"], list
             ):
@@ -2001,12 +2109,13 @@ class ThreeLayerQualityController:
                     formatted_content["experience"]
                 )
 
-            # Compile final result
+            # Compile final result with BOTH versions
             final_result = {
                 "status": "success",
                 "approved": approver_result.passed,
                 "quality_score": approver_result.metrics.overall_score,
-                "content": formatted_content,
+                "content": formatted_content,  # Frontend display version (experience as string)
+                "structured_content": structured_content,  # Database save version (experience as list)
                 "quality_report": {
                     "layer_results": [
                         {

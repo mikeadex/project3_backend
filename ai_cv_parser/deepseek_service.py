@@ -29,28 +29,48 @@ class DeepSeekService:
 
         logger.info(f"Initialized DeepSeekService with model: {self.model}")
 
-    async def _call_api(self, prompt, max_tokens=None, temperature=None):
+    async def _call_api(self, prompt, max_tokens=None, temperature=None, model=None, system_content=None, response_format=None):
         """
         Make an async call to the DeepSeek API with the provided prompt
+        
+        Args:
+            prompt: The user prompt
+            max_tokens: Maximum tokens for response
+            temperature: Temperature for generation
+            model: Override the default model (e.g., 'deepseek-reasoner' for better quality)
+            system_content: Override the system message
+            response_format: Override response format (None for reasoning model, {"type": "json_object"} for chat)
         """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
+        # Use provided model or default
+        use_model = model or self.model
+        
+        # Default system content
+        default_system = "You are a professional CV/resume parser. Your task is to extract structured information from CV text and format it as JSON."
+        
         data = {
-            "model": self.model,
+            "model": use_model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a professional CV/resume parser. Your task is to extract structured information from CV text and format it as JSON.",
+                    "content": system_content or default_system,
                 },
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": max_tokens or self.max_tokens,
             "temperature": temperature or self.temperature,
-            "response_format": {"type": "json_object"},
         }
+        
+        # Only add response_format if specified (reasoning model doesn't support it)
+        if response_format is not None:
+            data["response_format"] = response_format
+        elif use_model == "deepseek-chat":
+            # Default to JSON for chat model
+            data["response_format"] = {"type": "json_object"}
 
         max_retries = 3
         attempt = 0
@@ -127,16 +147,28 @@ class DeepSeekService:
                 logger.error(f"Unexpected error in _call_api: {str(e)}")
                 raise
 
-    async def generate(self, prompt, max_tokens=1000, temperature=0.7, top_p=0.9):
-        """Generate text using DeepSeek API"""
+    async def generate(self, prompt, max_tokens=1000, temperature=0.7, top_p=0.9, model=None):
+        """
+        Generate text using DeepSeek API
+        
+        Args:
+            prompt: The prompt to send
+            max_tokens: Maximum tokens for response
+            temperature: Temperature for generation
+            top_p: Top-p sampling parameter
+            model: Override the default model (e.g., 'deepseek-reasoner' for better quality)
+        """
         max_retries = 2
         attempt = 0
+        
+        # Use provided model or default
+        use_model = model or self.model
 
         while attempt < max_retries:
             try:
                 attempt += 1
                 logger.info(
-                    f"Sending request to DeepSeek API with model: {self.model} (attempt {attempt}/{max_retries})"
+                    f"🤖 Sending request to DeepSeek API with model: {use_model} (attempt {attempt}/{max_retries})"
                 )
 
                 async with aiohttp.ClientSession() as session:
@@ -147,7 +179,7 @@ class DeepSeekService:
                             "Content-Type": "application/json",
                         },
                         json={
-                            "model": self.model,
+                            "model": use_model,
                             "messages": [{"role": "user", "content": prompt}],
                             "max_tokens": max_tokens,
                             "temperature": temperature,
@@ -203,24 +235,36 @@ class DeepSeekService:
                 logger.error(f"Error in generate: {str(e)}")
                 raise
 
-    async def generate_completion(self, prompt, max_tokens=2000, temperature=0.2):
+    async def generate_completion(self, prompt, max_tokens=2000, temperature=0.2, model=None):
         """
         Generate text completion using DeepSeek API.
         For text completion without JSON, use this method instead of generate_json.
+        
+        Args:
+            prompt: The prompt to send
+            max_tokens: Maximum tokens for response
+            temperature: Temperature for generation
+            model: Override the default model (e.g., 'deepseek-reasoner' for better quality)
         """
         try:
             result = await self.generate(
-                prompt=prompt, max_tokens=max_tokens, temperature=temperature
+                prompt=prompt, max_tokens=max_tokens, temperature=temperature, model=model
             )
             return result
         except Exception as e:
             logger.error(f"Error in generate_completion: {str(e)}")
             return None
 
-    def generate_completion_sync(self, prompt, max_tokens=2000, temperature=0.2):
+    def generate_completion_sync(self, prompt, max_tokens=2000, temperature=0.2, model=None):
         """
         Synchronous version of generate_completion.
         For text completion without JSON, use this method in synchronous contexts.
+        
+        Args:
+            prompt: The prompt to send
+            max_tokens: Maximum tokens for response
+            temperature: Temperature for generation
+            model: Override the default model (e.g., 'deepseek-reasoner' for better quality)
         """
         try:
             # Create a new event loop for the async call
@@ -231,7 +275,7 @@ class DeepSeekService:
                 # Run the async generate method in the event loop
                 result = loop.run_until_complete(
                     self.generate(
-                        prompt=prompt, max_tokens=max_tokens, temperature=temperature
+                        prompt=prompt, max_tokens=max_tokens, temperature=temperature, model=model
                     )
                 )
                 return result
@@ -313,13 +357,32 @@ class DeepSeekService:
         Extract structured information from the following CV text. 
         Format the output as a valid JSON object with the following sections:
         
-        - personal_info: Object containing name, email, phone, location, etc.
+        - personal_info: Object containing name, email, phone, location, linkedin, github, portfolio, website, twitter, instagram, etc.
         - professional_summary: A concise summary of the candidate's background
         - skills: Array of objects with "name" and "level" (Beginner, Intermediate, Advanced, Expert)
-        - experience: Array of work experiences, each with job_title, company, location, start_date, end_date, and description
+        - experience: Array of work experiences, each with:
+          * job_title: The specific job title
+          * company: Company name
+          * location: Work location
+          * start_date: Start date
+          * end_date: End date
+          * description: Brief overview (1-2 sentences)
+          * responsibilities: Array of achievement/responsibility bullet points (extract each achievement as a separate item)
         - education: Array of education entries with school, degree, field, start_date, end_date
         - certifications: Array of certifications with name, issuer, and date
         - languages: Array of language proficiencies with language name and level
+        
+        🚨 CRITICAL INSTRUCTIONS FOR CONTACT INFORMATION:
+        - Extract ALL links and URLs from the CV, including:
+          * LinkedIn profile (linkedin.com/in/username)
+          * GitHub profile (github.com/username)
+          * Portfolio websites (Pexels, Behance, Dribbble, ArtStation, personal sites, etc.)
+          * Personal websites
+          * Twitter/X handles (twitter.com/username or x.com/username)
+          * Instagram profiles (instagram.com/username)
+        - Store each type of link in its specific field (linkedin, github, portfolio, website, twitter, instagram)
+        - Portfolio platforms like Pexels (pexels.com/@username) should go in the "portfolio" field
+        - DO NOT skip any URLs you find in the CV
         
         🚨 CRITICAL INSTRUCTIONS FOR WORK EXPERIENCE - FOLLOW EXACTLY:
         - NEVER EVER use "Position", "Role", "Job" as job_title 
@@ -331,6 +394,16 @@ class DeepSeekService:
         - If you see "Manager", "Analyst", "Developer", "Engineer", etc. - use the FULL title
         - FORBIDDEN WORDS for job_title: "Position", "Role", "Job", "Employee", "Worker"
         - Extract job_title as the specific professional title, NOT generic terms
+        
+        🚨 CRITICAL INSTRUCTIONS FOR RESPONSIBILITIES/ACHIEVEMENTS:
+        - Split work experience descriptions into individual bullet points
+        - Each achievement/responsibility should be a separate item in the "responsibilities" array
+        - Look for sentences that describe achievements, tasks, or results
+        - Each item should be a complete, actionable statement
+        - Example: If the CV says "Managed team of 10. Increased sales by 50%. Led 3 major projects."
+          → responsibilities: ["Managed team of 10", "Increased sales by 50%", "Led 3 major projects"]
+        - Extract ALL achievements and responsibilities as separate array items
+        - Do NOT combine multiple achievements into one item
         
         🚨 CRITICAL INSTRUCTIONS FOR EDUCATION vs CERTIFICATIONS - FOLLOW EXACTLY:
         

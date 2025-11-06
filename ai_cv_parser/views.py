@@ -17,7 +17,7 @@ from docx import Document
 from PyPDF2 import PdfReader
 from asgiref.sync import sync_to_async
 from django.db import close_old_connections
-from .models import ParsedCV, CVRewriteSession
+from .models import CVRewriteSession, ParsedCV
 from .deepseek_service import DeepSeekService
 from .serializers import ParsedCVSerializer
 from .services import CVRewriteService
@@ -320,14 +320,29 @@ class AICVParserViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter queryset to only show the authenticated user's CVs"""
         return ParsedCV.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Set the user field when creating a new ParsedCV"""
+        serializer.save(user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
         """Retrieve a single CV and auto-generate analysis if missing"""
         instance = self.get_object()
 
-        # If analysis_data is missing, generate it from parsed_data
-        if not instance.analysis_data and instance.parsed_data:
-            logger.info(f"Auto-generating analysis for CV {instance.id} in retrieve")
+        # Skip auto-analysis for CVs created via builder (they already have quality scores from 3-Layer QC)
+        # Builder CVs are identified by file_name pattern: CV_FirstName_LastName.json or *_v2.json
+        is_builder_cv = (
+            instance.file_name and 
+            '.json' in instance.file_name and 
+            ('CV_' in instance.file_name or instance.version_number and instance.version_number > 1)
+        )
+        
+        if is_builder_cv:
+            logger.info(f"⏩ Skipping auto-analysis for builder CV {instance.id} (file: {instance.file_name}, version: {instance.version_number})")
+        
+        # If analysis_data is missing, generate it from parsed_data (only for uploaded CVs)
+        if not is_builder_cv and not instance.analysis_data and instance.parsed_data:
+            logger.info(f"Auto-generating analysis for uploaded CV {instance.id} in retrieve")
             max_retries = 2
             retry_delay = 5  # seconds
 
@@ -858,12 +873,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 "Consider adding industry certifications",
             ]
 
+        # ENHANCED: Generate rich, context-aware improvement suggestions
         if not result["improvement_suggestions"]:
-            result["improvement_suggestions"] = [
-                "Add specific metrics to achievements",
-                "Include relevant certifications",
-                "Tailor content for target roles",
-            ]
+            result["improvement_suggestions"] = self._generate_improvement_suggestions(
+                original_cv_data, result, section_analyses
+            )
 
         # Calculate overall score as average of dynamic section scores
         section_scores = result["section_scores"]
@@ -886,6 +900,197 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             f"📊 Overall score calculated: {overall_score} from section scores: {dynamic_scores}"
         )
         return result
+
+    def _generate_improvement_suggestions(
+        self, cv_data, analysis_result, section_analyses
+    ):
+        """Generate rich, context-aware improvement suggestions based on comprehensive CV analysis."""
+        suggestions = []
+
+        # Analyze experience section
+        experience = cv_data.get("experience", [])
+        has_experience = len(experience) > 0
+        experience_count = len(experience)
+
+        # Analyze skills section
+        skills = cv_data.get("skills", [])
+        has_skills = len(skills) > 0
+        skills_count = len(skills)
+
+        # Analyze education section
+        education = cv_data.get("education", [])
+        has_education = len(education) > 0
+
+        # Get professional summary
+        professional_summary = cv_data.get("professional_summary", "")
+        has_summary = bool(professional_summary and len(professional_summary) > 50)
+
+        # Get section scores
+        section_scores = analysis_result.get("section_scores", {})
+        content_score = section_scores.get("content_completeness", 7)
+        format_score = section_scores.get("format_structure", 8)
+        skills_score = section_scores.get("skills_relevance", 7)
+        impact_score = section_scores.get("overall_impact", 8)
+
+        # Get experience level
+        experience_level = analysis_result.get("experience_level", {})
+        classification = experience_level.get("classification", "mid-level")
+        years_exp = experience_level.get("years_experience", 0)
+
+        logger.info(
+            f"📝 Generating improvement suggestions - Experience: {experience_count}, Skills: {skills_count}, Classification: {classification}"
+        )
+
+        # 1. QUANTIFICATION & METRICS
+        has_metrics = False
+        for exp in experience[:3]:  # Check recent roles
+            if isinstance(exp, dict):
+                desc = (exp.get("description") or "").lower()
+                if any(
+                    indicator in desc
+                    for indicator in [
+                        "%",
+                        "increased",
+                        "reduced",
+                        "saved",
+                        "$",
+                        "£",
+                        "€",
+                        "achieved",
+                    ]
+                ):
+                    has_metrics = True
+                    break
+
+        if not has_metrics and has_experience:
+            suggestions.append(
+                f"Quantify your achievements with specific metrics (e.g., 'Increased sales by 25%' instead of 'Improved sales'). "
+                f"Add numbers, percentages, or monetary values to {min(3, experience_count)} recent roles to demonstrate measurable impact."
+            )
+
+        # 2. PROFESSIONAL SUMMARY
+        if not has_summary:
+            suggestions.append(
+                f"Add a compelling professional summary (3-4 sentences) that highlights your {years_exp} years of experience, "
+                f"key expertise, and career goals. This helps recruiters quickly understand your value proposition."
+            )
+        elif len(professional_summary) < 100:
+            suggestions.append(
+                "Expand your professional summary to 150-200 words. Include your core competencies, "
+                "notable achievements, and what you're seeking in your next role."
+            )
+
+        # 3. SKILLS SECTION
+        if skills_count < 6:
+            suggestions.append(
+                f"Expand your skills section to include 10-15 relevant skills. Currently showing {skills_count} skills. "
+                f"Add both technical skills (tools, software, platforms) and soft skills (communication, leadership, problem-solving)."
+            )
+        elif skills_score < 7:
+            suggestions.append(
+                "Enhance skills section with industry-specific keywords and emerging technologies relevant to your field. "
+                "Include proficiency levels (e.g., 'Expert in...', 'Proficient in...') for key skills."
+            )
+
+        # 4. ROLE DESCRIPTIONS
+        if experience_count > 0:
+            short_descriptions = 0
+            for exp in experience[:3]:
+                if isinstance(exp, dict):
+                    desc = exp.get("description", "")
+                    if desc and len(desc) < 100:
+                        short_descriptions += 1
+
+            if short_descriptions > 0:
+                suggestions.append(
+                    f"Expand {short_descriptions} role description(s) with more detail. Each role should have 3-5 bullet points "
+                    "describing responsibilities, achievements, and technologies used. Use action verbs (Led, Developed, Implemented)."
+                )
+
+        # 5. EDUCATION & CERTIFICATIONS
+        if not has_education:
+            suggestions.append(
+                "Add education details including degree, institution, graduation year, and relevant coursework or honors. "
+                "Education section is currently missing."
+            )
+
+        certifications = cv_data.get("certifications", [])
+        if len(certifications) == 0 and classification in ["mid-level", "senior"]:
+            suggestions.append(
+                f"Consider adding relevant certifications for {classification} positions. "
+                "Industry certifications (e.g., PMP, AWS, CPA, Six Sigma) demonstrate continued professional development."
+            )
+
+        # 6. CONTENT COMPLETENESS
+        if content_score < 7:
+            missing_sections = []
+            if not cv_data.get("contact_info"):
+                missing_sections.append("contact information")
+            if not cv_data.get("languages"):
+                missing_sections.append("languages (if multilingual)")
+            if not cv_data.get("certifications"):
+                missing_sections.append("certifications")
+
+            if missing_sections:
+                suggestions.append(
+                    f"Add missing sections to improve completeness: {', '.join(missing_sections)}. "
+                    "A comprehensive CV should include all relevant professional information."
+                )
+
+        # 7. FORMATTING & STRUCTURE
+        if format_score < 7:
+            suggestions.append(
+                "Improve document formatting for better readability: use consistent fonts, clear section headers, "
+                "appropriate spacing, and bullet points for lists. Ensure dates are in consistent format (e.g., 'Jan 2020 - Present')."
+            )
+
+        # 8. ACTION VERBS & LANGUAGE
+        weak_verbs = ["responsible for", "worked on", "helped with", "involved in"]
+        has_weak_verbs = False
+        for exp in experience[:3]:
+            if isinstance(exp, dict):
+                desc = (exp.get("description") or "").lower()
+                if any(verb in desc for verb in weak_verbs):
+                    has_weak_verbs = True
+                    break
+
+        if has_weak_verbs:
+            suggestions.append(
+                "Replace passive language with strong action verbs. Use words like: Led, Spearheaded, Implemented, Optimized, "
+                "Achieved, Drove, Transformed. Avoid phrases like 'responsible for' and 'helped with'."
+            )
+
+        # 9. TAILORING & KEYWORDS
+        if impact_score < 8:
+            suggestions.append(
+                "Tailor your CV for specific roles by including industry-relevant keywords from job descriptions. "
+                "Research common requirements for your target positions and incorporate matching terminology naturally."
+            )
+
+        # 10. ACHIEVEMENT FOCUS
+        if experience_count >= 2:
+            suggestions.append(
+                "Restructure experience entries to emphasize achievements over duties. Each role should show impact: "
+                "What you accomplished, how you improved processes, what value you delivered. Use the STAR method "
+                "(Situation, Task, Action, Result) for key accomplishments."
+            )
+
+        # 11. CAREER PROGRESSION
+        if years_exp >= 5 and experience_count >= 3:
+            suggestions.append(
+                "Highlight career progression by emphasizing increasing responsibilities, team sizes managed, "
+                "budget authority, or scope of projects across roles. Show growth trajectory in your career narrative."
+            )
+
+        # 12. MODERN CV PRACTICES
+        suggestions.append(
+            "Ensure your CV follows modern best practices: Remove outdated elements (e.g., 'References available upon request'), "
+            "avoid personal photos unless required regionally, exclude age/marital status, and keep length to 2 pages maximum."
+        )
+
+        # Return top 8-10 most relevant suggestions
+        logger.info(f"✅ Generated {len(suggestions)} improvement suggestions")
+        return suggestions[:10]
 
     def _infer_skills_from_experience(self, experience_data):
         """Infer skills from job experience data."""
@@ -1266,7 +1471,73 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             return 0
 
     def _determine_experience_level(self, years_experience, cv_data):
-        """Determine experience level classification based on years and job titles."""
+        """Determine experience level classification based on years and job titles with career consistency analysis."""
+        # STEP 1: ANALYZE PROFESSIONAL SUMMARY FOR CAREER INTENT
+        professional_summary = cv_data.get("professional_summary", "").lower()
+        summary_override = None
+        summary_indicators = {
+            "entry": [
+                "graduate",
+                "recent graduate",
+                "new graduate",
+                "fresh graduate",
+                "trainee",
+                "aspiring",
+                "looking to join",
+                "seeking entry",
+                "entry level",
+                "entry-level",
+                "junior position",
+                "first role",
+                "starting career",
+                "begin my career",
+                "kickstart my career",
+                "assistant",
+                "intern",
+                "internship",
+                "apprentice",
+            ],
+            "mid": [
+                "experienced professional",
+                "proven track record",
+                "several years",
+                "established career",
+            ],
+            "senior": [
+                "senior professional",
+                "executive",
+                "extensive experience",
+                "seasoned professional",
+                "leadership experience",
+                "c-level",
+                "strategic leader",
+            ],
+        }
+
+        # Check for strong entry-level indicators in summary
+        entry_level_signals = 0
+        for indicator in summary_indicators["entry"]:
+            if indicator in professional_summary:
+                entry_level_signals += 1
+                logger.info(f"🎓 Entry-level indicator found in summary: '{indicator}'")
+
+        # If 2+ entry-level indicators found, this is a strong signal
+        if entry_level_signals >= 2:
+            summary_override = "entry-level"
+            logger.info(
+                f"📝 Professional summary strongly indicates ENTRY-LEVEL position ({entry_level_signals} indicators)"
+            )
+        elif entry_level_signals == 1:
+            # Single indicator is still significant for graduates
+            if any(
+                keyword in professional_summary
+                for keyword in ["graduate", "trainee", "aspiring"]
+            ):
+                summary_override = "entry-level"
+                logger.info(
+                    f"📝 Professional summary indicates ENTRY-LEVEL (graduate/trainee/aspiring)"
+                )
+
         # Get the most recent job title
         experience = cv_data.get("experience", [])
         recent_title = ""
@@ -1285,6 +1556,160 @@ class AICVParserViewSet(viewsets.ModelViewSet):
         if experience and isinstance(experience[0], dict):
             recent_title = experience[0].get("title", "").lower()
             company = experience[0].get("company", "").lower()
+
+        # CAREER CONSISTENCY ANALYSIS
+        # Track role types across career
+        role_categories = {
+            "software_dev": [
+                "software",
+                "developer",
+                "engineer",
+                "programmer",
+                "web",
+                "full stack",
+                "backend",
+                "frontend",
+            ],
+            "management": [
+                "manager",
+                "director",
+                "supervisor",
+                "lead",
+                "head",
+                "chief",
+                "vp",
+                "executive",
+            ],
+            # FINANCE first (more specific) before SALES (more generic)
+            "finance": [
+                "accountant",
+                "accounting",
+                "accountancy",
+                "financial",
+                "finance",
+                "analyst",
+                "auditor",
+                "bookkeeper",
+                "treasurer",
+                "cfo",
+            ],
+            "sales": [
+                "sales",
+                "account executive",
+                "account manager",
+                "business development",
+                "representative",
+                "sales rep",
+            ],
+            "customer_service": [
+                "customer service",
+                "support",
+                "representative",
+                "associate",
+            ],
+            "operations": ["operations", "logistics", "coordinator", "administrator"],
+            "marketing": ["marketing", "content", "social media", "brand"],
+            "hr": ["hr", "human resources", "recruiter", "talent"],
+            "compliance": ["compliance", "regulatory", "risk", "audit"],
+            "data": ["data", "analytics", "scientist", "analyst"],
+        }
+
+        # Count years in each category
+        category_years = {cat: 0 for cat in role_categories.keys()}
+        category_roles = {cat: [] for cat in role_categories.keys()}
+        total_categorized_years = 0
+
+        for exp in experience:
+            if isinstance(exp, dict):
+                title = (exp.get("title") or exp.get("position") or "").lower()
+                company = (exp.get("company") or "").lower()
+                description = (exp.get("description") or "").lower()
+
+                # Estimate years for this role (you might want to parse dates for accuracy)
+                exp_years = 2  # default estimate
+
+                # Categorize the role - check title, company, and description
+                categorized = False
+                search_text = f"{title} {company} {description[:200]}"  # Combine for better detection
+
+                for category, keywords in role_categories.items():
+                    if any(keyword in search_text for keyword in keywords):
+                        category_years[category] += exp_years
+                        # Use company name if title is missing
+                        role_label = (
+                            title if title and title != "n/a" else f"role at {company}"
+                        )
+                        category_roles[category].append(role_label)
+                        total_categorized_years += exp_years
+                        categorized = True
+                        logger.info(f"📋 Categorized as '{category}': {role_label}")
+                        break
+
+        # Determine dominant career path
+        dominant_category = (
+            max(category_years.items(), key=lambda x: x[1])[0]
+            if total_categorized_years > 0
+            else None
+        )
+        dominant_years = (
+            category_years.get(dominant_category, 0) if dominant_category else 0
+        )
+
+        # FALLBACK: If no roles were categorized, try to infer from professional summary
+        if not dominant_category and professional_summary:
+            logger.info(
+                "🔍 No roles categorized, checking professional summary for field indicators"
+            )
+            for category, keywords in role_categories.items():
+                if any(keyword in professional_summary for keyword in keywords):
+                    dominant_category = category
+                    # Estimate years from total experience
+                    dominant_years = years_experience if years_experience > 0 else 2
+                    category_years[category] = dominant_years
+                    total_categorized_years = dominant_years
+                    logger.info(
+                        f"📝 Inferred field from summary: {category} ({dominant_years} years)"
+                    )
+                    break
+
+        # Calculate career consistency score (0-100)
+        if total_categorized_years > 0:
+            consistency_score = int((dominant_years / total_categorized_years) * 100)
+        else:
+            consistency_score = 50  # neutral if we can't categorize
+
+        # Detect career change
+        recent_category = None
+        if experience and isinstance(experience[0], dict):
+            recent_title_lower = (
+                experience[0].get("title") or experience[0].get("position") or ""
+            ).lower()
+            recent_company_lower = (experience[0].get("company") or "").lower()
+            recent_desc_lower = (experience[0].get("description") or "")[:200].lower()
+            recent_search_text = (
+                f"{recent_title_lower} {recent_company_lower} {recent_desc_lower}"
+            )
+
+            for category, keywords in role_categories.items():
+                if any(keyword in recent_search_text for keyword in keywords):
+                    recent_category = category
+                    break
+
+        career_change_detected = False
+        career_change_risk = "Low"
+        if (
+            recent_category
+            and dominant_category
+            and recent_category != dominant_category
+        ):
+            career_change_detected = True
+            recent_cat_years = category_years.get(recent_category, 0)
+            if recent_cat_years < 2:
+                career_change_risk = "High"
+            elif recent_cat_years < 5:
+                career_change_risk = "Medium"
+            else:
+                career_change_risk = "Low"
 
         # If years_experience is 0 but we have experience data, try to estimate
         if years_experience == 0 and experience:
@@ -1319,37 +1744,172 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             else:
                 years_experience = 2  # At least 2 years with 1 role
 
-        # Determine level based on years and titles
-        if years_experience >= 15 or any(
+        # Determine level based on years and titles - ADJUST FOR CAREER CHANGERS
+        # Check for entry-level job titles first
+        entry_level_titles = [
+            "assistant",
+            "trainee",
+            "junior",
+            "intern",
+            "apprentice",
+            "associate",
+            "graduate",
+        ]
+
+        base_classification = ""
+        # PRIORITY: Entry-level titles override years
+        if any(keyword in recent_title for keyword in entry_level_titles):
+            base_classification = "entry-level"
+            career_stage = "Early Career"
+            logger.info(
+                f"🎯 Entry-level title detected: '{recent_title}' - forcing entry-level"
+            )
+        elif years_experience >= 15 or any(
             keyword in recent_title
             for keyword in ["director", "vp", "chief", "head", "executive"]
         ):
-            classification = "senior"
+            base_classification = "senior"
             career_stage = "Executive/Director level"
         elif years_experience >= 10 or any(
             keyword in recent_title
             for keyword in ["senior", "principal", "manager"] + management_keywords
         ):
-            classification = "senior"
+            base_classification = "senior"
             career_stage = "Senior Management"
         elif years_experience >= 7 or any(
             keyword in recent_title for keyword in management_keywords
         ):
-            classification = "mid-level"
+            base_classification = "mid-level"
             career_stage = "Management/Supervisory"
         elif years_experience >= 3 or any(
             keyword in recent_title for keyword in senior_keywords
         ):
-            classification = "mid-level"
+            base_classification = "mid-level"
             career_stage = "Experienced Professional"
         else:
-            classification = "entry-level"
+            base_classification = "entry-level"
             career_stage = "Early Career"
 
+        # DETECT DESIRED FIELD FROM PROFESSIONAL SUMMARY (Career Change Intent)
+        desired_field = None
+        if professional_summary:
+            summary_lower = professional_summary.lower()
+            # Check what field they're SEEKING based on keywords in summary
+            for category, keywords in role_categories.items():
+                # Look for "seeking", "transitioning to", "aspiring", "looking for" followed by field keywords
+                seeking_phrases = [
+                    "seeking",
+                    "transitioning to",
+                    "aspiring",
+                    "looking for",
+                    "interested in",
+                    "pursuing",
+                ]
+
+                # Check if any seeking phrase + field keyword combination exists
+                for phrase in seeking_phrases:
+                    for keyword in keywords:
+                        pattern = f"{phrase} {keyword}"
+                        if (
+                            pattern in summary_lower
+                            or f"{phrase} a {keyword}" in summary_lower
+                            or f"{phrase} an {keyword}" in summary_lower
+                        ):
+                            desired_field = category
+                            logger.info(
+                                f"🎯 Desired field detected from summary: {category} (found '{pattern}')"
+                            )
+                            break
+                    if desired_field:
+                        break
+                if desired_field:
+                    break
+
+        # ADJUST CLASSIFICATION - PRIORITY ORDER
+        final_classification = base_classification
+        trajectory_warning = None
+
+        # 1. HIGHEST PRIORITY: Professional summary override
+        if summary_override:
+            final_classification = summary_override
+            if summary_override == "entry-level" and base_classification in [
+                "mid-level",
+                "senior",
+            ]:
+                trajectory_warning = f"Professional summary indicates entry-level position sought (graduate/trainee/aspiring). Classification adjusted from '{base_classification}' to 'entry-level' based on career intent."
+                logger.info(
+                    f"⚠️ SUMMARY OVERRIDE: {base_classification} → {summary_override}"
+                )
+
+        # 2. DETECT CAREER TRANSITION (Experienced professional seeking new field)
+        elif desired_field and dominant_category and desired_field != dominant_category:
+            # Check if they have minimal experience in desired field
+            desired_field_years = category_years.get(desired_field, 0)
+
+            if desired_field_years == 0:
+                # No experience in desired field - treat as career changer
+                if base_classification == "senior":
+                    final_classification = "mid-level"
+                    trajectory_warning = f"⚠️ Career transition detected: {years_experience} years in {dominant_category.replace('_', ' ')} but seeking {desired_field.replace('_', ' ')} roles with no direct experience. Recommend mid-level or entry-level {desired_field.replace('_', ' ')} positions to build relevant experience."
+                elif base_classification == "mid-level":
+                    final_classification = "entry-level"
+                    trajectory_warning = f"⚠️ Career change: Transitioning from {dominant_category.replace('_', ' ')} to {desired_field.replace('_', ' ')}. Recommend entry-level {desired_field.replace('_', ' ')} roles to gain field-specific experience."
+
+                logger.info(
+                    f"⚠️ CAREER TRANSITION: {dominant_category} → {desired_field} (0 years experience in target field)"
+                )
+
+            elif desired_field_years < 3:
+                # Limited experience in desired field
+                trajectory_warning = f"⚠️ Career transition in progress: {desired_field_years} years in {desired_field.replace('_', ' ')} vs {category_years[dominant_category]} years in {dominant_category.replace('_', ' ')}. Consider {desired_field.replace('_', ' ')} roles at entry/mid-level to strengthen expertise."
+                logger.info(
+                    f"⚠️ CAREER TRANSITION: {dominant_category} → {desired_field} ({desired_field_years} years in target field)"
+                )
+
+        # 3. THIRD PRIORITY: Career change detection (from work history)
+        elif career_change_detected and career_change_risk == "High":
+            # Downgrade classification if recent field has <2 years
+            if base_classification == "senior":
+                final_classification = "mid-level"
+                trajectory_warning = f"Limited experience in current field ({recent_category.replace('_', ' ')}). Consider mid-level roles despite overall {years_experience} years experience."
+            elif base_classification == "mid-level":
+                final_classification = "entry-level"
+                trajectory_warning = f"Career change detected. New to {recent_category.replace('_', ' ')} field. Entry-level roles recommended."
+
+        # Build career consistency message - ADJUST FOR CAREER TRANSITIONS
+        consistency_message = ""
+
+        # If career transition detected, adjust consistency message
+        if desired_field and dominant_category and desired_field != dominant_category:
+            desired_field_years = category_years.get(desired_field, 0)
+            if desired_field_years == 0:
+                consistency_message = f"⚠️ Career transition: {years_experience} years in {dominant_category.replace('_', ' ')}, seeking {desired_field.replace('_', ' ')} roles"
+                consistency_score = 50  # Lower consistency due to career change
+            elif desired_field_years < 3:
+                consistency_message = f"⚠️ Transitioning: {category_years[dominant_category]} years in {dominant_category.replace('_', ' ')}, {desired_field_years} years in {desired_field.replace('_', ' ')}"
+                consistency_score = 60  # Moderate consistency
+        elif consistency_score >= 80:
+            consistency_message = f"Strong career consistency in {dominant_category.replace('_', ' ') if dominant_category else 'your field'}"
+        elif consistency_score >= 60:
+            consistency_message = f"Moderate career consistency with primary focus on {dominant_category.replace('_', ' ') if dominant_category else 'your field'}"
+        else:
+            consistency_message = "Diverse career path across multiple fields"
+
         return {
-            "classification": classification,
+            "classification": final_classification,
             "years_experience": years_experience,
             "career_stage": career_stage,
+            "consistency_score": consistency_score,
+            "consistency_message": consistency_message,
+            "dominant_field": (
+                dominant_category.replace("_", " ").title()
+                if dominant_category
+                else "General"
+            ),
+            "career_change_detected": career_change_detected,
+            "career_change_risk": career_change_risk,
+            "trajectory_warning": trajectory_warning,
+            "field_breakdown": {k: v for k, v in category_years.items() if v > 0},
         }
 
     def _generate_potential_roles(self, cv_data, hard_skills, experience_level):
@@ -2479,8 +3039,8 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                         "requires_confirmation": True,
                         "message": "You already have a parsed CV. Parsing a new CV will replace your existing one. Do you want to continue?",
                         "existing_cv_id": existing_cv.id,
-                        "existing_cv_name": existing_cv.file_name,
-                        "existing_cv_date": existing_cv.uploaded_at,
+                        "existing_cv_name": getattr(existing_cv, "file_name", ""),
+                        "existing_cv_date": getattr(existing_cv, "uploaded_at", None),
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -2491,16 +3051,27 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             # Delete any existing parsed CVs for this user
             if existing_cv:
                 # Clean up temporary file if it exists
-                if existing_cv.temp_file_path and os.path.exists(
-                    existing_cv.temp_file_path
-                ):
+                temp_file_path = getattr(existing_cv, "temp_file_path", None)
+                if temp_file_path and os.path.exists(temp_file_path):
                     try:
-                        os.remove(existing_cv.temp_file_path)
+                        os.remove(temp_file_path)
                         logger.info(
-                            f"Removed temporary file of existing CV: {existing_cv.temp_file_path}"
+                            f"Removed temporary file of existing CV: {temp_file_path}"
                         )
                     except Exception as file_e:
                         logger.error(f"Error removing temporary file: {str(file_e)}")
+
+                # Delete all CvWriter records for this user
+                # This will cascade delete related Experience, Education, Skill, etc.
+                from cv_writer.models import CvWriter
+
+                cv_writers = CvWriter.objects.filter(user=request.user)
+                cv_writer_count = cv_writers.count()
+                if cv_writer_count > 0:
+                    cv_writers.delete()
+                    logger.info(
+                        f"Deleted {cv_writer_count} CvWriter record(s) and related data for user {request.user.username}"
+                    )
 
                 # Delete the existing CV
                 existing_cv.delete()
@@ -2726,46 +3297,12 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     f"ParsedCV {cv_id} processing completed successfully in {parsed_cv.processing_time:.2f} seconds"
                 )
 
-                # AUTO-POPULATE Experience and Skill tables for recommendations
-                try:
-                    logger.info(
-                        f"🔄 Auto-populating Experience/Skill tables for CV {cv_id}"
-                    )
-                    from cv_writer.services import save_rewritten_cv_to_database
-                    from cv_writer.models import CvWriter
-
-                    # Get or create CvWriter instance for this user
-                    cv_writer, created = CvWriter.objects.get_or_create(
-                        user=parsed_cv.user,
-                        defaults={"status": "completed", "is_primary": True},
-                    )
-
-                    if not created:
-                        # If CV already exists, make sure it's set as primary
-                        if not cv_writer.is_primary:
-                            CvWriter.objects.filter(
-                                user=parsed_cv.user, is_primary=True
-                            ).update(is_primary=False)
-                            cv_writer.is_primary = True
-                            cv_writer.save()
-
-                    # Populate Experience and Skill tables from parsed data
-                    save_rewritten_cv_to_database(
-                        rewritten_cv_data=parsed_data,
-                        user=parsed_cv.user,
-                        cv_writer_instance=cv_writer,
-                    )
-                    logger.info(
-                        f"✅ Successfully populated Experience/Skill tables for CV {cv_id}"
-                    )
-
-                except Exception as pop_error:
-                    logger.error(
-                        f"⚠️ Error auto-populating Experience/Skill tables: {str(pop_error)}"
-                    )
-                    logger.error(traceback.format_exc())
-                    # Don't fail the entire CV parsing if this fails
-                    pass
+                # ⚠️ REMOVED AUTO-POPULATE - Per user requirement:
+                # "No new cv is saved until user trigger save action"
+                # ParsedCV data is stored, but CvWriter creation is deferred until user explicitly saves
+                logger.info(
+                    f"✅ CV parsed and stored in ParsedCV #{cv_id}. CvWriter will be created when user saves."
+                )
 
                 # Add career trajectory analysis
                 try:
@@ -3651,7 +4188,7 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=False, methods=["POST"])
+    @action(detail=False, methods=["POST"], url_path="analyze")
     def analyze(self, request):
         """
         Analyze a CV to provide feedback on content quality and improvement suggestions.
@@ -3682,84 +4219,11 @@ class AICVParserViewSet(viewsets.ModelViewSet):
                     parsed_cv = ParsedCV.objects.get(id=cv_id, user=request.user)
                     cv_data = parsed_cv.parsed_data
 
-                    # Check if we already have analysis data and it's not too old (e.g., less than 7 days)
-                    # Only use cache if force_refresh is False
-                    if (
-                        not force_refresh
-                        and parsed_cv.analysis_data
-                        and parsed_cv.analysis_date
-                        and (timezone.now() - parsed_cv.analysis_date).days < 7
-                    ):
-                        # Return cached analysis
-                        logger.info(
-                            f"Returning cached analysis for ParsedCV ID {cv_id}"
-                        )
-                        return Response(
-                            {
-                                "analysis": parsed_cv.analysis_data,
-                                "cached": True,
-                                "analysis_date": parsed_cv.analysis_date,
-                            }
-                        )
-                    elif force_refresh:
-                        logger.info(
-                            f"Force refresh requested for ParsedCV ID {cv_id}, bypassing cache and re-parsing CV"
-                        )
-
-                        # Re-parse the CV with improved parser when force_refresh is True
-                        try:
-                            from cv_parser.parsers import AdvancedDocumentParser
-                            import tempfile
-                            import os
-
-                            # Get the original file path - use temp_file_path since original_file doesn't exist in model
-                            original_file_path = (
-                                parsed_cv.temp_file_path
-                                if parsed_cv.temp_file_path
-                                else None
-                            )
-
-                            if original_file_path and os.path.exists(
-                                original_file_path
-                            ):
-                                logger.info(
-                                    f"Re-parsing original file: {original_file_path}"
-                                )
-
-                                # Use our enhanced parser
-                                parser = AdvancedDocumentParser()
-                                fresh_parsed_data = parser.parse_document_comprehensive(
-                                    original_file_path
-                                )
-
-                                # Update the stored parsed data with fresh results and clear analysis cache
-                                parsed_cv.parsed_data = fresh_parsed_data
-                                parsed_cv.analysis_data = None  # Clear cached analysis
-                                parsed_cv.analysis_date = None  # Clear analysis date
-                                parsed_cv.save(
-                                    update_fields=[
-                                        "parsed_data",
-                                        "analysis_data",
-                                        "analysis_date",
-                                    ]
-                                )
-
-                                # Use the fresh data for analysis
-                                cv_data = fresh_parsed_data
-                                logger.info(
-                                    f"Successfully re-parsed CV with enhanced parser. Experience entries: {len(fresh_parsed_data.get('experience', []))}, Skills: {len(fresh_parsed_data.get('skills', []))}"
-                                )
-
-                            else:
-                                logger.warning(
-                                    f"Original file not found for re-parsing: {original_file_path}"
-                                )
-                                cv_data = parsed_cv.parsed_data
-
-                        except Exception as reparse_error:
-                            logger.error(f"Failed to re-parse CV: {str(reparse_error)}")
-                            # Fall back to existing parsed data
-                            cv_data = parsed_cv.parsed_data
+                    # Note: cv_parser.ParsedCV doesn't have analysis_data/analysis_date fields
+                    # So we always perform fresh analysis using the existing parsed_data
+                    logger.info(
+                        f"Using parsed_data from ParsedCV ID {cv_id} for analysis"
+                    )
 
                 except ParsedCV.DoesNotExist:
                     return Response(
@@ -3852,12 +4316,9 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             # Use chunked analysis to prevent truncation
             analysis_result = self._analyze_cv_chunked(cv_data, service)
 
-            # If we have a parsed_cv, store the analysis results
-            if parser_type == "parsed_cv" and parsed_cv:
-                parsed_cv.analysis_data = analysis_result
-                parsed_cv.analysis_date = timezone.now()
-                parsed_cv.save(update_fields=["analysis_data", "analysis_date"])
-                logger.info(f"Stored analysis results for ParsedCV ID {cv_id}")
+            # Note: cv_parser.ParsedCV doesn't have analysis_data/analysis_date fields
+            # So we just return the analysis without caching it
+            logger.info(f"Analysis completed for CV ID {cv_id}, returning results")
 
             return Response(
                 {
@@ -4053,4 +4514,107 @@ class AICVParserViewSet(viewsets.ModelViewSet):
             return Response(
                 {"success": False, "message": f"Failed to clear CV data: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["PATCH"], url_path="set-template")
+    def set_template(self, request, pk=None):
+        """
+        Update the template for a specific ParsedCV.
+        
+        Request format:
+        {
+            "template": "executive"  # or "modern", "tech-focus", etc.
+        }
+        """
+        try:
+            cv = self.get_object()
+            template_id = request.data.get("template")
+            
+            if not template_id:
+                return Response(
+                    {"error": "template field is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate template ID (optional - could add validation logic here)
+            valid_templates = [
+                'executive', 'modern', 'tech-focus', 'minimalist-pro', 
+                'creative', 'corporate', 'professional', 'academic'
+            ]
+            
+            if template_id not in valid_templates:
+                logger.warning(f"Unknown template '{template_id}', but allowing it")
+            
+            # Update the template
+            cv.template = template_id
+            cv.save(update_fields=['template'])
+            
+            logger.info(f"✅ Updated template for CV {cv.id} to '{template_id}'")
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Template updated to '{template_id}'",
+                    "cv_id": cv.id,
+                    "template": cv.template
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except ParsedCV.DoesNotExist:
+            return Response(
+                {"error": "CV not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error updating template for CV {pk}: {str(e)}", exc_info=True)
+            return Response(
+                {"error": f"Failed to update template: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=["PATCH"], url_path="set-primary")
+    def set_primary(self, request, pk=None):
+        """
+        Set a specific ParsedCV as the user's primary CV.
+        Unsets primary flag on all other user CVs.
+        
+        Request format: {} (empty body, just PATCH the endpoint)
+        """
+        try:
+            # Get the CV to set as primary
+            cv = self.get_object()
+            
+            # Unset primary for all other user CVs
+            ParsedCV.objects.filter(user=request.user, is_primary=True).update(
+                is_primary=False
+            )
+            
+            # Set this CV as primary
+            cv.is_primary = True
+            cv.save(update_fields=['is_primary'])
+            
+            logger.info(f"✅ Set CV {cv.id} as primary for user {request.user.username}")
+            
+            # Serialize and return the updated CV
+            serializer = self.get_serializer(cv)
+            return Response(
+                {
+                    "success": True,
+                    "message": "Primary CV updated successfully",
+                    "cv": serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except ParsedCV.DoesNotExist:
+            return Response(
+                {"error": "CV not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error setting primary CV {pk}: {str(e)}", exc_info=True)
+            return Response(
+                {"error": f"Failed to set primary CV: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
