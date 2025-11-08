@@ -2,6 +2,33 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.conf import settings
 from dj_rest_auth.serializers import PasswordResetSerializer as DefaultPasswordResetSerializer
+from dj_rest_auth.registration.serializers import RegisterSerializer
+
+class CustomRegisterSerializer(RegisterSerializer):
+    """Custom registration serializer that doesn't require username"""
+    username = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    
+    def validate_username(self, username):
+        """Make username optional and auto-generate from email if not provided"""
+        return username
+    
+    def get_cleaned_data(self):
+        """Override to handle optional username"""
+        data = super().get_cleaned_data()
+        
+        # If no username provided, generate one from email
+        if not data.get('username'):
+            email = data.get('email', '')
+            # Use email prefix as username, make it unique
+            username_base = email.split('@')[0] if email else 'user'
+            username = username_base
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{username_base}{counter}"
+                counter += 1
+            data['username'] = username
+            
+        return data
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

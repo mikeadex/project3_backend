@@ -305,6 +305,7 @@ REST_AUTH = {
     "JWT_AUTH_COOKIE": "access_token",
     "JWT_AUTH_REFRESH_COOKIE": "refresh_token",
     "JWT_AUTH_HTTPONLY": False,
+    "REGISTER_SERIALIZER": "api.serializers.CustomRegisterSerializer",
 }
 
 # Frontend URL (without trailing slash) - default to apex domain for canonical consistency
