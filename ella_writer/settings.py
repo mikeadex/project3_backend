@@ -394,7 +394,9 @@ TEMPLATES = [
 ]
 
 # Email verification settings
-ACCOUNT_EMAIL_VERIFICATION = "none"  # ✅ Disable email verification (SMTP issues on Render)
+ACCOUNT_EMAIL_VERIFICATION = (
+    "optional"  # ✅ Optional email verification - users can login before verifying
+)
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
@@ -495,6 +497,7 @@ else:  # Default to Resend
     EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY", "")
 
 EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 30  # 30 second timeout for SMTP connections (prevents hanging)
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Ella CV <noreply@ellacv.com>")
 
 # Debug email configuration - Only show when explicitly enabled or in DEBUG mode

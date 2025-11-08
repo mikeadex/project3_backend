@@ -8,73 +8,108 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SPASocialAccountAdapter(DefaultSocialAccountAdapter):
     """
     Custom social account adapter for SPA (Single Page Application)
     Generates JWT tokens and redirects to frontend callback
     """
-    
+
     def get_login_redirect_url(self, request):
         """
         Override the login redirect URL to include JWT tokens for SPA
         """
-        logger.info(f"🔧 ADAPTER: get_login_redirect_url called for user: {getattr(request.user, 'email', 'Anonymous')}")
-        
+        logger.info(
+            f"🔧 ADAPTER: get_login_redirect_url called for user: {getattr(request.user, 'email', 'Anonymous')}"
+        )
+
         if request.user.is_authenticated:
             # Generate JWT tokens for the authenticated user
             refresh = RefreshToken.for_user(request.user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
-            
+
             # Create SPA callback URL with tokens
-            redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
-            
-            logger.info(f"🔐 ADAPTER: Social login successful for user: {request.user.email} (ID: {request.user.id})")
-            logger.info(f"🎯 ADAPTER: Generated JWT tokens - Access: {access_token[:20]}...")
+            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+
+            logger.info(
+                f"🔐 ADAPTER: Social login successful for user: {request.user.email} (ID: {request.user.id})"
+            )
+            logger.info(
+                f"🎯 ADAPTER: Generated JWT tokens - Access: {access_token[:20]}..."
+            )
             logger.info(f"🔄 ADAPTER: Returning redirect URL: {redirect_url}")
-            
+
             return redirect_url
         else:
             # Fallback to default behavior if user not authenticated
-            logger.error(f"❌ ADAPTER: Social login adapter called but user not authenticated")
+            logger.error(
+                f"❌ ADAPTER: Social login adapter called but user not authenticated"
+            )
             return super().get_login_redirect_url(request)
-    
+
     def authentication_complete(self, request, sociallogin, **kwargs):
         """
         Override authentication complete to handle redirect with JWT tokens
         """
-        logger.info(f"🔧 ADAPTER: authentication_complete called for user: {sociallogin.user.email if sociallogin.user else 'Unknown'}")
-        
+        logger.info(
+            f"🔧 ADAPTER: authentication_complete called for user: {sociallogin.user.email if sociallogin.user else 'Unknown'}"
+        )
+
         # Call the parent method to complete authentication
         response = super().authentication_complete(request, sociallogin, **kwargs)
-        
+
         # Check if user is now authenticated and generate JWT redirect
         if request.user.is_authenticated:
             # Generate JWT tokens
             refresh = RefreshToken.for_user(request.user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
-            
+
             # Create redirect URL
-            redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
-            
-            logger.info(f"🚀 ADAPTER: Authentication complete, redirecting to: {redirect_url}")
-            
+            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+
+            logger.info(
+                f"🚀 ADAPTER: Authentication complete, redirecting to: {redirect_url}"
+            )
+
             # Return HttpResponseRedirect instead of letting allauth handle it
             return HttpResponseRedirect(redirect_url)
-        
+
         return response
+
 
 class SPAAccountAdapter(DefaultAccountAdapter):
     """
-    Custom account adapter for SPA compatibility
+    Custom account adapter for SPA compatibility with graceful email error handling
     """
-    
+
     def get_login_redirect_url(self, request):
         """
         Override login redirect for regular logins too
         """
         if request.user.is_authenticated:
             # For regular logins, just redirect to frontend login success
-            return f'{settings.FRONTEND_URL}/login-success'
+            return f"{settings.FRONTEND_URL}/login-success"
         return super().get_login_redirect_url(request)
+
+    def send_mail(self, template_prefix, email, context):
+        """
+        Override send_mail to catch SMTP errors and prevent registration failures.
+        This allows registration to succeed even if email sending fails.
+        """
+        try:
+            return super().send_mail(template_prefix, email, context)
+        except Exception as e:
+            # Log the error but don't raise it - don't block registration
+            logger.error(
+                f"⚠️ Failed to send email to {email} using template {template_prefix}: {str(e)}",
+                exc_info=True,
+            )
+            logger.warning(
+                f"📧 Email sending failed, but registration will continue. "
+                f"User can still login. Please configure email provider credentials "
+                f"(BREVO_API_KEY, SENDGRID_API_KEY, or RESEND_API_KEY) in Render dashboard."
+            )
+            # Return None to indicate email wasn't sent, but don't block registration
+            return None
