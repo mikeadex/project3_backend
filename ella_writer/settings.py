@@ -394,7 +394,7 @@ TEMPLATES = [
 ]
 
 # Email verification settings
-ACCOUNT_EMAIL_VERIFICATION = "optional"  # ✅ Allow social logins to skip verification
+ACCOUNT_EMAIL_VERIFICATION = "none"  # ✅ Disable email verification (SMTP issues on Render)
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = f"{FRONTEND_URL}/email-confirmed"
