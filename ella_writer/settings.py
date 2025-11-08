@@ -315,18 +315,22 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ellacv.com")
 LOGIN_REDIRECT_URL = f"{FRONTEND_URL}/auth/social-callback"
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
-# Email settings - Use SMTP in production, console for development/testing
-# For testing with testmail.app, use console backend to see email content in logs
+# Email settings - Use HTTP API for Resend (bypasses Render SMTP port blocking)
 EMAIL_USE_TESTMAIL = os.getenv("USE_TESTMAIL_TESTING", "false").lower() == "true"
+
+# Resend API key for HTTP backend (works on Render free tier)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
 # Check if any email provider API key is configured
 has_email_api_key = (
-    os.getenv("RESEND_API_KEY")
-    or os.getenv("SENDGRID_API_KEY")
-    or os.getenv("BREVO_API_KEY")
+    RESEND_API_KEY or os.getenv("SENDGRID_API_KEY") or os.getenv("BREVO_API_KEY")
 )
 
-if has_email_api_key and not EMAIL_USE_TESTMAIL:
+if RESEND_API_KEY and not EMAIL_USE_TESTMAIL:
+    # Use custom Resend HTTP backend (bypasses SMTP port blocking on Render)
+    EMAIL_BACKEND = "api.email_backend.ResendHTTPBackend"
+elif has_email_api_key and not EMAIL_USE_TESTMAIL:
+    # Fallback to SMTP for other providers
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
     # Console backend - perfect for testmail.app testing (shows email content in logs)
