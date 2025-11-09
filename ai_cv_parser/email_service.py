@@ -46,7 +46,9 @@ class VerificationEmailService:
             }
 
             # Render email templates
-            html_message = render_to_string("emails/verification_email.html", context)
+            html_message = render_to_string(
+                "emails/cv_verification_email.html", context
+            )
             plain_message = strip_tags(html_message)
 
             # Email subject

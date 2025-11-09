@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import get_user_model
@@ -24,7 +25,8 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 
-logger = logging.getLogger('django')
+logger = logging.getLogger("django")
+
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -40,25 +42,25 @@ class CustomConfirmEmailView(ConfirmEmailView):
             response = super().post(request, *args, **kwargs)
             logger.info("Email successfully confirmed!")
             # Redirect to frontend success page
-            return redirect(f'{settings.FRONTEND_URL}/email-confirmed?status=success')
+            return redirect(f"{settings.FRONTEND_URL}/email-confirmed?status=success")
         except Exception as e:
             logger.error(f"Error confirming email: {str(e)}")
-            # Redirect to frontend error page  
-            return redirect(f'{settings.FRONTEND_URL}/email-confirmed?status=error')
+            # Redirect to frontend error page
+            return redirect(f"{settings.FRONTEND_URL}/email-confirmed?status=error")
 
     def post(self, request, *args, **kwargs):
         logger.debug("Processing email confirmation (POST)")
         return self.get(request, *args, **kwargs)
 
+
 class CustomPasswordResetView(APIView):
     permission_classes = [AllowAny]
-    
+
     def post(self, request, *args, **kwargs):
-        email = request.data.get('email')
+        email = request.data.get("email")
         if not email:
             return Response(
-                {"error": "Email is required"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         UserModel = get_user_model()
@@ -77,24 +79,28 @@ class CustomPasswordResetView(APIView):
 
         # Render email template
         context = {
-            'user': user,
-            'reset_url': reset_url,
-            'site_name': settings.SITE_NAME,
-            'protocol': 'http' if settings.DEBUG else 'https',
-            'domain': settings.FRONTEND_URL.replace('http://', '').replace('https://', '')
+            "user": user,
+            "reset_url": reset_url,
+            "site_name": settings.SITE_NAME,
+            "protocol": "http" if settings.DEBUG else "https",
+            "domain": settings.FRONTEND_URL.replace("http://", "").replace(
+                "https://", ""
+            ),
         }
 
-        # Render email template
-        email_body = render_to_string('registration/password_reset_email.html', context)
-        email_subject = f"{settings.SITE_NAME} - Password Reset"
+        # Render email template with HTML
+        html_message = render_to_string("emails/password_reset_email.html", context)
+        plain_message = strip_tags(html_message)
+        email_subject = f"Reset Your Password - {settings.SITE_NAME}"
 
         try:
             # Send email
             send_mail(
                 email_subject,
-                email_body,
+                plain_message,
                 settings.DEFAULT_FROM_EMAIL,
                 [email],
+                html_message=html_message,
                 fail_silently=False,
             )
             return Response({"detail": "Password reset email has been sent."})
@@ -102,46 +108,51 @@ class CustomPasswordResetView(APIView):
             logger.error(f"Failed to send password reset email: {str(e)}")
             return Response(
                 {"error": "Failed to send password reset email"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 class CustomPasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
         try:
-            uid = request.data.get('uid')
-            token = request.data.get('token')
-            password1 = request.data.get('new_password1')
-            password2 = request.data.get('new_password2')
+            uid = request.data.get("uid")
+            token = request.data.get("token")
+            password1 = request.data.get("new_password1")
+            password2 = request.data.get("new_password2")
 
             if not uid or not token or not password1 or not password2:
                 return Response(
                     {"error": "Missing required fields"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if password1 != password2:
                 return Response(
                     {"error": "Passwords do not match"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Decode the uidb64 to get the user
             try:
                 uid = urlsafe_base64_decode(uid).decode()
                 user = get_user_model().objects.get(pk=uid)
-            except (TypeError, ValueError, OverflowError, get_user_model().DoesNotExist):
+            except (
+                TypeError,
+                ValueError,
+                OverflowError,
+                get_user_model().DoesNotExist,
+            ):
                 return Response(
-                    {"error": "Invalid reset link"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Invalid reset link"}, status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Check the token
             if not default_token_generator.check_token(user, token):
                 return Response(
                     {"error": "Invalid or expired reset link"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Set the new password
@@ -154,29 +165,36 @@ class CustomPasswordResetConfirmView(APIView):
             logger.error(f"Password reset confirm error: {str(e)}")
             return Response(
                 {"error": "Failed to reset password"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 class EmailVerificationSentView(TemplateView):
     """SPA-compatible social login handler - generates JWT tokens for authenticated users"""
-    
+
     def dispatch(self, request, *args, **kwargs):
         """Handle both GET and POST requests for social login callbacks"""
-        logger.debug(f"🔍 Social login callback received: {request.method} {request.path}")
-        logger.debug(f"👤 User: {request.user}, Authenticated: {request.user.is_authenticated}")
+        logger.debug(
+            f"🔍 Social login callback received: {request.method} {request.path}"
+        )
+        logger.debug(
+            f"👤 User: {request.user}, Authenticated: {request.user.is_authenticated}"
+        )
         logger.debug(f"📝 Session keys: {list(request.session.keys())}")
-        
+
         # For social logins, user should be authenticated at this point
         if request.user.is_authenticated:
             # Generate JWT tokens for the authenticated user
             refresh = RefreshToken.for_user(request.user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
-            
+
             # Create success redirect URL with tokens
-            redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
-            
-            logger.info(f"✅ Social login successful for user: {request.user.email} (ID: {request.user.id})")
+            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+
+            logger.info(
+                f"✅ Social login successful for user: {request.user.email} (ID: {request.user.id})"
+            )
             logger.info(f"🔄 Redirecting to: {redirect_url}")
             return redirect(redirect_url)
         else:
@@ -185,9 +203,9 @@ class EmailVerificationSentView(TemplateView):
             logger.error(f"🔍 Session data: {dict(request.session)}")
             logger.error(f"👤 User object: {request.user}")
             logger.error(f"📍 Request path: {request.path}")
-            
+
             # Try to help user by redirecting to login with message
-            error_url = f'{settings.FRONTEND_URL}/login?error=social_auth_failed'
+            error_url = f"{settings.FRONTEND_URL}/login?error=social_auth_failed"
             logger.warning(f"🔄 Redirecting to error page: {error_url}")
             return redirect(error_url)
 
@@ -196,5 +214,6 @@ class EmailVerificationSentView(TemplateView):
 
     def post(self, request, *args, **kwargs):
         return self.dispatch(request, *args, **kwargs)
+
 
 # Create your views here.
