@@ -41,14 +41,14 @@ class ResendHTTPBackend(BaseEmailBackend):
 
                 # Handle HTML and plain text - Check for alternatives first
                 has_html = False
-                if hasattr(message, 'alternatives') and message.alternatives:
+                if hasattr(message, "alternatives") and message.alternatives:
                     # EmailMultiAlternatives with HTML
                     for content, mimetype in message.alternatives:
                         if mimetype == "text/html":
                             email_data["html"] = content
                             has_html = True
                             break
-                
+
                 if not has_html and message.content_subtype == "html":
                     # Direct HTML message
                     email_data["html"] = message.body

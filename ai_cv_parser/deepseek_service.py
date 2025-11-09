@@ -1295,12 +1295,16 @@ class DeepSeekService:
                 cert_text = f"- {cert.get('name', 'Unknown')} from {cert.get('issuer', 'Unknown')} ({cert.get('date', 'Unknown')})"
                 cert_summary.append(cert_text)
 
-            skills_text = ", ".join(
-                [
-                    s.get("name", s) if isinstance(s, dict) else str(s)
-                    for s in skills[:20]
-                ]
-            )
+            # Handle skills - can be list of strings or list of dicts
+            skills_list = []
+            for s in skills[:20]:
+                if isinstance(s, dict):
+                    skills_list.append(s.get("name", str(s)))
+                elif isinstance(s, str):
+                    skills_list.append(s)
+                else:
+                    skills_list.append(str(s))
+            skills_text = ", ".join(skills_list)
 
             prompt = f"""Analyze this candidate's career trajectory and provide insights on job consistency, role stability, and potential career changes.
 
