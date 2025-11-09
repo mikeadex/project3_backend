@@ -51,8 +51,8 @@ class VerificationEmailService:
             )
             plain_message = strip_tags(html_message)
 
-            # Email subject
-            subject = "🎯 Verify your email to unlock your CV analysis"
+            # Email subject (no emojis - helps avoid spam filters)
+            subject = "Verify your email to unlock your CV analysis"
 
             # Send email
             send_mail(
