@@ -66,6 +66,13 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                             hasattr(request, 'path') and 
                             any(pattern in request.path for pattern in social_callback_patterns))
         
+        # ALSO check for 200 OK HTML responses on callback paths (allauth rendering template)
+        is_callback_html = (hasattr(request, "path") and 
+                           hasattr(response, "status_code") and
+                           response.status_code == 200 and
+                           hasattr(request, "user") and request.user.is_authenticated and
+                           any(pattern in request.path for pattern in social_callback_patterns))
+        
         if is_social_callback:
             
             logger.info(f"🔍 MIDDLEWARE: Intercepted social login redirect")
@@ -86,6 +93,24 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                     request.session.pop('social_login_success', None)
                     request.session.pop('social_login_redirect', None)
                     return HttpResponseRedirect(redirect_url)
+        
+        # Handle 200 OK HTML responses on callback paths
+        elif is_callback_html:
+            logger.info(f"🔍 MIDDLEWARE: Detected 200 OK HTML response on callback path: {request.path}")
+            logger.info(f"   User: {request.user.email if hasattr(request.user, 'email') else 'Unknown'}")
+            
+            # Generate JWT tokens for authenticated social user
+            from rest_framework_simplejwt.tokens import RefreshToken
+            from django.conf import settings
+            
+            refresh = RefreshToken.for_user(request.user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            jwt_redirect_url = f"{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+            logger.info(f"🚀 MIDDLEWARE: Replacing HTML response with JWT redirect: {jwt_redirect_url}")
+            
+            return HttpResponseRedirect(jwt_redirect_url)
         
         # COMPREHENSIVE CHECK: Catch ANY allauth page access by authenticated social users
         elif (hasattr(request, 'user') and request.user.is_authenticated and 
