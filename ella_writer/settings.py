@@ -312,7 +312,7 @@ REST_AUTH = {
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ellacv.com")
 
 # OAuth redirect URLs should point to production frontend
-LOGIN_REDIRECT_URL = f"{FRONTEND_URL}/auth/social-callback"
+LOGIN_REDIRECT_URL = f"{FRONTEND_URL}/social-callback"
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
 # Email settings - Use HTTP API for Resend (bypasses Render SMTP port blocking)
