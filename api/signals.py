@@ -30,7 +30,7 @@ def handle_social_login_success(sender, request, user, **kwargs):
         refresh_token = str(refresh)
         
         # Create redirect URL with tokens
-        redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
+        redirect_url = f'{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}'
         
         logger.info(f"🎯 SIGNAL: Generated JWT tokens for social user: {user.email}")
         logger.info(f"🚀 SIGNAL: Creating redirect response to: {redirect_url}")

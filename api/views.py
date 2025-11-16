@@ -190,7 +190,7 @@ class EmailVerificationSentView(TemplateView):
             refresh_token = str(refresh)
 
             # Create success redirect URL with tokens
-            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+            redirect_url = f"{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}"
 
             logger.info(
                 f"✅ Social login successful for user: {request.user.email} (ID: {request.user.id})"

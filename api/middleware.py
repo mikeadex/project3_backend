@@ -136,7 +136,7 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                     access_token = str(refresh.access_token)
                     refresh_token = str(refresh)
                     
-                    jwt_redirect_url = f'{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}'
+                    jwt_redirect_url = f'{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}'
                     logger.info(f"🚀 MIDDLEWARE: Generated JWT redirect: {jwt_redirect_url}")
                     
                     return HttpResponseRedirect(jwt_redirect_url)

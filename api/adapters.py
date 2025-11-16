@@ -30,7 +30,7 @@ class SPASocialAccountAdapter(DefaultSocialAccountAdapter):
             refresh_token = str(refresh)
 
             # Create SPA callback URL with tokens
-            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+            redirect_url = f"{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}"
 
             logger.info(
                 f"🔐 ADAPTER: Social login successful for user: {request.user.email} (ID: {request.user.id})"
@@ -67,7 +67,7 @@ class SPASocialAccountAdapter(DefaultSocialAccountAdapter):
             refresh_token = str(refresh)
 
             # Create redirect URL
-            redirect_url = f"{settings.FRONTEND_URL}/auth/social-callback?status=success&access={access_token}&refresh={refresh_token}"
+            redirect_url = f"{settings.FRONTEND_URL}/social-callback?status=success&access={access_token}&refresh={refresh_token}"
 
             logger.info(
                 f"🚀 ADAPTER: Authentication complete, redirecting to: {redirect_url}"
