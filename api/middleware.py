@@ -73,6 +73,18 @@ class SocialLoginRedirectMiddleware(MiddlewareMixin):
                            hasattr(request, "user") and request.user.is_authenticated and
                            any(pattern in request.path for pattern in social_callback_patterns))
         
+        # DEBUG: Log what is_callback_html evaluates to
+        if hasattr(request, "path") and "login/callback" in request.path:
+            logger.info(f"🔍 DEBUG is_callback_html check for {request.path}:")
+            logger.info(f"   has path: {hasattr(request, 'path')}")
+            logger.info(f"   has status_code: {hasattr(response, 'status_code')}")
+            logger.info(f"   status_code value: {response.status_code if hasattr(response, 'status_code') else 'None'}")
+            logger.info(f"   status == 200: {response.status_code == 200 if hasattr(response, 'status_code') else False}")
+            logger.info(f"   has user: {hasattr(request, 'user')}")
+            logger.info(f"   user.is_authenticated: {request.user.is_authenticated if hasattr(request, 'user') else 'No user'}")
+            logger.info(f"   pattern match: {any(pattern in request.path for pattern in social_callback_patterns)}")
+            logger.info(f"   is_callback_html = {is_callback_html}")
+        
         if is_social_callback:
             
             logger.info(f"🔍 MIDDLEWARE: Intercepted social login redirect")
